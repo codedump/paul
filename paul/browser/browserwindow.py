@@ -2,7 +2,7 @@
 
 # Form implementation generated from reading ui file '../../ui/browserwindow.ui'
 #
-# Created: Sa Jun 18 16:07:22 2011
+# Created: Sa Jun 18 22:23:27 2011
 #      by: The PyQt User Interface Compiler (pyuic) 3.18.1
 #
 # WARNING! All changes made in this file will be lost!
@@ -23,17 +23,19 @@ class BrowserWindow(QMainWindow):
         self.setSizePolicy(QSizePolicy(QSizePolicy.Preferred,QSizePolicy.Preferred,0,0,self.sizePolicy().hasHeightForWidth()))
 
         self.setCentralWidget(QWidget(self,"qt_central_widget"))
+        BrowserWindowLayout = QGridLayout(self.centralWidget(),1,1,11,6,"BrowserWindowLayout")
 
         self.Plotspace = MatplotlibWidget(self.centralWidget(),"Plotspace")
-        self.Plotspace.setGeometry(QRect(10,10,560,420))
-        self.Plotspace.setSizePolicy(QSizePolicy(QSizePolicy.Maximum,QSizePolicy.Maximum,0,0,self.Plotspace.sizePolicy().hasHeightForWidth()))
+        self.Plotspace.setSizePolicy(QSizePolicy(QSizePolicy.Expanding,QSizePolicy.Expanding,0,0,self.Plotspace.sizePolicy().hasHeightForWidth()))
         self.Plotspace.setMinimumSize(QSize(50,50))
+
+        BrowserWindowLayout.addWidget(self.Plotspace,0,0)
 
 
 
         self.languageChange()
 
-        self.resize(QSize(580,453).expandedTo(self.minimumSizeHint()))
+        self.resize(QSize(577,549).expandedTo(self.minimumSizeHint()))
         self.clearWState(Qt.WState_Polished)
 
 

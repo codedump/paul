@@ -38,6 +38,7 @@ Wave files and Numpy arrays.
 
 
 from paul.base.struct_helper import *
+from paul.base.wave import *
 
 
 __version__ = '0.1'
@@ -260,7 +261,8 @@ def version_structs(version, byte_order):
         bin = BinHeader5
         wave = WaveHeader5
     else:
-        raise ValueError('This does not appear to be a valid Igor binary wave file. The version field = %d.\n', version);
+        raise ValueError('This does not appear to be a valid Igor binary wave file.'
+                         ' The version field = %d.\n', version);
     checkSumSize = bin.size + wave.size
     if version == 5:
         checkSumSize -= 4  # Version 5 checksum does not include the wData field.
@@ -300,7 +302,8 @@ def loadibw(filename):
         b = buffer(b + f.read(bin_struct.size + wave_struct.size - BinHeaderCommon.size))
         c = checksum(b, byteOrder, 0, checkSumSize)
         if c != 0:
-            raise ValueError('Error in checksum - should be 0, is %d.  This does not appear to be a valid Igor binary wave file.' % c)
+            raise ValueError('Error in checksum - should be 0, is %d.  '
+                             'This does not appear to be a valid Igor binary wave file.' % c)
         bin_info = bin_struct.unpack_dict_from(b)
         wave_info = wave_struct.unpack_dict_from(b, offset=bin_struct.size)
         if wave_info['type'] == 0:
