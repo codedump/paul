@@ -62,24 +62,44 @@ UnitTable = {
 }
 
 #
-# LEEM2000 module hashes
+# "Data Source" structures
 #
-DataSourceTable = {
-    100: 1,  # Mitutoyo,           2 floats
-    101: 2,  # FOV,                string 17 bytes
-    102: 3,  # varian #1.1,        1 float
-    103: 4,  # varian #1.2,        1 float
-    104: 5,  # cam exposure in ms, 1 float
-    105: 6,  # title,              string 17 bytes
-    106: 7,  # varian #1.1         string 17 (label), string 5 (units), 1 float
-    107: 8,  # varian #1.2         string 17 (label), string 5 (units), 1 float
-    108: 9,  # varian #2.1         string 17 (label), string 5 (units), 1 float
-    109: 10, # varian #2.2         string 17 (label), string 5 (units), 1 float
-    110: 11, # FOV cal. factor     string 17, 1 float
-    111: 12, # phi, theta          1 float, 1 float
-    112: 13, # spin
-    }
-    
+
+
+DSFloat    = Structure ( name='DSFloat',    fields=[Field('d', 'val')] )
+DSFov      = Structure ( name='DSFov',      fields=[Field('c', 'fov', count=17)] )
+DSCamExp   = Structure ( name='DSCamExp',   fields=[Field('d', 'ms')] )
+DSTitle    = Structure ( name='DSTitle',    fields=[Field('c', 'title', count=17)] )
+DSMitutoyo = Structure ( name='DSMitutoyo', fields=[Field('d', 'val1'),
+                                                    Field('d', 'val2')] )
+DSFovCal   = Structure ( name='DSFovCal',   fields=[Field('c', 'text', count=17),
+                                                    Field('d', 'val')] )
+DSVarian   = Structure ( name='DSVarian',   fields=[Field('c', 'label', count=17),
+                                                    Field('d', 'val'),
+						    Field('c', 'unit', count=5)] )
+#DSGeneric  = Structure ( name='DSGeneric',  fields=[]] )
+DataSources = {
+ #0..99: Generic information, with the following format:
+ #         - LEEM Module ID (16 bit int?)
+ #         - Followed by name (variable-length string
+ #         - Followed by unit code (see UnitTable)
+ #         - 0 (string termination)
+ #         - 1 float (data)
+    100: DSMitutoyo,
+    101: DSFov,
+    102: DSFloat, # old varian
+    103: DSFloat, # old varian
+    104: DSCamExp,
+    105: DSTitle,
+    106: DSVarian, 
+    107: DSVarian, 
+    108: DSVarian, 
+    109: DSVarian,
+    110: DSFovCal,
+    111: DSFloat, # phi, theta
+    112: DSFloat,
+   #255: Skip!
+}
 
 #
 # DAT: File Format
@@ -146,52 +166,6 @@ ImageHeader = Structure(
         ])
 
 #
-# LEEM data structure, originally part of the ImageHeader, is a 256 bytes long
-# unsigned char array, constructed as follows:
-#   . Source1, Argument1, Source2, Argument2, ..., SourceN, ArgumentN
-#
-# 0..99:  LEEM tags, as follows:
-#           - leem module id
-#           - followed by name
-#           - followed by 1 ASCII unit code (0=none, 1=V, 2=mA, 3=A, 4=C, 5=K, 6=mV, 7=pA, 8=nA, 9=uA)
-#           - \0 (string termination)
-#           - data (1 float = 4 bytes)
-#
-LeemData = Structure(
-    name = 'LeemData',
-    fields = [
-        Field('c', 'modString', help='String containing LEEM2000 module information.', count=100),
-        ])
-
-#        Field('f', 'posX', help='Mitutoyo X position value'),
-#        Field('f', 'posY', help='Mitutoyo Y position value'),
-#        Field('f', 'exposure', help='Camera exposure time in milliseconds.'),
-#        Field('c', 'title', help='Title', count=17),
-#
-#        Field('c', 'pGauge1Label', help='Pressure gauge #1 label.', count=17),
-#        Field('c', 'pGauge1Unit', help='Pressure gauge #1 units.',  count=5),
-#        Field('f', 'pGauge1Value', help='Pressure gauge #1 value.'),
-#
-#        Field('c', 'pGauge2Label', help='Pressure gauge #2 label.', count=17),
-#        Field('c', 'pGauge2Unit', help='Pressure gauge #2 units.',  count=5),
-#        Field('f', 'pGauge2Value', help='Pressure gauge #2 value.'),
-#
-#        Field('c', 'pGauge3Label', help='Pressure gauge #3 label.', count=17),
-#        Field('c', 'pGauge3Unit', help='Pressure gauge #3 units.',  count=5),
-#        Field('f', 'pGauge3Value', help='Pressure gauge #3 value.'),
-#
-#        Field('c', 'pGauge4Label', help='Pressure gauge #4 label.', count=17),
-#        Field('c', 'pGauge4Unit', help='Pressure gauge #4 units.',  count=5),
-#        Field('f', 'pGauge4Value', help='Pressure gauge #4 value.'),
-#
-#        Field('c', 'fov', help='Camera FOV.', count=17),
-#        Field('f', 'fovFactor', help='FOV calibration factor.', count=17),
-#        Field('f', 'phi', help=''),
-#        Field('f', 'theta', help=''),
-#        Field('f', 'spin', help=''),
-#        ])
-
-#
 # ImageMarkup block (attached to ImageHeader+LeemData if ImageHeader.attacehdMarkupSize > 0
 #
 ImageMarkup = Structure(
@@ -199,8 +173,14 @@ ImageMarkup = Structure(
     fields = [
         Field ('h', 'data', help='Infos about lines & markers (128 bytes of data, present if ImageHeader.attachedMarkupSize > 0', count=128),
         ])
-    
 
+#
+# Loads the next LEEM 2000 data block from the file stream 'file'
+# and returns it in a usable form:
+#  {'key' = [value, 'unit'], ...}
+#
+def getNextL2KData (buf):
+	return { 'foo': [0.0, 'bar']}
 #
 # Loads a DAT image file, returns the data and header information
 #
@@ -225,8 +205,7 @@ def load(filename):
         if (fileh['attachedRecipeSize'] > 0):
             recipe = Recipe.unpack_dict_from (buffer(f.read(Recipe.size)))                                             
         imgh = ImageHeader.unpack_dict_from (buffer(f.read(ImageHeader.size)))
-        leemd = LeemData.unpack_dict_from (buffer(f.read(LeemData.size)))
-
+        leemd = buffer(f.read(256))
         raw = buffer(f.read(fileh['imageWidth']*fileh['imageHeight']*fileh['bitsPerPixel']/8))
         data = numpy.ndarray (buffer=raw, shape=[fileh['imageWidth'], fileh['imageHeight']],
                               dtype=BppTable[fileh['bitsPerPixel']])
