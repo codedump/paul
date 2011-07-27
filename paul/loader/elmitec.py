@@ -30,7 +30,7 @@ and Numpy arrays.
 from paul.base.struct_helper import *
 from paul.base.wave import *
 from paul.base.errors import *
-import numpy
+import numpy, StringIO, curses.ascii
 
 testfile = "C:\\Documents and Settings\\LEEM\\Desktop\\DATA - Permanent\\Pt(111)\\2011-06-01\\Pt111_CO_experiment2_.dat"
 
@@ -46,7 +46,12 @@ BppTable = {
 }
 
 #
-# Unit codes for LEEMData table
+# "Data Source" structures. These are basically image meta-data
+# structures, called "Data Sources" in the LEEM2k documentation.
+#
+
+#
+# Unit codes for DS table
 #
 UnitTable = {
     0: '',
@@ -62,10 +67,8 @@ UnitTable = {
 }
 
 #
-# "Data Source" structures
+# DS structures
 #
-
-
 DSFloat    = Structure ( name='DSFloat',    fields=[Field('d', 'val')] )
 DSFov      = Structure ( name='DSFov',      fields=[Field('c', 'fov', count=17)] )
 DSCamExp   = Structure ( name='DSCamExp',   fields=[Field('d', 'ms')] )
@@ -78,8 +81,14 @@ DSVarian   = Structure ( name='DSVarian',   fields=[Field('c', 'label', count=17
                                                     Field('d', 'val'),
 						    Field('c', 'unit', count=5)] )
 #DSGeneric  = Structure ( name='DSGeneric',  fields=[]] )
+
+#
+# MI codes. The metadata buffer is made up of
+#    - 1 MI code,
+#    - followed by the corresponding MI structure,
+#
 DataSources = {
- #0..99: Generic information, with the following format:
+ # 0..99: Generic information, with the following format:
  #         - LEEM Module ID (16 bit int?)
  #         - Followed by name (variable-length string
  #         - Followed by unit code (see UnitTable)
@@ -141,7 +150,7 @@ FileHeader7 = Structure(
 Recipe = Structure(
     name = 'Recipe',
     fields=[
-        Field('c', 'recipe', help='Recipe data, see Elmitec docs for format specification.', count=128),
+        Field('c', 'recipe', help='Recipe data, see Elmitec docs for format info.', count=128),
         ])
 
 #
@@ -154,7 +163,8 @@ ImageHeader = Structure(
         Field('h', 'version', help=''),
         Field('h', 'colorScaleLow', help=''),
         Field('h', 'colorScaleHigh', help=''),
-        Field('Q', 'imageTime', help='Standard Windows FILETIME (64 bit value with the number of 100ns units since 1. Januarz 1601).'),
+        Field('Q', 'imageTime', help='Standard Windows FILETIME '
+                   '(64 bit value with the number of 100ns units since 1. January 1601).'),
         Field('h', 'maskXShift',  help=''),
         Field('h', 'maskYShift',  help=''),
         Field('c', 'useMask', help=''),
@@ -171,16 +181,56 @@ ImageHeader = Structure(
 ImageMarkup = Structure(
     name = 'ImageMarkup',
     fields = [
-        Field ('h', 'data', help='Infos about lines & markers (128 bytes of data, present if ImageHeader.attachedMarkupSize > 0', count=128),
+        Field ('h', 'data', help='Infos about lines & markers (128 bytes of data, '
+                           'present if ImageHeader.attachedMarkupSize > 0', count=128),
         ])
 
 #
 # Loads the next LEEM 2000 data block from the file stream 'file'
 # and returns it in a usable form:
-#  {'key' = [value, 'unit'], ...}
+#  {'key': [value, 'unit', ...]}
 #
-def getNextL2KData (buf):
-	return { 'foo': [0.0, 'bar']}
+def getNextDs (io):
+    id = struct.unpack('b', io.read(1))[0]
+    if (id == 255):
+        # buffer ends here, no more meta info
+        return {}
+    elif (id >= 0 and id < 99):
+        # generic structure, variable length
+	ds = getGenericDs(io)
+	print ds
+	getNextDs(io)
+    else:
+        # typed structure, one of the DS applies
+        print "Typed DS: ", DataSources[id].name
+	dat = io.read(DataSources[id].size)
+        ds = {}
+	getNextDs(io)
+    return ds
+
+#
+# Reads exactly one generic DS from specified buffer,
+# returns the data and the buffer.
+# The format of a (variable-length) buffer is the following:
+#         - Unit name (variable-length string)
+#         - Unit code, as an ASCII digit (see UnitTable)
+#         - 0 (byte value string termination)
+#         - 1 float (data)
+#
+def getGenericDs (io):
+    mod_name = ''
+    next_char = io.read(1)
+    next_byte = struct.unpack('b', next_char)[0]
+    while ((next_byte > 31 and next_byte < 128) and not curses.ascii.isdigit(next_char)):
+        ch = struct.unpack('c', next_char)
+	mod_name += ch[0]
+	next_char = io.read(1)
+	next_byte = struct.unpack('b', next_char)[0]
+    mod_unit = UnitTable[int(next_char)]
+    io.read(1)  # this is the trailing 0 of the name+unit string
+    mod_value = struct.unpack('f', io.read(4))[0]
+    return { mod_name: [mod_value, mod_unit]}
+
 #
 # Loads a DAT image file, returns the data and header information
 #
@@ -209,6 +259,8 @@ def load(filename):
         raw = buffer(f.read(fileh['imageWidth']*fileh['imageHeight']*fileh['bitsPerPixel']/8))
         data = numpy.ndarray (buffer=raw, shape=[fileh['imageWidth'], fileh['imageHeight']],
                               dtype=BppTable[fileh['bitsPerPixel']])
+
+	io = StringIO.StringIO(buf)
         
     finally:
         if not hasattr(filename, 'read'):
