@@ -35,6 +35,11 @@ class Field (object):
     See Also
     --------
     Structure
+
+    We are also introducing a new field type character, 'S', which
+    is not included in the original Python specs. 'S' is a variable
+    length null-terminated string. The 'count' argument for this
+    character is the maximum size, including the trailing 0.
     """
     def __init__(self, format, name, default=None, help=None, count=1):
         self.format = format # See the struct documentation

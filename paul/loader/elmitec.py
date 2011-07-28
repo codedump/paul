@@ -67,50 +67,6 @@ UnitTable = {
 }
 
 #
-# DS structures
-#
-DSFloat    = Structure ( name='DSFloat',    fields=[Field('d', 'val')] )
-DSFov      = Structure ( name='DSFov',      fields=[Field('c', 'fov', count=17)] )
-DSCamExp   = Structure ( name='DSCamExp',   fields=[Field('d', 'ms')] )
-DSTitle    = Structure ( name='DSTitle',    fields=[Field('c', 'title', count=17)] )
-DSMitutoyo = Structure ( name='DSMitutoyo', fields=[Field('d', 'val1'),
-                                                    Field('d', 'val2')] )
-DSFovCal   = Structure ( name='DSFovCal',   fields=[Field('c', 'text', count=17),
-                                                    Field('d', 'val')] )
-DSVarian   = Structure ( name='DSVarian',   fields=[Field('c', 'label', count=17),
-                                                    Field('d', 'val'),
-						    Field('c', 'unit', count=5)] )
-#DSGeneric  = Structure ( name='DSGeneric',  fields=[]] )
-
-#
-# MI codes. The metadata buffer is made up of
-#    - 1 MI code,
-#    - followed by the corresponding MI structure,
-#
-DataSources = {
- # 0..99: Generic information, with the following format:
- #         - LEEM Module ID (16 bit int?)
- #         - Followed by name (variable-length string
- #         - Followed by unit code (see UnitTable)
- #         - 0 (string termination)
- #         - 1 float (data)
-    100: DSMitutoyo,
-    101: DSFov,
-    102: DSFloat, # old varian
-    103: DSFloat, # old varian
-    104: DSCamExp,
-    105: DSTitle,
-    106: DSVarian, 
-    107: DSVarian, 
-    108: DSVarian, 
-    109: DSVarian,
-    110: DSFovCal,
-    111: DSFloat, # phi, theta
-    112: DSFloat,
-   #255: Skip!
-}
-
-#
 # DAT: File Format
 #
 #  FileHeader7
@@ -185,28 +141,23 @@ ImageMarkup = Structure(
                            'present if ImageHeader.attachedMarkupSize > 0', count=128),
         ])
 
+
 #
-# Loads the next LEEM 2000 data block from the file stream 'file'
-# and returns it in a usable form:
-#  {'key': [value, 'unit', ...]}
+# Returns a DS string (variable-length, C-style string).
+# Maximum length is the length of the string without the
+# trailing 0.
 #
-def getNextDs (io):
-    id = struct.unpack('b', io.read(1))[0]
-    if (id == 255):
-        # buffer ends here, no more meta info
-        return {}
-    elif (id >= 0 and id < 99):
-        # generic structure, variable length
-	ds = getGenericDs(io)
-	print ds
-	getNextDs(io)
-    else:
-        # typed structure, one of the DS applies
-        print "Typed DS: ", DataSources[id].name
-	dat = io.read(DataSources[id].size)
-        ds = {}
-	getNextDs(io)
-    return ds
+def getDsString(io, max=-1):
+    s = ''
+    next_byte = struct.unpack('B', io.read(1))[0]
+    while (next_byte):
+	if (not curses.ascii.iscntrl(next_byte)):
+            s += chr(next_byte)
+	next_byte = struct.unpack('B', io.read(1))[0]
+
+    if (max > -1 and len(s) > max):
+	    raise FormatError("String '%s' too long" % s)
+    return s
 
 #
 # Reads exactly one generic DS from specified buffer,
@@ -217,19 +168,108 @@ def getNextDs (io):
 #         - 0 (byte value string termination)
 #         - 1 float (data)
 #
-def getGenericDs (io):
-    mod_name = ''
-    next_char = io.read(1)
-    next_byte = struct.unpack('b', next_char)[0]
-    while ((next_byte > 31 and next_byte < 128) and not curses.ascii.isdigit(next_char)):
-        ch = struct.unpack('c', next_char)
-	mod_name += ch[0]
-	next_char = io.read(1)
-	next_byte = struct.unpack('b', next_char)[0]
-    mod_unit = UnitTable[int(next_char)]
-    io.read(1)  # this is the trailing 0 of the name+unit string
+def getDsGeneric(io):
+    unit = getDsString(io)
+    mod_name = unit[:-1]
+    mod_unit = UnitTable[int(unit[-1:])]
     mod_value = struct.unpack('f', io.read(4))[0]
-    return { mod_name: [mod_value, mod_unit]}
+    return [ { mod_name: [mod_value, mod_unit] } ]
+
+#
+# Reads a FovCal chunk. Format:
+#   . string + trailing 0
+#   . float
+#
+def getDsFovCal(io):
+    name = getDsString(io, max=16)
+    if (name == 'none'):
+	# make things prettier: for some unknown reason,
+        # FOV name is most of the time 'none'.
+        name = "FOV cal."
+    return [ { name: [struct.unpack('f', io.read(4))[0]] } ]
+
+# Reads cam exposure info (single float)
+def getDsCamExp(io):
+    return [ { 'Exposure': [struct.unpack('f', io.read(4))[0], 's'] } ]
+
+
+
+# Reads Mitutotyo micrometers (2 floats for X and Y axis).
+def getDsMitutoyo(io):
+    return [ { 'Pos X': [struct.unpack('f', io.read(4))[0], 'um'] },
+	     { 'Pos Y': [struct.unpack('f', io.read(4))[0], 'um'] } ]
+
+# Reads title string (Variable-length C string).
+def getDsTitle(io):
+    return [ { 'Title': [getDsString(io, max=16)] }]
+
+
+# Phi, Theta (two floats)
+def getDsPhiTheta(io):
+    return [ { 'Phi':   [struct.unpack('f', io.read(4))[0]] },
+	     { 'Theta': [struct.unpack('f', io.read(4))[0]] } ]
+
+# Spin (float)
+def getDsSpin(io):
+    return [ { 'Spin': [struct.unpack('f', io.read(4))[0]] } ]
+
+
+# Varian controller info. Format:
+#    . Name (string 17)
+#    . Unit (string 5)
+#    . Float
+def getDsVarian(io):
+    name = getDsString(io, max=16)
+    unit = getDsString(io, max=16)
+    return [ { name: [struct.unpack('f', io.read(4))[0], unit] } ]
+
+# Skip entry, called for every entry above DataSources['max'].
+# Returns an empty list.
+def getDsSkip(io):
+    return []
+
+#
+# MI codes. The metadata buffer is made up of
+#    - 1 MI code,
+#    - followed by the corresponding MI structure,
+#
+DataSources = {
+      0: getDsGeneric,
+    100: getDsMitutoyo,
+    101: DSFov,   # old FOV
+    102: DSFloat, # old varian
+    103: DSFloat, # old varian
+    104: getDsCamExp,
+    105: getDsTitle,
+    106: getDsVarian,
+    107: getDsVarian, 
+    108: getDsVarian, 
+    109: getDsVarian,
+    110: getDsFovCal,
+    111: getDsPhiTheta, # phi, theta
+    112: getDsSpin,
+   'max': 112
+}
+
+# some automatic filling of DataSources stuff...
+for i in range(100):
+    DataSources[i]=DataSources[0]
+for i in range(DataSources['max'], 256):
+    DataSources[i]=getDsSkip
+
+#
+# Loads the next LEEM 2000 data block from the file stream 'file'
+# and returns it in a usable form:
+#  {'key': [value, 'unit', ...]}
+#
+def getDs (io):
+    dslist = []
+    id_str = io.read(1)
+    while (len(id_str) > 0):
+        id = struct.unpack('B', id_str)[0]
+	dslist += DataSources[id](io)
+        id_str = io.read(1)
+    return dslist
 
 #
 # Loads a DAT image file, returns the data and header information
@@ -255,18 +295,17 @@ def load(filename):
         if (fileh['attachedRecipeSize'] > 0):
             recipe = Recipe.unpack_dict_from (buffer(f.read(Recipe.size)))                                             
         imgh = ImageHeader.unpack_dict_from (buffer(f.read(ImageHeader.size)))
-        leemd = buffer(f.read(256))
+        leemd_buf = buffer(f.read(256))
         raw = buffer(f.read(fileh['imageWidth']*fileh['imageHeight']*fileh['bitsPerPixel']/8))
         data = numpy.ndarray (buffer=raw, shape=[fileh['imageWidth'], fileh['imageHeight']],
                               dtype=BppTable[fileh['bitsPerPixel']])
-
-	io = StringIO.StringIO(buf)
+	leemd = getDs(StringIO.StringIO(leemd_buf))
         
     finally:
         if not hasattr(filename, 'read'):
             f.close()
 
-    return data, fileh, imgh, leemd
+    return data, leemd, fileh, imgh, leemd_buf
 
 
 def save (filename):
