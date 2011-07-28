@@ -308,12 +308,18 @@ def load(filename):
         raw = buffer(f.read(fileh['imageWidth']*fileh['imageHeight']*fileh['bitsPerPixel']/8))
         data = numpy.ndarray (buffer=raw, shape=[fileh['imageWidth'], fileh['imageHeight']],
                               dtype=BppTable[fileh['bitsPerPixel']])
+
+	# parse DataSource meta-information
 	leemd = getDs(leemd_buf)
         
     finally:
         if not hasattr(filename, 'read'):
             f.close()
 
+    # In an ideal world, we would pack the most important stuff
+    # (data+leemd) in a Wave together, and put fileh+imgh+leemd_buf
+    # aside for later saving. But, as this world is not ideal,
+    # we just return the whole bunch as it is... :-/
     return data, leemd, fileh, imgh, leemd_buf
 
 
