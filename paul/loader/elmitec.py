@@ -262,13 +262,22 @@ for i in range(DataSources['max'], 256):
 # and returns it in a usable form:
 #  {'key': [value, 'unit', ...]}
 #
-def getDs (io):
+def getDs (buf):
+    
+    # check whether it's a buffer or a stream object
+    if (hasattr(buf, 'read')):
+        io = buf
+    else:
+        io = StringIO.StringIO(buf)
+
     dslist = []
+
     id_str = io.read(1)
     while (len(id_str) > 0):
         id = struct.unpack('B', id_str)[0]
 	dslist += DataSources[id](io)
         id_str = io.read(1)
+
     return dslist
 
 #
@@ -299,7 +308,7 @@ def load(filename):
         raw = buffer(f.read(fileh['imageWidth']*fileh['imageHeight']*fileh['bitsPerPixel']/8))
         data = numpy.ndarray (buffer=raw, shape=[fileh['imageWidth'], fileh['imageHeight']],
                               dtype=BppTable[fileh['bitsPerPixel']])
-	leemd = getDs(StringIO.StringIO(leemd_buf))
+	leemd = getDs(leemd_buf)
         
     finally:
         if not hasattr(filename, 'read'):
