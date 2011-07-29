@@ -93,7 +93,8 @@ FileHeader7 = Structure(
         Field('h', 'imageWidth', help=''),
         Field('h', 'imageHeight', help=''),
         Field('h', 'nrImages', help=''),
-        Field('h', 'attachedRecipeSize', help='Size of attached recipe data (up to 128 bytes).'),
+        Field('h', 'attachedRecipeSize',
+              help='Size of attached recipe data (up to 128 bytes).'),
         Field('c', 'spare2', help='', count=56),
         ])
 
@@ -147,7 +148,7 @@ ImageMarkup = Structure(
 # Maximum length is the length of the string without the
 # trailing 0.
 #
-def getDsString(io, max=-1):
+def parseDsString(io, max=-1):
     s = ''
     next_byte = struct.unpack('B', io.read(1))[0]
     while (next_byte):
@@ -168,65 +169,65 @@ def getDsString(io, max=-1):
 #         - 0 (byte value string termination)
 #         - 1 float (data)
 #
-def getDsGeneric(io):
-    unit = getDsString(io)
+def parseDsGeneric(io):
+    unit = parseDsString(io)
     mod_name = unit[:-1]
     mod_unit = UnitTable[int(unit[-1:])]
     mod_value = struct.unpack('f', io.read(4))[0]
-    return [ { mod_name: [mod_value, mod_unit] } ]
+    return { mod_name: [mod_value, mod_unit] }
 
 #
 # Reads a FovCal chunk. Format:
 #   . string + trailing 0
 #   . float
 #
-def getDsFovCal(io):
-    name = getDsString(io, max=16)
+def parseDsFovCal(io):
+    name = parseDsString(io, max=16)
     if (name == 'none'):
 	# make things prettier: for some unknown reason,
         # FOV name is most of the time 'none'.
         name = "FOV cal."
-    return [ { name: [struct.unpack('f', io.read(4))[0]] } ]
+    return { name: [struct.unpack('f', io.read(4))[0]] }
 
 # Reads cam exposure info (single float)
-def getDsCamExp(io):
-    return [ { 'Exposure': [struct.unpack('f', io.read(4))[0], 's'] } ]
+def parseDsCamExp(io):
+    return { 'Exposure': [struct.unpack('f', io.read(4))[0], 's'] }
 
 
 
 # Reads Mitutotyo micrometers (2 floats for X and Y axis).
-def getDsMitutoyo(io):
-    return [ { 'Pos X': [struct.unpack('f', io.read(4))[0], 'um'] },
-	     { 'Pos Y': [struct.unpack('f', io.read(4))[0], 'um'] } ]
+def parseDsMitutoyo(io):
+    return { 'Pos X': [struct.unpack('f', io.read(4))[0], 'um'],
+	     'Pos Y': [struct.unpack('f', io.read(4))[0], 'um'] }
 
 # Reads title string (Variable-length C string).
-def getDsTitle(io):
-    return [ { 'Title': [getDsString(io, max=16)] }]
+def parseDsTitle(io):
+    return { 'Title': [parseDsString(io, max=16)] }
 
 
 # Phi, Theta (two floats)
-def getDsPhiTheta(io):
-    return [ { 'Phi':   [struct.unpack('f', io.read(4))[0]] },
-	     { 'Theta': [struct.unpack('f', io.read(4))[0]] } ]
+def parseDsPhiTheta(io):
+    return { 'Phi':   [struct.unpack('f', io.read(4))[0]],
+	     'Theta': [struct.unpack('f', io.read(4))[0]] }
 
 # Spin (float)
-def getDsSpin(io):
-    return [ { 'Spin': [struct.unpack('f', io.read(4))[0]] } ]
+def parseDsSpin(io):
+    return { 'Spin': [struct.unpack('f', io.read(4))[0]] }
 
 
 # Varian controller info. Format:
 #    . Name (string 17)
 #    . Unit (string 5)
 #    . Float
-def getDsVarian(io):
-    name = getDsString(io, max=16)
-    unit = getDsString(io, max=16)
-    return [ { name: [struct.unpack('f', io.read(4))[0], unit] } ]
+def parseDsVarian(io):
+    name = parseDsString(io, max=16)
+    unit = parseDsString(io, max=16)
+    return { name: [struct.unpack('f', io.read(4))[0], unit] }
 
 # Skip entry, called for every entry above DataSources['max'].
 # Returns an empty list.
-def getDsSkip(io):
-    return []
+def parseDsSkip(io):
+    return {}
 
 #
 # MI codes. The metadata buffer is made up of
@@ -234,20 +235,20 @@ def getDsSkip(io):
 #    - followed by the corresponding MI structure,
 #
 DataSources = {
-      0: getDsGeneric,
-    100: getDsMitutoyo,
-    101: DSFov,   # old FOV
-    102: DSFloat, # old varian
-    103: DSFloat, # old varian
-    104: getDsCamExp,
-    105: getDsTitle,
-    106: getDsVarian,
-    107: getDsVarian, 
-    108: getDsVarian, 
-    109: getDsVarian,
-    110: getDsFovCal,
-    111: getDsPhiTheta, # phi, theta
-    112: getDsSpin,
+      0: parseDsGeneric,
+    100: parseDsMitutoyo,
+    101: parseDsSkip, # old FOV
+    102: parseDsSkip, # old varian
+    103: parseDsSkip, # old varian
+    104: parseDsCamExp,
+    105: parseDsTitle,
+    106: parseDsVarian,
+    107: parseDsVarian, 
+    108: parseDsVarian, 
+    109: parseDsVarian,
+    110: parseDsFovCal,
+    111: parseDsPhiTheta, # phi, theta
+    112: parseDsSpin,
    'max': 112
 }
 
@@ -255,14 +256,14 @@ DataSources = {
 for i in range(100):
     DataSources[i]=DataSources[0]
 for i in range(DataSources['max'], 256):
-    DataSources[i]=getDsSkip
+    DataSources[i]=parseDsSkip
 
 #
 # Loads the next LEEM 2000 data block from the file stream 'file'
 # and returns it in a usable form:
 #  {'key': [value, 'unit', ...]}
 #
-def getDs (buf):
+def parseDs (buf):
     
     # check whether it's a buffer or a stream object
     if (hasattr(buf, 'read')):
@@ -270,12 +271,12 @@ def getDs (buf):
     else:
         io = StringIO.StringIO(buf)
 
-    dslist = []
+    dslist = {}
 
     id_str = io.read(1)
     while (len(id_str) > 0):
         id = struct.unpack('B', id_str)[0]
-	dslist += DataSources[id](io)
+        dslist.update(DataSources[id](io))
         id_str = io.read(1)
 
     return dslist
@@ -303,24 +304,30 @@ def load(filename):
 
         if (fileh['attachedRecipeSize'] > 0):
             recipe = Recipe.unpack_dict_from (buffer(f.read(Recipe.size)))                                             
-        imgh = ImageHeader.unpack_dict_from (buffer(f.read(ImageHeader.size)))
-        leemd_buf = buffer(f.read(256))
-        raw = buffer(f.read(fileh['imageWidth']*fileh['imageHeight']*fileh['bitsPerPixel']/8))
-        data = numpy.ndarray (buffer=raw, shape=[fileh['imageWidth'], fileh['imageHeight']],
-                              dtype=BppTable[fileh['bitsPerPixel']])
+        imgh  = ImageHeader.unpack_dict_from (buffer(f.read(ImageHeader.size)))
+        leemd = buffer(f.read(256))
+	ds    = parseDs(leemd)
+        raw   = buffer(f.read(fileh['imageWidth']*fileh['imageHeight']*fileh['bitsPerPixel']/8))
+        data  = Wave (buffer = raw,
+                      shape  = [fileh['imageWidth'], fileh['imageHeight']],
+                      dtype  = BppTable[fileh['bitsPerPixel']])
+        data.info.update(ds)
 
-	# parse DataSource meta-information
-	leemd = getDs(leemd_buf)
-        
+        # We're packing the raw versions of the headers together with
+        # the supplementary information. This way, when the user chooses
+        # to save the image again, the elmitec.save() function can check
+        # for their existence and, if found, can use them to save a more
+        # complete version of the file.
+        data.info["__raw__"] = { "format": "Elmitec",
+                          "imgh"  : imgh,
+                          "fileh" : fileh,
+                          "leemd" : leemd }
+                         
     finally:
         if not hasattr(filename, 'read'):
             f.close()
 
-    # In an ideal world, we would pack the most important stuff
-    # (data+leemd) in a Wave together, and put fileh+imgh+leemd_buf
-    # aside for later saving. But, as this world is not ideal,
-    # we just return the whole bunch as it is... :-/
-    return data, leemd, fileh, imgh, leemd_buf
+    return data
 
 
 def save (filename):
