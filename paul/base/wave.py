@@ -80,17 +80,8 @@ class Wave(ndarray):
     # interpolating if necessary.
     def __call__(self, vals):
 
-
         ## FIXME: check if this also works for negative deltas!
         
-        # val is a n-tuple (number of axes)
-        # initialize some variables
-        # i1 = ()
-        # i2 = ()   # integer intex above ii
-        # xx = ()   # desired x-value (should actually be exactly the same as 'val' :-)
-        # x1 = ()   # x-value belonging to i1
-        # x2 = ()   # x-value belonging to i2
-
         # desired position index (fractional index)
         ii = ndarray([len(self.shape)])
         i1 = ndarray([len(self.shape)], dtype=int)
@@ -100,21 +91,11 @@ class Wave(ndarray):
             ii[ai] = (self.ax[ai]._x2i(v))
             i1[ai] = floor(ii[ai])
             i2[ai] = i1[ai]+1
-
-
-        #_i1 = floor(ii)    # integer index below ii (data type is float!)
-        #_i2 = i1+1         # integer index below ii0
-
-        # same as i1 and i2, only with integer arguments (need these for i2x() calls
-        #for i in range(len(self.shape)):
-        #    _i1[i] = int(i1[i])
-        #    _i2[i] = int(i2[i])
         
-        # axis values
+        # axis values (i.e. positions in axis units, not indices!)
         xx = self.ax[ai].i2x(ii)
         x1 = self.ax[ai].i2x(i1)
         x2 = self.ax[ai].i2x(i2)
-
 
         print "Indices:    ", ii, i1, i2
         print "Axis values:", xx, x1, x2
@@ -123,20 +104,34 @@ class Wave(ndarray):
         # We do this by modifying one coordinate at a time,
         # from low-index (i1) to high-index (i1), and calculating
         # the y value for that corner.
-        
-        # This is the block that needs to be changed:
-        _i1 = ()
-        _i2 = ()
-        for a, b in zip(i1,i2):
-            _i1 += (a,)
-            _i2 += (b,)
-        y1 = self[_i1]
-        y2 = self[_i2]
-        print "Y values:  ", y1, y2
-        dy = y2 - y1  # this is a single value, should become a vector
-                      # of y-values, one for each dimesion direction
 
-        dx = x2 - x1  # this is an n-tuple of dx values
+        # corner 0: the lower-index corner
+        _i1 = ()
+        for a in i1:
+            _i1 += (a,)
+        y1 = self[_i1]
+        print "Base corner:", y1
+        
+        # calculating other corners: one corner for each dimension,
+        # with the respective coordinate replaced by the higher-index coordinate.
+        y2 = []
+        for i in range(len(self.shape)):
+            _i2 = ()
+            for j in range(len(self.shape)):
+                if (i==j):
+                    _i2 += (i2[j],)
+                else:
+                    _i2 += (i1[j],)
+            y2_tmp = self[_i2]
+            y2.append(y2_tmp)
+            print ("Corner %d:" % i), y2_tmp
+                
+        print "Y values:  ", y1, y2
+
+        # it's all downhill from here: calculate the derivative
+        # approximations and apply to 1st order corrections... :-)
+        dy = y2 - y1
+        dx = x2 - x1
         print "Deltas:     ", dx, dy
 
         # 0th order approximation: value at ii is the same as the value at i1
