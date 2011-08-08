@@ -119,31 +119,31 @@ class Wave(ndarray):
         print "Indices:    ", ii, i1, i2
         print "Axis values:", xx, x1, x2
 
+        # Need to calculate approximation for the n-dim derivative.
+        # We do this by modifying one coordinate at a time,
+        # from low-index (i1) to high-index (i1), and calculating
+        # the y value for that corner.
+        
+        # This is the block that needs to be changed:
         _i1 = ()
         _i2 = ()
-
         for a, b in zip(i1,i2):
             _i1 += (a,)
             _i2 += (b,)
-
         y1 = self[_i1]
         y2 = self[_i2]
+        print "Y values:  ", y1, y2
+        dy = y2 - y1  # this is a single value, should become a vector
+                      # of y-values, one for each dimesion direction
 
-        print "Y1 values:  ", y1, y2
-        
-        
-        dy  = y2 - y1  # this is a single value
-        _dx = x2 - x1  # this is an n-tuple of dx values
+        dx = x2 - x1  # this is an n-tuple of dx values
         print "Deltas:     ", dx, dy
 
         # 0th order approximation: value at ii is the same as the value at i1
-        yfinal = y1
+        ynew0 = y1
 
         # 1st order approximation: linear interpolation (for each dimension)
-        #yfinal += dy/dx
-        # now, we need to calculate
-        #for dx in _dx:
-        #    diff = dy/dx
-        #yy = y1 + (yy-y1)*(dy/dx)
+        ynew1 = (xx-x1) * dy/dx
+        print "Correction: ", ynew1
 
-        return yfinal
+        return ynew0+ynew1.sum()
