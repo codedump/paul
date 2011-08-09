@@ -73,20 +73,23 @@ class Wave(ndarray):
             l += ((self.min(a), self.max(a)))
         return l
 
+    # 
     # () operator for Wave instaces.
-    # Takes a real n-tuple representing a fractional 3D-coordinate within
-    # the space spanned by the (min,max) values of the axes.
+    # Takes a variable number of arguments (n-tuple) representing a fractional
+    # 3D-coordinate within the space spanned by the (min,max) values of the axes.
     # Returns the wave value as the specified position, linearly
     # interpolating if necessary.
-    def __call__(self, vals):
-
-        ## FIXME: check if this also works for negative deltas!
+    #
+    def __call__(self, *vals):
+        
+        if len(vals) != len(self.shape):
+            raise IndexError (("expected %d dimensions, got %d"
+                               % (len(self.shape), len(vals))))
         
         # desired position index (fractional index)
         ii = ndarray([len(self.shape)])
         i1 = ndarray([len(self.shape)], dtype=int)
         i2 = ndarray([len(self.shape)], dtype=int)
-        print ii
         for v, ai in zip(vals, range(len(self.shape))):
             ii[ai] = (self.ax[ai]._x2i(v))
             i1[ai] = floor(ii[ai])
@@ -97,48 +100,31 @@ class Wave(ndarray):
         x1 = self.ax[ai].i2x(i1)
         x2 = self.ax[ai].i2x(i2)
 
-        print "Indices:    ", ii, i1, i2
-        print "Axis values:", xx, x1, x2
-
         # Need to calculate approximation for the n-dim derivative.
         # We do this by modifying one coordinate at a time,
         # from low-index (i1) to high-index (i1), and calculating
         # the y value for that corner.
 
-        # corner 0: the lower-index corner
-        _i1 = ()
-        for a in i1:
-            _i1 += (a,)
-        y1 = self[_i1]
-        print "Base corner:", y1
-        
-        # calculating other corners: one corner for each dimension,
-        # with the respective coordinate replaced by the higher-index coordinate.
-        y2 = []
-        for i in range(len(self.shape)):
-            _i2 = ()
-            for j in range(len(self.shape)):
-                if (i==j):
-                    _i2 += (i2[j],)
-                else:
-                    _i2 += (i1[j],)
-            y2_tmp = self[_i2]
-            y2.append(y2_tmp)
-            print ("Corner %d:" % i), y2_tmp
-                
-        print "Y values:  ", y1, y2
+        y1 = self[tuple(i1)]   # corner 0: the lower-index of each dimension
+        y2 = []   
+        for i in range(len(vals)):
+            icorner = i1.copy()
+            icorner[i] = i2[i]
+            y2.append(self[tuple(icorner)])
 
-        # it's all downhill from here: calculate the derivative
-        # approximations and apply to 1st order corrections... :-)
+        # dx and dy are vectors => calculate all dimensions in one shot
         dy = y2 - y1
         dx = x2 - x1
-        print "Deltas:     ", dx, dy
-
-        # 0th order approximation: value at ii is the same as the value at i1
-        ynew0 = y1
-
-        # 1st order approximation: linear interpolation (for each dimension)
-        ynew1 = (xx-x1) * dy/dx
-        print "Correction: ", ynew1
+        ynew0 = y1                   # 0th order: lower corner
+        ynew1 = (xx-x1) * dy/dx      # 1st order: linear correction
 
         return ynew0+ynew1.sum()
+
+    # 
+    # inverse of __call__: sets the values of the wave by evaluating
+    # the specified object (function?) in all dimensions at the points
+    # specified by self's axis specifications.
+    # 
+    def set(obj):
+        
+        return self
