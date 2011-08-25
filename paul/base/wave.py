@@ -126,5 +126,5 @@ class Wave(ndarray):
     # specified by self's axis specifications.
     # 
     def set(obj):
-        
+        #for 
         return self
