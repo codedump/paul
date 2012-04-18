@@ -31,6 +31,7 @@ class Wave(ndarray):
 
     def __init__(self, shape, dtype=None, buffer=None, offset=0, strides=[], order='C'):
         ndarray.__init__(shape, dtype, buffer, offset, strides, order)
+        #ndarray.__new__(shape, dtype, buffer, offset, strides, order)
         self.ax = []
         self.info = {}
         for i in range(0,len(shape)):
@@ -54,23 +55,23 @@ class Wave(ndarray):
         self.ax[aindex].delta = (right-left) / self.shape[aindex]
 
     # returns the minimum axis value
-    def min(self, aindex):
+    def axMin(self, aindex):
         return min(self.ax[aindex].offset,
                    self.ax[aindex].offset+self.ax[aindex].delta*self.shape[aindex])
 
     # returns the minimum axis value
-    def max(self, aindex):
+    def axMax(self, aindex):
         return max(self.ax[aindex].offset,
                    self.ax[aindex].offset+self.ax[aindex].delta*self.shape[aindex])
 
     # Returns a tuple with the axis limits,
     # in the format (ax[0].min, ax[0].max, ax[1].min, ax[1].max...)
     # Useful for imshow()'ing a 2D wave :-)
-    def lim(self):
+    def axLim(self):
         l = ()
         #print self.ax
         for a in range(len(self.ax)):
-            l += ((self.min(a), self.max(a)))
+            l += ((self.axMin(a), self.axMax(a)))
         return l
 
     # 

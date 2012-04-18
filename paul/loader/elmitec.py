@@ -30,7 +30,7 @@ and Numpy arrays.
 from paul.base.struct_helper import *
 from paul.base.wave import *
 from paul.base.errors import *
-import numpy, StringIO, curses.ascii
+import numpy, StringIO, sys
 
 testfile = "C:\\Documents and Settings\\LEEM\\Desktop\\DATA - Permanent\\Pt(111)\\2011-06-01\\Pt111_CO_experiment2_.dat"
 
@@ -152,9 +152,9 @@ def parseDsString(io, max=-1):
     s = ''
     next_byte = struct.unpack('B', io.read(1))[0]
     while (next_byte):
-	if (not curses.ascii.iscntrl(next_byte)):
+        if (int(next_byte) >= 32 and int(next_byte) < 255):
             s += chr(next_byte)
-	next_byte = struct.unpack('B', io.read(1))[0]
+        next_byte = struct.unpack('B', io.read(1))[0]
 
     if (max > -1 and len(s) > max):
 	    raise FormatError("String '%s' too long" % s)
@@ -171,6 +171,8 @@ def parseDsString(io, max=-1):
 #
 def parseDsGeneric(io):
     unit = parseDsString(io)
+    if (len(unit) < 1):
+        return {}
     mod_name = unit[:-1]
     mod_unit = UnitTable[int(unit[-1:])]
     mod_value = struct.unpack('f', io.read(4))[0]
