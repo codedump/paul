@@ -1,13 +1,13 @@
 
 import sys, os, random
-from qt import *
+from PyQt4 import QtCore, QtGui
 
 import matplotlib
-matplotlib.use('Agg')
+matplotlib.use('Qt4Agg')
 import pylab
 
 from matplotlib.numerix import arange, sin, pi
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 from paul.loader import igor
@@ -17,27 +17,20 @@ class MatplotlibWidget(FigureCanvas):
     """Ultimately, this is a QWidget (as well as a FigureCanvasAgg, etc.)."""
     def __init__(self, parent=None, name=None, width=5, height=4, dpi=100, bgcolor=None):
 	self.parent = parent
-	if self.parent:
-		bgc = parent.backgroundBrush().color()
-		bgcolor = float(bgc.red())/255.0, float(bgc.green())/255.0, float(bgc.blue())/255.0
 
-        self.fig = Figure(figsize=(width, height), dpi=dpi,
-                          facecolor=bgcolor, edgecolor=bgcolor)
+        self.fig = Figure(figsize=(width, height), dpi=dpi, facecolor=bgcolor, edgecolor=bgcolor)
         self.axes = self.fig.add_subplot(111)
 
         # We want the axes cleared every time plot() is called
         self.axes.hold(False)
 
         self.compute_initial_figure()
-        #self.plot("/home/florin/local/analysis/uru2si2/2010-zpoint/jul2010.uxp-dir/jul10_urs11/t10k/jul10_urs11_09gif.ibw")
-        self.plot (sys.argv[1])
+        self.plot("/home/florin/local/analysis/uru2si2/2010-zpoint/jul2010.uxp-dir/jul10_urs11/t10k/jul10_urs11_09gif.ibw")
+        #self.plot (sys.argv[1])
         
-        FigureCanvas.__init__(self, self.fig)
-        self.reparent(parent, QPoint(0, 0))
-
-        FigureCanvas.setSizePolicy(self, QSizePolicy.Expanding,
-                                         QSizePolicy.Expanding)
-        FigureCanvas.updateGeometry(self)
+        #FigureCanvas.__init__(self, self.fig)
+        #FigureCanvas.setSizePolicy(self, QSizePolicy.Expanding, QSizePolicy.Expanding)
+        #FigureCanvas.updateGeometry(self)
 
     def sizeHint(self):
         w = self.fig.get_figwidth()

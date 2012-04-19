@@ -323,7 +323,8 @@ def loadibw(filename):
         t = numpy.dtype(TYPE_TABLE[wave_info['type']])
         assert waveDataSize == wave_info['npnts'] * t.itemsize, \
             ('%d, %d, %d, %s' % (waveDataSize, wave_info['npnts'], t.itemsize, t))
-        tail_data = array.array('f', b[-tail:])
+        #tail_data = array.array ('f', b[-tail:])
+        tail_data = array (b[-tail:])
         data_b = buffer(buffer(tail_data) + f.read(waveDataSize-tail))
         if version == 5:
             shape = [n for n in wave_info['nDim'] if n > 0]
