@@ -4,6 +4,20 @@ from paul.browser.browserwindow import BrowserWindow
 from PyQt4 import QtGui
 import sys
 
+import logging
+
+log = logging.getLogger ('paul.browser')
+log.setLevel (logging.DEBUG)
+
+ch = logging.StreamHandler()
+ch.setLevel (logging.DEBUG)
+log.addHandler (ch)
+
+fmt = logging.Formatter('%(asctime)s %(levelname)s(%(name)s): %(message)s')
+ch.setFormatter(fmt)
+
+log.debug ("Starting...")
+
 testfile = "/home/florin/local/analysis/uru2si2/2010-zpoint/jul2010.uxp-dir/jul10_urs11/t10k/jul10_urs11_09gif.ibw"
 
 def run():
