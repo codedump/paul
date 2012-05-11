@@ -8,8 +8,10 @@ import pylab
 
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-
 from paul.loader import igor
+
+import logging
+log = logging.getLogger (__name__)
 
 
 class MatplotlibWidget(FigureCanvas):
@@ -22,13 +24,12 @@ class MatplotlibWidget(FigureCanvas):
         self.axes = self.fig.add_subplot(111)
         self.axes.hold(False)         # We want the axes cleared every time plot() is called
 
-        #
         FigureCanvas.__init__(self, self.fig)
         self.setParent(parent)
-        FigureCanvas.setSizePolicy(self, QtGui.QSizePolicy.Expanding, QtGui.QSizePolicy.Expanding)
-        FigureCanvas.updateGeometry(self)
+        self.setSizePolicy(QtGui.QSizePolicy.Expanding, QtGui.QSizePolicy.Expanding)
+        self.updateGeometry()
 
-        self.plot("/home/florin/local/analysis/uru2si2/2010-zpoint/jul2010.uxp-dir/jul10_urs11/t10k/jul10_urs11_09gif.ibw")
+        #self.plotFile("/home/florin/local/analysis/uru2si2/2010-zpoint/jul2010.uxp-dir/jul10_urs11/t10k/jul10_urs11_09gif.ibw")
 
     def sizeHint(self):
         w = self.fig.get_figwidth()
@@ -41,11 +42,16 @@ class MatplotlibWidget(FigureCanvas):
     def compute_initial_figure(self):
        	pass
 
-    def plot (self, filename):
+    # Called to plot file specified by the given full path
+    @QtCore.pyqtSlot ('QString')
+    def plotFile (self, filename):
+        log.debug ("Plotting %s" % filename)
         data, binfo, winfo = igor.loadibw (filename)
         if (data.ndim == 1):
+            log.debug ("1D plot")
             self.axes.plot(data)
         elif (data.ndim == 2):
+            log.debug ("2D imshow")
             dim1_start = winfo["sfB"][1]
             dim1_end = dim1_start + winfo["sfA"][1]*data.shape[1]
             dim2_start = winfo["sfB"][0]
@@ -56,5 +62,8 @@ class MatplotlibWidget(FigureCanvas):
             self.axes.imshow(data, aspect='auto',
                              extent=[min(dim1_start,dim1_end), max(dim1_start,dim1_end),
                                      min(dim2_start,dim2_end), max(dim2_start,dim2_end)])
+            self.draw()
+            #self.repaint()
+            #self.parent.repaint()
         else:
-            print "MatplotWidget::plot: not implemented for dim > 2"
+            log.error ("Not implemented for dim > 2")
