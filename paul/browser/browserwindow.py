@@ -19,23 +19,25 @@ class BrowserWindow (QtGui.QMainWindow, Ui_BrowserWindow):
         self.fileSys.setNameFilters ("*.ibw")
         self.fileSys.setNameFilterDisables (False)
         self.fileTree.setModel (self.fileSys)
-        self.fileTree.activated.connect(self.dirSelected)
+        self.fileTree.activated.connect(self.dirActivated)
 
         # model for ibw files in the 2nd list box
         self.waveList.setRootIndex (self.fileSys.index(QtCore.QDir.currentPath()))
         self.waveList.setModel (self.fileSys)
-        self.waveList.activated.connect(self.waveSelected)
+        self.waveList.activated.connect(self.waveActivated)
+        #self.waveList.selectionChanged.connect(self.waveSelected)
 
-        self.dirSelected (self.fileSys.index("/home/florin/local/analysis"))
+        self.dirActivated (self.fileSys.index("/home/florin/local/analysis"))
 
     # called when user selected an entry from the dir list
     @QtCore.pyqtSlot('QModelIndex')
-    def dirSelected (self, index):
+    def dirActivated (self, index):
         self.waveList.setRootIndex (index)
         self.fileTree.resizeColumnToContents(0)
 
+    # called when an item in the waveList is activated (double-clicked)
     @QtCore.pyqtSlot('QModelIndex')
-    def waveSelected (self, index):
+    def waveActivated (self, index):
         finfo = self.fileSys.fileInfo(index)
         fpath = self.fileSys.filePath(index)
         if finfo.isDir():
@@ -45,3 +47,12 @@ class BrowserWindow (QtGui.QMainWindow, Ui_BrowserWindow):
         if finfo.isFile() and finfo.isReadable():
             log.info ("Loading %s" % fpath)
             self.plotCanvas.plotFile (fpath)
+
+    # called when the selection changed in the waveList
+    @QtCore.pyqtSlot ('QItemSelection', 'QItemSelection')
+    def waveSelected (self, sel, unsel):
+        ind = sel.indexes().first()
+        log.debug ("Selected %s" % self.fileSys.filePath(ind))
+        if self.fileSys.fileInfo(ind).isFile():
+            log.debug ("Passing on %s" % self.fileSys.filePath(ind))
+            self.waveActivated (ind)
