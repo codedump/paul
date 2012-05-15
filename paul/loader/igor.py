@@ -35,11 +35,11 @@ Wave files and Numpy arrays.
 #   share. We hope IGOR Technical Notes will provide you with lots of
 #   valuable information while you are developing IGOR applications.
 
-
+import logging
+log = logging.getLogger (__name__)
 
 from paul.base.struct_helper import *
-from paul.base.wave import *
-
+from paul.base.wave import Wave
 
 __version__ = '0.1'
 
@@ -282,8 +282,11 @@ def checksum(buffer, byte_order, oldcksum, numbytes):
             oldcksum -= 2**31
     return oldcksum & 0xffff
 
-# Translated from ReadWave()
-def loadibw(filename):
+#
+# loads an IBW from specified file, returns a Wave() object
+# (which is an overloaded ndarray) containing the Igor wave data.
+#
+def load(filename):
     if hasattr(filename, 'read'):
         f = filename  # filename is actually a stream object
     else:
@@ -302,8 +305,9 @@ def loadibw(filename):
         b = buffer(b + f.read(bin_struct.size + wave_struct.size - BinHeaderCommon.size))
         c = checksum(b, byteOrder, 0, checkSumSize)
         if c != 0:
-            raise ValueError('Error in checksum - should be 0, is %d.  '
-                             'This does not appear to be a valid Igor binary wave file.' % c)
+            raise ValueError('load: %s: error in checksum - should be 0, is %d.  '
+                             'This does not appear to be a valid Igor binary wave file.'
+                             % (filename, c))
         bin_info = bin_struct.unpack_dict_from(b)
         wave_info = wave_struct.unpack_dict_from(b, offset=bin_struct.size)
         if wave_info['type'] == 0:
@@ -323,19 +327,26 @@ def loadibw(filename):
         t = numpy.dtype(TYPE_TABLE[wave_info['type']])
         assert waveDataSize == wave_info['npnts'] * t.itemsize, \
             ('%d, %d, %d, %s' % (waveDataSize, wave_info['npnts'], t.itemsize, t))
-        #tail_data = array.array ('f', b[-tail:])
-        tail_data = array (b[-tail:])
-        data_b = buffer(buffer(tail_data) + f.read(waveDataSize-tail))
+        tail_data = numpy.array(b[-tail:])
+
         if version == 5:
             shape = [n for n in wave_info['nDim'] if n > 0]
         else:
             shape = (wave_info['npnts'],)
-        data = numpy.ndarray(
-            shape=shape,
-            dtype=t.newbyteorder(byteOrder),
-            buffer=data_b,
-            order='F',
-            )
+
+        data_b = buffer(buffer(tail_data) + f.read(waveDataSize-tail))
+        data_rev = Wave (shape=shape,
+                      dtype=t.newbyteorder(byteOrder),
+                      buffer=data_b,
+                      order='F')
+
+        log.debug ("load: original shape: %dx%d" % (data_rev.shape[0], data_rev.shape[1]))
+
+        # Data seems to come out inverted with respect to the axes,
+        # if plainly read out from the file. So, we're reverting it again...
+        data = data_rev
+
+        log.debug ("load: new shape: %dx%d" % (data.shape[0], data.shape[1]))
 
         if version == 1:
             pass  # No post-data information
@@ -409,10 +420,24 @@ def loadibw(filename):
         if not hasattr(filename, 'read'):
             f.close()
 
-    return data, bin_info, wave_info
+    data.info.update (bin_info)
+    data.info.update (wave_info)
+
+    log.debug ("load: setting scale on %d dimensions" % len(shape))
+    
+    # set the scaling.
+    # strangely, in igor dimensions seem to be reversed (tested with 1D and 2D arrays only)
+    for dim in range(0,len(shape)):
+        mydim = dim
+        igordim = mydim #len(shape)-1-mydim
+        log.debug ("load: Setting scaling info for dimension %d here (%d with Igor): %f/%f"
+                   % (mydim, igordim, wave_info["sfA"][igordim], wave_info["sfB"][igordim]))
+        data.setScale (mydim, wave_info["sfA"][igordim], wave_info["sfB"][igordim])
+
+    return data
 
 
-def saveibw(filename):
+def save(filename):
     raise NotImplementedError
 
 

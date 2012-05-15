@@ -20,6 +20,7 @@ class BrowserWindow (QtGui.QMainWindow, Ui_BrowserWindow):
         self.fileSys.setNameFilterDisables (False)
         self.fileTree.setModel (self.fileSys)
         self.fileTree.activated.connect(self.dirActivated)
+        
 
         # model for ibw files in the 2nd list box
         self.waveList.setRootIndex (self.fileSys.index(QtCore.QDir.currentPath()))

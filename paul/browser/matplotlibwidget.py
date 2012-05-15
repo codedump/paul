@@ -1,4 +1,7 @@
 
+import logging
+log = logging.getLogger (__name__)
+
 import sys, os, random
 from PyQt4 import QtCore, QtGui
 
@@ -9,9 +12,6 @@ import pylab
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from paul.loader import igor
-
-import logging
-log = logging.getLogger (__name__)
 
 
 class MatplotlibWidget(FigureCanvas):
@@ -29,8 +29,6 @@ class MatplotlibWidget(FigureCanvas):
         self.setSizePolicy(QtGui.QSizePolicy.Expanding, QtGui.QSizePolicy.Expanding)
         self.updateGeometry()
 
-        #self.plotFile("/home/florin/local/analysis/uru2si2/2010-zpoint/jul2010.uxp-dir/jul10_urs11/t10k/jul10_urs11_09gif.ibw")
-
     def sizeHint(self):
         w = self.fig.get_figwidth()
         h = self.fig.get_figheight()
@@ -46,24 +44,13 @@ class MatplotlibWidget(FigureCanvas):
     @QtCore.pyqtSlot ('QString')
     def plotFile (self, filename):
         log.debug ("Plotting %s" % filename)
-        data, binfo, winfo = igor.loadibw (filename)
+        data = igor.load (filename)
         if (data.ndim == 1):
             log.debug ("1D plot")
             self.axes.plot(data)
         elif (data.ndim == 2):
             log.debug ("2D imshow")
-            dim1_start = winfo["sfB"][1]
-            dim1_end = dim1_start + winfo["sfA"][1]*data.shape[1]
-            dim2_start = winfo["sfB"][0]
-            dim2_end = dim2_start + winfo["sfA"][0]*data.shape[0]
-            # FIXME: loadibw() inverts the data order on one (or more?) of the dimenstions
-            #        This means that our scale comes out upside-down, and possibly
-            #        also left-right inverted. Need to fix than in igor.loadibw() !
-            self.axes.imshow(data, aspect='auto',
-                             extent=[min(dim1_start,dim1_end), max(dim1_start,dim1_end),
-                                     min(dim2_start,dim2_end), max(dim2_start,dim2_end)])
-            self.draw()
-            #self.repaint()
-            #self.parent.repaint()
+            self.axes.imshow(data, aspect='auto', extent=data.imgLim())
         else:
             log.error ("Not implemented for dim > 2")
+        self.draw()

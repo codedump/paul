@@ -1,3 +1,6 @@
+import logging
+log = logging.getLogger (__name__)
+
 from numpy import ndarray, floor, array
 import math
 
@@ -26,20 +29,29 @@ class AxisInfo:
 #   . notes dictionary
 #
 class Wave(ndarray):
-    ax = []      # axis info vector
-    info = {}    # meta information map  'key': [value, 'unit', ...]
-
-    def __init__(self, shape, dtype=None, buffer=None, offset=0, strides=[], order='C'):
-        ndarray.__init__(shape, dtype, buffer, offset, strides, order)
-        #ndarray.__new__(shape, dtype, buffer, offset, strides, order)
-        self.ax = []
-        self.info = {}
+    def __new__ (subtype, shape, dtype=None, buffer=None, offset=0, strides=[], order='C'):
+        obj = ndarray.__new__ (subtype, shape, dtype, buffer, offset, strides, order)
         for i in range(0,len(shape)):
-            self.ax.append(AxisInfo())
+            log.debug ("Wave::__init__: dim %d" % i)
+            obj.ax.append(AxisInfo())
+        log.debug ("Wave::__init__: %d dimensions" % len(obj.ax))
+        return obj
+
+    def __array_finalize__ (self, obj):
+        if obj is None:
+            # this means that object was created explicitly:  foo=Wave()
+            pass
+
+        # otherwise, if this is a view casting (ndarray.view()) or
+        # from a template type (ndarray[x:y:z]), we need to set 'info'
+        # and 'ax' to sane default values.
+        self.info = getattr (obj, 'info', {})
+        self.ax = getattr (obj, 'ax', [])
 
     # overwrites the ndarray.reshape() in order to resize the axes vector 
     def reshape(self, sizes):
         self.ax.resize (len(sizes))
+        log.debug ("Wave::reshape: %d axes" % len (self.ax))
         ndarray.reshape (self, sizes)
     
     # sets the axis scaling using delta / offset parameters
@@ -64,15 +76,33 @@ class Wave(ndarray):
         return max(self.ax[aindex].offset,
                    self.ax[aindex].offset+self.ax[aindex].delta*self.shape[aindex])
 
+    # returns the axis offset
+    def axOffset (self, aindex):
+        return self.ax[aindex].offset
+
+    # returns the axis endpoint (offset + dim*delta), opposite of offset.
+    def axEndpoint (self, aindex):
+        return self.ax[aindex].offset + self.ax[aindex].delta*self.shape[aindex]
+
     # Returns a tuple with the axis limits,
     # in the format (ax[0].min, ax[0].max, ax[1].min, ax[1].max...)
     # Useful for imshow()'ing a 2D wave :-)
     def axLim(self):
         l = ()
-        #print self.ax
         for a in range(len(self.ax)):
             l += ((self.axMin(a), self.axMax(a)))
         return l
+
+    # same as axLim(), only this one is especially for images,
+    # to use with Matplotlib's imshow(). This means that:
+    #   . it only works with 2 dimensions
+    #   . axes are switched (axis 1 represents left-right boundaries,
+    #                        axis 0 represents top-bottom boundaries)
+    #
+    # The imshow() limit tuple format is: (left, right, top, bottom).
+    def imgLim (self):
+        return (self.axOffset(1), self.axEndpoint(1), self.axEndpoint(0), self.axOffset(0))
+
 
     # 
     # () operator for Wave instaces.
