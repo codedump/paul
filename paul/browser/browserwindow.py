@@ -6,12 +6,12 @@ import logging
 log = logging.getLogger (__name__)
 
 class BrowserWindow (QtGui.QMainWindow, Ui_BrowserWindow):
-    def __init__ (self):
+    def __init__ (self, start_path="/home/florin"):
         QtGui.QMainWindow.__init__(self)
         Ui_BrowserWindow.__init__(self)
 
         # some defaults
-        self.start_path = "/home/florin"
+        self.start_path = start_path
 
         self.setupUi (self)
 
