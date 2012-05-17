@@ -10,6 +10,7 @@ matplotlib.use('Qt4Agg')
 import pylab
 
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt4agg import NavigationToolbar2QTAgg as NavigationToolbar
 from matplotlib.figure import Figure
 from paul.loader import igor
 
@@ -18,6 +19,7 @@ class MatplotlibWidget(FigureCanvas):
     """Ultimately, this is a QWidget (as well as a FigureCanvasAgg, etc.)."""
     def __init__(self, parent=None, name=None, width=5, height=4, dpi=100, bgcolor=None):
         QtGui.QWidget.__init__(self)
+
 	self.parent = parent
 
         self.fig = Figure(figsize=(width, height), dpi=dpi, facecolor=bgcolor, edgecolor=bgcolor)
@@ -28,6 +30,9 @@ class MatplotlibWidget(FigureCanvas):
         self.setParent(parent)
         self.setSizePolicy(QtGui.QSizePolicy.Expanding, QtGui.QSizePolicy.Expanding)
         self.updateGeometry()
+
+        self.tools = NavigationToolbar (self, self.parent)
+        self.tools.show()
 
     def sizeHint(self):
         w = self.fig.get_figwidth()

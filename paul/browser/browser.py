@@ -22,7 +22,10 @@ testfile = "/home/florin/local/analysis/uru2si2/2010-zpoint/jul2010.uxp-dir/jul1
 
 def run():
     app = QtGui.QApplication (sys.argv)
-    win = BrowserWindow()
+    start_path = "~"
+    if (len(sys.argv) > 1 and len(sys.argv[1]) > 0):
+        start_path = sys.argv[1]
+    win = BrowserWindow(start_path)
     win.show()
 
     sys.exit(app.exec_())
