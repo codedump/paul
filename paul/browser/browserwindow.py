@@ -15,58 +15,54 @@ class BrowserWindow (QtGui.QMainWindow):
         self.start_path = start_path
 
         # create UI elements
-        self.uiInit()
+        self.initMainFrame()
+        self.initBrowser()
 
-        # model for the file system (dir tree)
-        self.fileSys = QtGui.QFileSystemModel()
-        self.fileSys.setRootPath(QtCore.QDir.currentPath())
-        self.fileSys.setFilter (QtCore.QDir.AllDirs | QtCore.QDir.Dirs | QtCore.QDir.Files | QtCore.QDir.NoDotAndDotDot)
-        self.fileSys.setNameFilters ("*.ibw")
-        self.fileSys.setNameFilterDisables (False)
-        self.fileTree.setModel (self.fileSys)
-        self.fileTree.activated.connect(self.dirActivated)
-        
+        # move to default start directory
+        self.dirActivated (self.filesys.index(self.start_path))
 
-        # model for ibw files in the 2nd list box
-        self.waveList.setRootIndex (self.fileSys.index(QtCore.QDir.currentPath()))
-        self.waveList.setModel (self.fileSys)
-        self.waveList.activated.connect(self.waveActivated)
-        self.waveList.selectionModel().selectionChanged.connect(self.waveSelected)
 
-        self.dirActivated (self.fileSys.index(self.start_path))
-
-    def uiInit(self):
+    def initMainFrame(self):
         self.main_frame = QtGui.QWidget()
         self.setCentralWidget (self.main_frame)
 
         self.hbox = QtGui.QHBoxLayout()
         self.main_frame.setLayout (self.hbox)
+        self.splitter = QtGui.QSplitter(self.main_frame)
+        self.hbox.addWidget (self.splitter)
 
-        #self.splitter = QtGui.QSplitter(self.main_frame)
-        #self.splitter.setOrientation(QtCore.Qt.Horizontal)
-        #self.splitter.setObjectName("splitter")
-
-        self.fileTree = QtGui.QTreeView()
-        self.waveList = QtGui.QListView()
+        self.file_tree = QtGui.QTreeView(self.splitter)
+        self.wave_list = QtGui.QListView(self.splitter)
 
         self.vbox_plot = QtGui.QVBoxLayout()
-        self.plotCanvas = MatplotlibWidget()
-        self.plotTools = NavigationToolbar(self.plotCanvas, self)
+        self.plot_canvas = MatplotlibWidget()
+        self.plot_tools = NavigationToolbar(self.plot_canvas, self)
         
-        for w in [ self.plotTools, self.plotCanvas ]:
+        for w in [ self.plot_tools, self.plot_canvas ]:
             self.vbox_plot.addWidget (w)
 
         #self.plotDock = QtGui.QDockWidget(self.splitter)
         #self.plotDock.setEnabled(True)
         #self.plotDock.setFeatures(QtGui.QDockWidget.DockWidgetFloatable)
 
-        for w in [ self.fileTree, self.waveList ]:
-            self.hbox.addWidget (w)
-            #self.hbox.setAlignment (w, QtCore.Qt.AlignVCenter)
         self.hbox.addLayout (self.vbox_plot)
 
-    def ui_init_lists(self):
-        pass
+
+    def initBrowser(self):
+        # model for the file system (dir tree)
+        self.filesys = QtGui.QFileSystemModel()
+        self.filesys.setRootPath(QtCore.QDir.currentPath())
+        self.filesys.setFilter (QtCore.QDir.AllDirs | QtCore.QDir.Dirs | QtCore.QDir.Files | QtCore.QDir.NoDotAndDotDot)
+        self.filesys.setNameFilters ("*.ibw")
+        self.filesys.setNameFilterDisables (False)
+        self.file_tree.setModel (self.filesys)
+        self.file_tree.activated.connect(self.dirActivated)        
+
+        # model for ibw files in the 2nd list box
+        self.wave_list.setRootIndex (self.filesys.index(QtCore.QDir.currentPath()))
+        self.wave_list.setModel (self.filesys)
+        self.wave_list.activated.connect(self.waveActivated)
+        self.wave_list.selectionModel().selectionChanged.connect(self.waveSelected)
 
     def ui_init_plots(self):
         pass    
@@ -75,22 +71,22 @@ class BrowserWindow (QtGui.QMainWindow):
     # called when user selected an entry from the dir list
     @QtCore.pyqtSlot('QModelIndex')
     def dirActivated (self, index):
-        self.waveList.setRootIndex (index)
-        self.fileTree.scrollTo (index)
-        self.fileTree.resizeColumnToContents(0)
+        self.wave_list.setRootIndex (index)
+        self.file_tree.scrollTo (index)
+        self.file_tree.resizeColumnToContents(0)
 
     # called when an item in the waveList is activated (double-clicked)
     @QtCore.pyqtSlot('QModelIndex')
     def waveActivated (self, index):
-        finfo = self.fileSys.fileInfo(index)
-        fpath = self.fileSys.filePath(index)
+        finfo = self.filesys.fileInfo(index)
+        fpath = self.filesys.filePath(index)
         if finfo.isDir():
-            self.waveList.setRootIndex (index)
-            self.fileTree.scrollTo (index)
-            self.fileTree.resizeColumnToContents(0)
+            self.wave_list.setRootIndex (index)
+            self.file_tree.scrollTo (index)
+            self.file_tree.resizeColumnToContents(0)
         if finfo.isFile() and finfo.isReadable():
             log.info ("Loading %s" % fpath)
-            self.plotCanvas.plotFile (fpath)
+            self.plot_canvas.plotFile (fpath)
 
     # called when the selection changed in the waveList
     @QtCore.pyqtSlot ('QItemSelection', 'QItemSelection')
@@ -98,7 +94,7 @@ class BrowserWindow (QtGui.QMainWindow):
         if (sel.isEmpty()):
             return
         ind = sel.indexes()[0]
-        log.debug ("Selected %s" % self.fileSys.filePath(ind))
-        if self.fileSys.fileInfo(ind).isFile():
-            log.debug ("Passing on %s" % self.fileSys.filePath(ind))
+        log.debug ("Selected %s" % self.filesys.filePath(ind))
+        if self.filesys.fileInfo(ind).isFile():
+            log.debug ("Passing on %s" % self.filesys.filePath(ind))
             self.waveActivated (ind)
