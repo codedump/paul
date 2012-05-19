@@ -18,15 +18,16 @@ from paul.browser.browserwindow import BrowserWindow
 from PyQt4 import QtGui
 import sys
 
-testfile = "/home/florin/local/analysis/uru2si2/2010-zpoint/jul2010.uxp-dir/jul10_urs11/t10k/jul10_urs11_09gif.ibw"
+canvas = None
 
 def run():
     app = QtGui.QApplication (sys.argv)
     start_path = "~"
     if (len(sys.argv) > 1 and len(sys.argv[1]) > 0):
         start_path = sys.argv[1]
-    win = BrowserWindow(start_path)
-    win.show()
+    main_win = BrowserWindow(start_path)
+    main_win.show()
+    #canvas = main_win.plotCanvas
 
     sys.exit(app.exec_())
 
