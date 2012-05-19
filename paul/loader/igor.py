@@ -335,14 +335,10 @@ def load(filename):
             shape = (wave_info['npnts'],)
 
         data_b = buffer(buffer(tail_data) + f.read(waveDataSize-tail))
-        data_rev = Wave (shape=shape,
-                      dtype=t.newbyteorder(byteOrder),
-                      buffer=data_b,
-                      order='F')
-
-        # Data seems to come out inverted with respect to the axes,
-        # if plainly read out from the file. So, we're reverting it again...
-        data = data_rev
+        data = Wave (shape=shape,
+                     dtype=t.newbyteorder(byteOrder),
+                     buffer=data_b,
+                     order='F')
 
         if version == 1:
             pass  # No post-data information
@@ -421,11 +417,9 @@ def load(filename):
 
     log.debug ("load: setting scale on %d dimensions" % len(shape))
     
-    # set the scaling.
-    # strangely, in igor dimensions seem to be reversed (tested with 1D and 2D arrays only)
-    for dim in range(0,len(shape)):
-        mydim = dim
-        igordim = mydim #len(shape)-1-mydim
+    # set the intrinsic scaling information of the wave.
+    for mydim in range(0,len(shape)):
+        igordim = mydim
         log.debug ("load: Setting scaling info for dimension %d here (%d with Igor): %f/%f"
                    % (mydim, igordim, wave_info["sfA"][igordim], wave_info["sfB"][igordim]))
         data.setScale (mydim, wave_info["sfA"][igordim], wave_info["sfB"][igordim])

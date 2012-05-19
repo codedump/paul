@@ -17,22 +17,26 @@ from paul.loader import igor
 
 class MatplotlibWidget(FigureCanvas):
     """Ultimately, this is a QWidget (as well as a FigureCanvasAgg, etc.)."""
-    def __init__(self, parent=None, name=None, width=5, height=4, dpi=100, bgcolor=None):
-        QtGui.QWidget.__init__(self)
+    def __init__(self, parent=None, name=None, width=5, height=4, dpi=100,
+                 bgcolor=None):
+        QtGui.QWidget.__init__(self, parent)
 
 	self.parent = parent
 
-        self.fig = Figure(figsize=(width, height), dpi=dpi, facecolor=bgcolor, edgecolor=bgcolor)
+        self.fig = Figure(figsize=(width, height), dpi=dpi, 
+                          facecolor=bgcolor, edgecolor=bgcolor)
         self.axes = self.fig.add_subplot(111)
-        self.axes.hold(False)         # We want the axes cleared every time plot() is called
+        self.axes.hold(False)  # We want the axes cleared every time
+                               # plot() is called
 
         FigureCanvas.__init__(self, self.fig)
         self.setParent(parent)
-        self.setSizePolicy(QtGui.QSizePolicy.Expanding, QtGui.QSizePolicy.Expanding)
+        self.setSizePolicy(QtGui.QSizePolicy.Expanding,
+                           QtGui.QSizePolicy.Expanding)
         self.updateGeometry()
 
-        self.tools = NavigationToolbar (self, self.parent)
-        self.tools.show()
+        #self.tools = NavigationToolbar (self, self.parent)
+        #self.tools.show()
 
     def sizeHint(self):
         w = self.fig.get_figwidth()
