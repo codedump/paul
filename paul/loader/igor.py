@@ -340,13 +340,9 @@ def load(filename):
                       buffer=data_b,
                       order='F')
 
-        log.debug ("load: original shape: %dx%d" % (data_rev.shape[0], data_rev.shape[1]))
-
         # Data seems to come out inverted with respect to the axes,
         # if plainly read out from the file. So, we're reverting it again...
         data = data_rev
-
-        log.debug ("load: new shape: %dx%d" % (data.shape[0], data.shape[1]))
 
         if version == 1:
             pass  # No post-data information
