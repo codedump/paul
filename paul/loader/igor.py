@@ -40,6 +40,8 @@ log = logging.getLogger (__name__)
 
 from paul.base.struct_helper import *
 from paul.base.wave import Wave
+from paul.base.errors import *
+import os
 
 __version__ = '0.1'
 
@@ -291,8 +293,8 @@ def version_structs(version, byte_order):
         bin = BinHeader5
         wave = WaveHeader5
     else:
-        raise ValueError('This does not appear to be a valid Igor binary wave file.'
-                         ' The version field = %d.\n', version);
+        raise FormatError ('This does not appear to be a valid Igor binary wave file.'
+                           ' The version field = %d.' % version)
     checkSumSize = bin.size + wave.size
     if version == 5:
         checkSumSize -= 4  # Version 5 checksum does not include the wData field.
@@ -312,74 +314,91 @@ def checksum(buffer, byte_order, oldcksum, numbytes):
             oldcksum -= 2**31
     return oldcksum & 0xffff
 
-#
-# loads an IBW from specified file, returns a Wave() object
-# (which is an overloaded ndarray) containing the Igor wave data.
-#
+
 def load(filename):
+    '''
+    Loads an IBW from specified file, returns a Wave() object
+    (which is an overloaded ndarray) containing the Igor wave data.
+
+    This function is a wrapper for either wave_read(), which will transparently
+    handle loading waves from either proper .IBW files, on disk, or from Igor
+    packed files (.PXP or .PXT files), following the Igor path
+    format inside the packed file (i.e.: ":this:is:an:igor:path" representing
+    a wave called "path", at the path component /this/is/an/igor/)
+    '''
     return wave_read(filename)
 
-def wave_read_header(f):
+
+def wave_read_header(filename):
     '''
     Reads the wave header information. This is useful for quick access to a wave's
     data (i.e. the name?) without having to load the complete wave. Nice for 
     big waves and browsing PXP files.
     '''
-    b = buffer(f.read(BinHeaderCommon.size))
-    version = BinHeaderCommon.unpack_dict_from(b)['version']
-    needToReorderBytes = need_to_reorder_bytes(version)
-    byteOrder = byte_order(needToReorderBytes)
-    
-    if needToReorderBytes:
-        BinHeaderCommon.set_byte_order(byteOrder)
-        version = BinHeaderCommon.unpack_dict_from(b)['version']
-    bin_struct, wave_struct, checkSumSize = version_structs(version, byteOrder)
 
-    b = buffer(b + f.read(bin_struct.size + wave_struct.size - BinHeaderCommon.size))
-    c = checksum(b, byteOrder, 0, checkSumSize)
-    if c != 0:
-        raise ValueError('load: %s: error in checksum - should be 0, is %d.  '
-                         'This does not appear to be a valid Igor binary wave file.'
-                         % (filename, c))
-    bin_info = bin_struct.unpack_dict_from(b)
-    wave_info = wave_struct.unpack_dict_from(b, offset=bin_struct.size)
-
-    #
-    # Need to calculate this because we need access to the Structure class
-    # that unpacked the header.
-    #
-    # We are creating some new dictionary items:
-    #   'wave_data_size': represents the size of the wave data
-    #                     (without tail or header info)
-    #   'tail_size': the size of the wdata field in the correct WaveHeader
-    #                structure
-    #   'tail_data': the corresponding tail data
-    #   'byte_order': byte order parameter as returned by byteorder() above
-    #
-    # and pass those that along with the bin_info dictionary.
-    #
-    if version in [1,2,3]:
-        #flo: tail = 16  # 16 = size of wData field in WaveHeader2 structure
-        #flo: waveDataSize = bin_info['wfmSize'] - wave_struct.size
-        bin_info['tail_size'] = 16
-        bin_info['wave_data_size'] = bin_info['wfmSize'] - wave_struct.size
+    if hasattr(filename, 'read'):
+        f = filename  # filename is actually a stream object
     else:
-        assert version == 5, version
-        #flo: tail = 4  # 4 = size of wData field in WaveHeader5 structure
-        #flo: waveDataSize = bin_info['wfmSize'] - (wave_struct.size - tail)
-        bin_info['tail_size'] = 4
-        bin_info['wave_data_size'] = bin_info['wfmSize'] - (wave_struct.size - bin_info['tail_size'])
+        f = open(filename, 'rb')
+    try:
 
-    bin_info['tail_data'] = numpy.array(b[-bin_info['tail_size']:])
-    bin_info['byte_order'] = byteOrder
+        b = buffer(f.read(BinHeaderCommon.size))
+        version = BinHeaderCommon.unpack_dict_from(b)['version']
+        needToReorderBytes = need_to_reorder_bytes(version)
+        byteOrder = byte_order(needToReorderBytes)
+    
+        if needToReorderBytes:
+            BinHeaderCommon.set_byte_order(byteOrder)
+            version = BinHeaderCommon.unpack_dict_from(b)['version']
+        bin_struct, wave_struct, checkSumSize = version_structs(version, byteOrder)
+
+        b = buffer(b + f.read(bin_struct.size + wave_struct.size - BinHeaderCommon.size))
+        c = checksum(b, byteOrder, 0, checkSumSize)
+        if c != 0:
+            raise VersionError('load: %s: error in checksum - should be 0, is %d.  '
+                               'This does not appear to be a valid Igor binary wave file.'
+                               % (filename, c))
+        bin_info = bin_struct.unpack_dict_from(b)
+        wave_info = wave_struct.unpack_dict_from(b, offset=bin_struct.size)
+
+        #
+        # Need to calculate this because we need access to the Structure class
+        # that unpacked the header.
+        #
+        # We are creating some new dictionary items:
+        #   'wave_data_size': represents the size of the wave data
+        #                     (without tail or header info)
+        #   'tail_size': the size of the wdata field in the correct WaveHeader
+        #                structure
+        #   'tail_data': the corresponding tail data
+        #   'byte_order': byte order parameter as returned by byteorder() above
+        #
+        # and pass those that along with the bin_info dictionary.
+        #
+        if version in [1,2,3]:
+            bin_info['tail_size'] = 16
+            bin_info['wave_data_size'] = bin_info['wfmSize'] - wave_struct.size
+        else:
+            assert version == 5, version
+            bin_info['tail_size'] = 4
+            bin_info['wave_data_size'] = bin_info['wfmSize'] - (wave_struct.size - bin_info['tail_size'])
+
+        bin_info['tail_data'] = numpy.array(b[-bin_info['tail_size']:])
+        bin_info['byte_order'] = byteOrder
         
-    return wave_info, bin_info
+        return wave_info, bin_info
+
+    finally:
+        if not hasattr(filename, 'read'):
+            log.debug ("wave_read_header: Closing %s" % filename)
+            f.close()
 
 
 def wave_read_data (f, wave_info, bin_info):
     '''
     Reads main wave data
     '''
+        
     # dtype() wrapping to avoid numpy.generic and
     # getset_descriptor issues with the builtin Numpy types
     # (e.g. int32).  It has no effect on our local complex
@@ -392,7 +411,7 @@ def wave_read_data (f, wave_info, bin_info):
         shape = [n for n in wave_info['nDim'] if n > 0]
     else:
         shape = (wave_info['npnts'],)
-
+        
     data_b = buffer(buffer(bin_info['tail_data']) + 
                     f.read(bin_info['wave_data_size']-bin_info['tail_size']))
     data = Wave (shape=shape,
@@ -400,6 +419,7 @@ def wave_read_data (f, wave_info, bin_info):
                  buffer=data_b,
                  order='F')
     return data
+
 
 
 def wave_read_info(f, wave_info, bin_info):
@@ -416,6 +436,7 @@ def wave_read_info(f, wave_info, bin_info):
         #   * 16 bytes of padding
         #   * Optional wave note data
         pad_b = buffer(f.read(16))  # skip the padding
+        log.debug("pad: %s, size: %d" % (pad_b, len(pad_b)))
         assert max(pad_b) == 0, pad_b
         bin_info['note'] = str(f.read(bin_info['noteSize'])).strip()
     elif version == 3:
@@ -521,6 +542,70 @@ def wave_read(filename):
             f.close()
 
 
+def wave_find (filename='', pack_tree={}):
+    '''
+    Tries to locate the specified wave. The file name will usually be a mix-up
+    of a file system path and an Igor path (inside a PXP), e.g.:
+    
+        "/home/user/experiment.pxp:path:to:wave"
+    
+    In that case, we want this function to:
+      . look for a file called "experiment.pxp:path:to:wave"
+        (just in case it's a legit file)
+      . if it doesn't exist, look for a file called experiment.pxp,
+        and a path component "path:to:wave" representing a wave,
+        return a file stream object to "/home/user/experiment.pxp" and
+        seek the stream to the correct position for :path:to:wave.
+
+    The function will return the 'tree' information of the corresponding
+    wave (i.e. the wave name, path components inside the packed file,
+    offset and size of the wave data, and real path of the packed file).
+    '''
+
+    # if a file name is specified, guess the filesystem path / igor path components
+    # if no file name specified, just take the first
+    if len(filename) == 0:
+        pass
+
+    if not os.path.exists(filename):
+        real_filename = os.path.join (os.path.dirname(filename), os.path.basename(filename).split(':')[0])
+        igor_path = os.path.basename(filename).split(':')[1:]
+        print log.debug ("wave_open: Path: filesystem=%s, igor=%s" % (real_filename, igor_path))
+    else:
+        real_filename = filename
+        igor_path = ''
+
+    if len(pack_tree) == 0:
+        pack_tree = pack_scan_tree (real_filename)
+
+    tree = pack_tree
+
+    if (len(igor_path) > 0):
+        # extract information from the location specified by the igor path
+        for idir in igor_path:
+            tree = tree[idir]
+
+        if not tree.has_key('offset'):
+            log.error ("wave_find: %s (in %s) is not a wave." % (igor_path, real_filename))
+            raise IOError ("wave_find: Component '%s' (inside packed file '%s') is not a wave." % (igor_path, real_filename))
+
+        log.debug ("wave_find: Have branch: %s" % tree)
+    
+        tree['wname'] = igor_path[-1]
+        tree['wpath'] = igor_path[:-1]
+        tree['file'] = real_filename
+        log.debug ("Location components wave '%s': %s" % (igor_path, str(tree)))
+
+    else:
+        # if no igor path is specified, then check if the file itself is a wave
+        winfo, wbin = wave_read_header (real_filename)
+        tree['wname'] = ''.join(winfo.setdefault('bname', os.path.basename(real_filename)))
+        tree['wpath'] = real_filename
+        tree['offset'] = 0
+
+    return tree
+
+
 def wave_save(filename):
     raise NotImplementedError
 
@@ -565,11 +650,19 @@ def pack_scan_tree (filename, dbg_folder_prefix=''):
                 f.seek (rec['numDataBytes'], 1)
                 break # exit recursion step
 
-            elif PackedFileRecordType[rec_type_id] == 'Wave':                
-                pack_tree['wave%d' % num_waves] = {'offset': f.tell(),
-                                                   'size': rec['numDataBytes'] }
+            elif PackedFileRecordType[rec_type_id] == 'Wave':
+                wpos1 = f.tell()
+                winfo, wbin = wave_read_header (f)
+                wpos2 = f.tell()
+                wname = ''.join(winfo.setdefault('bname', 'wave%d' % num_waves))
+                pack_tree[wname] = {
+                    'offset': wpos1, 
+                    'size': rec['numDataBytes'],
+                    }
                 num_waves = num_waves + 1
-                f.seek (rec['numDataBytes'], 1)
+                log.debug ("pack_scan_tree: Wave %s/%s (%d bytes, offset %d)" %
+                           (dbg_folder_prefix, wname, rec['numDataBytes'], wpos1))
+                f.seek ((rec['numDataBytes'] - (wpos2-wpos1)), 1)  # skip the res of the wave data
 
             else:
                 # default behavior is to ignore all other fields
@@ -580,6 +673,34 @@ def pack_scan_tree (filename, dbg_folder_prefix=''):
             f.close()
 
     return pack_tree
+
+
+def pack_unpack (filename, basedir=".", igordir="", packtree=None):
+    '''
+    Extracts an Igor packed file, specified by 'filename', to the location
+    specified by 'basedir'.
+    '''
+    
+    if packtree == None:
+        packtree = pack_scan_tree (filename)
+
+    for key in packtree:
+        val = packtree[key]
+        basedir_new = os.path.join(basedir, key)
+        wpath_igor = igordir+":"+key   # complete igor path, inside the PXP
+        wname = key                    # igor wave name
+        if val.has_key('offset'):
+            print "unpacking IBW file %s \t(from %s)" % (basedir_new, wpath_igor)
+            if not os.path.isdir (basedir):
+                os.makedirs (basedir)
+            dst = open(basedir_new+".ibw", "wb")
+            src = open (filename, "rb")
+            src.seek (val['offset'])
+            dst.write (src.read(val['size']))
+            src.close()
+            dst.close()
+        else:
+            pack_unpack (filename, basedir_new, wpath_igor, val)
 
 
 
@@ -597,7 +718,14 @@ def main_read_ibw(options):
 
 def main_read_pack(options):
     log.debug ("reading...")
-    pprint.pprint (pack_scan_tree (options.infile))
+    #pack_tree = pack_scan_tree (options.infile)
+    #pprint.pprint (pack_tree)
+    #print "found: %s" % wave_find (options.infile+":HO2:gr2")
+    #print "found: %s" % wave_find (options.infile, pack_tree)
+
+    pack_unpack (options.infile)
+
+
 
 
 
