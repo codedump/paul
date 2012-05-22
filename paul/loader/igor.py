@@ -230,7 +230,37 @@ WaveHeader5 = Structure(
 
 # End IGOR constants and typedefs from IgorBin.h
 
-# Begin functions from ReadWave.c
+# headers for packd files
+PackedFileRecordHeader = Structure (
+    name = "PackedFileRecord",
+    fields = [
+        Field ('H','recordType', default=0, help='Record type plus superceeded flag.'),
+        Field ('h','version', default=0, help='Version information, record type dependent.'),
+        Field ('l','numDataBytes', default=0, help='Size of the record.'),
+        ])
+
+PackedFileRecordType = {
+    0: 'Unused',            #
+    1: 'Variables',         # Contains system numeric variables
+    2: 'History',           # Contains the experiment's history as plain text
+    3: 'Wave',              # Contains the data for a wave
+    4: 'Recreation',        # Contains the experiment's recreation procedures as plain text.
+    5: 'Procedure',         # Contains the experiment's main procedure window text as plain text.
+    6: 'Unused2',           # 
+    7: 'GetHistory',        # Not a real record but rather, a message to go back and read the history text.
+    8: 'PackedFile',        # Contains the data for a procedure file or notebook in a packed form.
+    9: 'DataFolderStart',   # Marks the start of a new data folder.
+    10: 'DataFolderEnd',    # Marks the end of a data folder.
+    11: 'Reserved'          # From Igor docs:
+                            #   "Igor writes other kinds of records in a packed experiment file, for storing
+                            #    things like pictures, page setup records, and miscellaneous settings. The
+                            #    format for these records is quite complex and is not described in PTN003.
+                            #    If you are writing a program to read packed files, you must skip any record
+                            #    with a record type that is not listed above."
+}
+
+# invert
+PackedFileRecordId = dict((v,k) for k, v in PackedFileRecordType.iteritems())
 
 def need_to_reorder_bytes(version):
     # If the low order byte of the version field of the BinHeader
@@ -287,95 +317,134 @@ def checksum(buffer, byte_order, oldcksum, numbytes):
 # (which is an overloaded ndarray) containing the Igor wave data.
 #
 def load(filename):
-    if hasattr(filename, 'read'):
-        f = filename  # filename is actually a stream object
-    else:
-        f = open(filename, 'rb')
-    try:
-        b = buffer(f.read(BinHeaderCommon.size))
+    return wave_read(filename)
+
+def wave_read_header(f):
+    '''
+    Reads the wave header information. This is useful for quick access to a wave's
+    data (i.e. the name?) without having to load the complete wave. Nice for 
+    big waves and browsing PXP files.
+    '''
+    b = buffer(f.read(BinHeaderCommon.size))
+    version = BinHeaderCommon.unpack_dict_from(b)['version']
+    needToReorderBytes = need_to_reorder_bytes(version)
+    byteOrder = byte_order(needToReorderBytes)
+    
+    if needToReorderBytes:
+        BinHeaderCommon.set_byte_order(byteOrder)
         version = BinHeaderCommon.unpack_dict_from(b)['version']
-        needToReorderBytes = need_to_reorder_bytes(version)
-        byteOrder = byte_order(needToReorderBytes)
+    bin_struct, wave_struct, checkSumSize = version_structs(version, byteOrder)
+
+    b = buffer(b + f.read(bin_struct.size + wave_struct.size - BinHeaderCommon.size))
+    c = checksum(b, byteOrder, 0, checkSumSize)
+    if c != 0:
+        raise ValueError('load: %s: error in checksum - should be 0, is %d.  '
+                         'This does not appear to be a valid Igor binary wave file.'
+                         % (filename, c))
+    bin_info = bin_struct.unpack_dict_from(b)
+    wave_info = wave_struct.unpack_dict_from(b, offset=bin_struct.size)
+
+    #
+    # Need to calculate this because we need access to the Structure class
+    # that unpacked the header.
+    #
+    # We are creating some new dictionary items:
+    #   'wave_data_size': represents the size of the wave data
+    #                     (without tail or header info)
+    #   'tail_size': the size of the wdata field in the correct WaveHeader
+    #                structure
+    #   'tail_data': the corresponding tail data
+    #   'byte_order': byte order parameter as returned by byteorder() above
+    #
+    # and pass those that along with the bin_info dictionary.
+    #
+    if version in [1,2,3]:
+        #flo: tail = 16  # 16 = size of wData field in WaveHeader2 structure
+        #flo: waveDataSize = bin_info['wfmSize'] - wave_struct.size
+        bin_info['tail_size'] = 16
+        bin_info['wave_data_size'] = bin_info['wfmSize'] - wave_struct.size
+    else:
+        assert version == 5, version
+        #flo: tail = 4  # 4 = size of wData field in WaveHeader5 structure
+        #flo: waveDataSize = bin_info['wfmSize'] - (wave_struct.size - tail)
+        bin_info['tail_size'] = 4
+        bin_info['wave_data_size'] = bin_info['wfmSize'] - (wave_struct.size - bin_info['tail_size'])
+
+    bin_info['tail_data'] = numpy.array(b[-bin_info['tail_size']:])
+    bin_info['byte_order'] = byteOrder
         
-        if needToReorderBytes:
-            BinHeaderCommon.set_byte_order(byteOrder)
-            version = BinHeaderCommon.unpack_dict_from(b)['version']
-        bin_struct,wave_struct,checkSumSize = version_structs(version, byteOrder)
+    return wave_info, bin_info
 
-        b = buffer(b + f.read(bin_struct.size + wave_struct.size - BinHeaderCommon.size))
-        c = checksum(b, byteOrder, 0, checkSumSize)
-        if c != 0:
-            raise ValueError('load: %s: error in checksum - should be 0, is %d.  '
-                             'This does not appear to be a valid Igor binary wave file.'
-                             % (filename, c))
-        bin_info = bin_struct.unpack_dict_from(b)
-        wave_info = wave_struct.unpack_dict_from(b, offset=bin_struct.size)
-        if wave_info['type'] == 0:
-            raise NotImplementedError('Text wave')
-        if version in [1,2,3]:
-            tail = 16  # 16 = size of wData field in WaveHeader2 structure
-            waveDataSize = bin_info['wfmSize'] - wave_struct.size
-            # =  bin_info['wfmSize']-16 - (wave_struct.size - tail)
-        else:
-            assert version == 5, version
-            tail = 4  # 4 = size of wData field in WaveHeader5 structure
-            waveDataSize = bin_info['wfmSize'] - (wave_struct.size - tail)
-        # dtype() wrapping to avoid numpy.generic and
-        # getset_descriptor issues with the builtin Numpy types
-        # (e.g. int32).  It has no effect on our local complex
-        # integers.
-        t = numpy.dtype(TYPE_TABLE[wave_info['type']])
-        assert waveDataSize == wave_info['npnts'] * t.itemsize, \
-            ('%d, %d, %d, %s' % (waveDataSize, wave_info['npnts'], t.itemsize, t))
-        tail_data = numpy.array(b[-tail:])
 
-        if version == 5:
-            shape = [n for n in wave_info['nDim'] if n > 0]
-        else:
-            shape = (wave_info['npnts'],)
+def wave_read_data (f, wave_info, bin_info):
+    '''
+    Reads main wave data
+    '''
+    # dtype() wrapping to avoid numpy.generic and
+    # getset_descriptor issues with the builtin Numpy types
+    # (e.g. int32).  It has no effect on our local complex
+    # integers.
+    t = numpy.dtype(TYPE_TABLE[wave_info['type']])
+    assert bin_info['wave_data_size'] == wave_info['npnts'] * t.itemsize, \
+        ('%d, %d, %d, %s' % (bin_info['wave_data_size'], wave_info['npnts'], t.itemsize, t))
 
-        data_b = buffer(buffer(tail_data) + f.read(waveDataSize-tail))
-        data = Wave (shape=shape,
-                     dtype=t.newbyteorder(byteOrder),
-                     buffer=data_b,
-                     order='F')
+    if bin_info['version'] == 5:
+        shape = [n for n in wave_info['nDim'] if n > 0]
+    else:
+        shape = (wave_info['npnts'],)
 
-        if version == 1:
-            pass  # No post-data information
-        elif version == 2:
-            # Post-data info:
-            #   * 16 bytes of padding
-            #   * Optional wave note data
-            pad_b = buffer(f.read(16))  # skip the padding
-            assert max(pad_b) == 0, pad_b
-            bin_info['note'] = str(f.read(bin_info['noteSize'])).strip()
-        elif version == 3:
-            # Post-data info:
-            #   * 16 bytes of padding
-            #   * Optional wave note data
-            #   * Optional wave dependency formula
-            """Excerpted from TN003:
+    data_b = buffer(buffer(bin_info['tail_data']) + 
+                    f.read(bin_info['wave_data_size']-bin_info['tail_size']))
+    data = Wave (shape=shape,
+                 dtype=t.newbyteorder(bin_info['byte_order']),
+                 buffer=data_b,
+                 order='F')
+    return data
 
-            A wave has a dependency formula if it has been bound by a
-            statement such as "wave0 := sin(x)". In this example, the
-            dependency formula is "sin(x)". The formula is stored with
-            no trailing null byte.
-            """
-            pad_b = buffer(f.read(16))  # skip the padding
-            assert max(pad_b) == 0, pad_b
-            bin_info['note'] = str(f.read(bin_info['noteSize'])).strip()
-            bin_info['formula'] = str(f.read(bin_info['formulaSize'])).strip()
-        elif version == 5:
-            # Post-data info:
-            #   * Optional wave dependency formula
-            #   * Optional wave note data
-            #   * Optional extended data units data
-            #   * Optional extended dimension units data
-            #   * Optional dimension label data
-            #   * String indices used for text waves only
-            """Excerpted from TN003:
 
-            dataUnits - Present in versions 1, 2, 3, 5. The dataUnits
+def wave_read_info(f, wave_info, bin_info):
+    '''
+    Reads the post-data info of a wave and returns an updated bin_info dictionary.
+    '''
+
+    version = bin_info['version']
+
+    if version == 1:
+        pass  # No post-data information
+    elif version == 2:
+        # Post-data info:
+        #   * 16 bytes of padding
+        #   * Optional wave note data
+        pad_b = buffer(f.read(16))  # skip the padding
+        assert max(pad_b) == 0, pad_b
+        bin_info['note'] = str(f.read(bin_info['noteSize'])).strip()
+    elif version == 3:
+        # Post-data info:
+        #   * 16 bytes of padding
+        #   * Optional wave note data
+        #   * Optional wave dependency formula
+        """Excerpted from TN003:
+        
+        A wave has a dependency formula if it has been bound by a
+        statement such as "wave0 := sin(x)". In this example, the
+        dependency formula is "sin(x)". The formula is stored with
+        no trailing null byte.
+        """
+        pad_b = buffer(f.read(16))  # skip the padding
+        assert max(pad_b) == 0, pad_b
+        bin_info['note'] = str(f.read(bin_info['noteSize'])).strip()
+        bin_info['formula'] = str(f.read(bin_info['formulaSize'])).strip()
+    elif version == 5:
+        # Post-data info:
+        #   * Optional wave dependency formula
+        #   * Optional wave note data
+        #   * Optional extended data units data
+        #   * Optional extended dimension units data
+        #   * Optional dimension label data
+        #   * String indices used for text waves only
+        """Excerpted from TN003:
+        
+        dataUnits - Present in versions 1, 2, 3, 5. The dataUnits
               field stores the units for the data represented by the
               wave. It is a C string terminated with a null
               character. This field supports units of 0 to 3 bytes. In
@@ -384,77 +453,174 @@ def load(filename):
               stored using the optional extended data units section of
               the file.
 
-            xUnits - Present in versions 1, 2, 3. The xUnits field
+        xUnits - Present in versions 1, 2, 3. The xUnits field
               stores the X units for a wave. It is a C string
               terminated with a null character.  This field supports
               units of 0 to 3 bytes. In version 1, 2 and 3 files,
               longer units can not be represented.
 
-            dimUnits - Present in version 5 only. This field is an
+        dimUnits - Present in version 5 only. This field is an
               array of 4 strings, one for each possible wave
               dimension. Each string supports units of 0 to 3
               bytes. Longer units can be stored using the optional
               extended dimension units section of the file.
-            """
-            bin_info['formula'] = str(f.read(bin_info['formulaSize'])).strip()
-            bin_info['note'] = str(f.read(bin_info['noteSize'])).strip()
-            bin_info['dataEUnits'] = str(f.read(bin_info['dataEUnitsSize'])).strip()
-            bin_info['dimEUnits'] = [
-                str(f.read(size)).strip() for size in bin_info['dimEUnitsSize']]
-            bin_info['dimLabels'] = []
-            for size in bin_info['dimLabelsSize']:
-                labels = str(f.read(size)).split(chr(0)) # split null-delimited strings
-                bin_info['dimLabels'].append([L for L in labels if len(L) > 0])
-            if wave_info['type'] == 0:  # text wave
-                bin_info['sIndices'] = f.read(bin_info['sIndicesSize'])
+              """
+        bin_info['formula'] = str(f.read(bin_info['formulaSize'])).strip()
+        bin_info['note'] = str(f.read(bin_info['noteSize'])).strip()
+        bin_info['dataEUnits'] = str(f.read(bin_info['dataEUnitsSize'])).strip()
+        bin_info['dimEUnits'] = [
+            str(f.read(size)).strip() for size in bin_info['dimEUnitsSize']]
+        bin_info['dimLabels'] = []
+        for size in bin_info['dimLabelsSize']:
+            labels = str(f.read(size)).split(chr(0)) # split null-delimited strings
+            bin_info['dimLabels'].append([L for L in labels if len(L) > 0])
+        if wave_info['type'] == 0:  # text wave
+            bin_info['sIndices'] = f.read(bin_info['sIndicesSize'])    
+
+    return bin_info
+
+
+def wave_read(filename):
+    '''
+    Loads an Igor binary wave from the specified file (either a file stream
+    or a file name).
+    '''
+    if hasattr(filename, 'read'):
+        f = filename  # filename is actually a stream object
+    else:
+        f = open(filename, 'rb')
+    try:
+        
+        wave_info, bin_info = wave_read_header (f)
+        version = bin_info['version']
+
+        if wave_info['type'] == 0:
+            raise NotImplementedError('Text wave')
+
+        data = wave_read_data (f, wave_info, bin_info)
+        bin_info_new = wave_read_info (f, wave_info, bin_info)
+        bin_info = bin_info_new
+
+        data.info.update (bin_info)
+        data.info.update (wave_info)
+
+        # have all the data, now set explicit scaling information
+        log.debug ("load: setting scale on %d dimensions" % len(data.shape))
+    
+        # set the intrinsic scaling information of the wave.
+        for mydim in range(0,len(data.shape)):
+            igordim = mydim
+            log.debug ("load: Setting scaling info for dimension %d here (%d with Igor): %f/%f"
+                       % (mydim, igordim, wave_info["sfA"][igordim], wave_info["sfB"][igordim]))
+            data.setScale (mydim, wave_info["sfA"][igordim], wave_info["sfB"][igordim])
+
+        return data
 
     finally:
         if not hasattr(filename, 'read'):
             f.close()
 
-    data.info.update (bin_info)
-    data.info.update (wave_info)
 
-    log.debug ("load: setting scale on %d dimensions" % len(shape))
-    
-    # set the intrinsic scaling information of the wave.
-    for mydim in range(0,len(shape)):
-        igordim = mydim
-        log.debug ("load: Setting scaling info for dimension %d here (%d with Igor): %f/%f"
-                   % (mydim, igordim, wave_info["sfA"][igordim], wave_info["sfB"][igordim]))
-        data.setScale (mydim, wave_info["sfA"][igordim], wave_info["sfB"][igordim])
-
-    return data
-
-
-def save(filename):
+def wave_save(filename):
     raise NotImplementedError
 
 
-if __name__ == '__main__':
-    """IBW -> ASCII conversion
+def pack_scan_tree (filename, dbg_folder_prefix=''):
+    '''
+    Returns the tree structure of an Igor packed file.
+    '''
+
+    pack_tree = {}
+
+    if hasattr(filename, 'read'):
+        f = filename  # filename is actually a stream object
+    else:
+        log.debug ("get_pack_tree: Reading %s" % filename)
+        f = open(filename, 'rb')
+    try:
+
+        num_waves = 0
+        
+        while True:
+            b = buffer(f.read(PackedFileRecordHeader.size))
+            if (len(b) < PackedFileRecordHeader.size):
+                break
+
+            rec = PackedFileRecordHeader.unpack_dict_from(b)
+            rec_type_id = rec['recordType'] & 0x7fff
+
+            if rec_type_id >= 11:
+                #log.debug ('skipping block %d (%d bytes)' % 
+                #           (rec_type_id, rec['numDataBytes']))
+                f.seek (rec['numDataBytes'], 1)
+
+            elif PackedFileRecordType[rec_type_id] == 'DataFolderStart':
+                folder_name = str(f.read(rec["numDataBytes"])).split("\0")[0]
+                log.debug ("pack_scan_tree: Folder %s/%s (%d bytes)" %
+                           (dbg_folder_prefix, folder_name, rec['numDataBytes']))
+                # recursively scan the folder
+                pack_tree[folder_name] = pack_scan_tree (f, "%s/%s" % (dbg_folder_prefix, folder_name))
+
+            elif PackedFileRecordType[rec_type_id] == 'DataFolderEnd':
+                f.seek (rec['numDataBytes'], 1)
+                break # exit recursion step
+
+            elif PackedFileRecordType[rec_type_id] == 'Wave':                
+                pack_tree['wave%d' % num_waves] = {'offset': f.tell(),
+                                                   'size': rec['numDataBytes'] }
+                num_waves = num_waves + 1
+                f.seek (rec['numDataBytes'], 1)
+
+            else:
+                # default behavior is to ignore all other fields
+                f.seek (rec['numDataBytes'], 1)
+        
+    finally:
+        if not hasattr(filename, 'read'):
+            f.close()
+
+    return pack_tree
+
+
+
+def main_read_ibw(options):
     """
+    IBW -> ASCII conversion
+    """
+
+    wav = wave_read (options.infile)
+    numpy.savetxt(options.outfile, data, fmt='%g', delimiter='\t')
+
+    if options.verbose > 0:
+        pprint.pprint(wav)
+
+
+def main_read_pack(options):
+    log.debug ("reading...")
+    pprint.pprint (pack_scan_tree (options.infile))
+
+
+
+if __name__ == '__main__':
     import optparse
     import sys
+    import pprint
 
+    # preparing the logging system
+    ch = logging.StreamHandler()
+    ch.setLevel (logging.DEBUG)
+    log.setLevel (logging.DEBUG)
+    log.addHandler (ch)
+
+    # parsing options
     p = optparse.OptionParser(version=__version__)
-
     p.add_option('-f', '--infile', dest='infile', metavar='FILE',
-                 default='-', help='Input IGOR Binary Wave (.ibw) file.')
+                 default='-', help='Input IGOR (.ibw, .pxp, .pxt) file.')
     p.add_option('-o', '--outfile', dest='outfile', metavar='FILE',
                  default='-', help='File for ASCII output.')
-    p.add_option('-v', '--verbose', dest='verbose', default=0,
-                 action='count', help='Increment verbosity')
-    p.add_option('-t', '--test', dest='test', default=False,
-                 action='store_true', help='Run internal tests and exit.')
-
     options,args = p.parse_args()
 
-    if options.test == True:
-        import doctest
-        num_failures,num_tests = doctest.testmod(verbose=options.verbose)
-        sys.exit(min(num_failures, 127))
-
+    # some defaults...
     if len(args) > 0 and options.infile == None:
         options.infile = args[0]
     if options.infile == '-':
@@ -462,9 +628,5 @@ if __name__ == '__main__':
     if options.outfile == '-':
         options.outfile = sys.stdout
 
-    data,bin_info,wave_info = loadibw(options.infile)
-    numpy.savetxt(options.outfile, data, fmt='%g', delimiter='\t')
-    if options.verbose > 0:
-        import pprint
-        pprint.pprint(bin_info)
-        pprint.pprint(wave_info)
+    # testing tasks
+    main_read_pack(options)

@@ -1,0 +1,3 @@
+This directory contains documentation relevant to reading IgorPro file
+formats. It is proprietary information of Wavemetrics, the corporation
+that made IgorPro.

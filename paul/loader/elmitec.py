@@ -32,8 +32,6 @@ from paul.base.wave import *
 from paul.base.errors import *
 import numpy, StringIO, sys
 
-testfile = "C:\\Documents and Settings\\LEEM\\Desktop\\DATA - Permanent\\Pt(111)\\2011-06-01\\Pt111_CO_experiment2_.dat"
-
 __version__ = '0.1'
 
 #

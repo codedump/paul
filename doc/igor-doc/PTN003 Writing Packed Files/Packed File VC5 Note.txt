@@ -1,0 +1,1 @@
+On Windows, after you unstuff "Packed File VC5.zip", you should have a folder named "Packed File VC5" which contains the Visual C++ project file, "Packed File.dsw". The "Packed File VC5" folder must be at the same level of your disk hierarchy as the Source folder.
