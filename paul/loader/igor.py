@@ -627,16 +627,24 @@ def pack_scan_tree (filename, dbg_folder_prefix=''):
         num_waves = 0
         
         while True:
+
+            log.debug ("reading %d bytes from..." % PackedFileRecordHeader.size)
+
             b = buffer(f.read(PackedFileRecordHeader.size))
+
+            log.debug ("done")
+
             if (len(b) < PackedFileRecordHeader.size):
                 break
 
             rec = PackedFileRecordHeader.unpack_dict_from(b)
             rec_type_id = rec['recordType'] & 0x7fff
 
+            log.debug ("record: %d" % rec_type_id)
+
             if rec_type_id >= 11:
-                #log.debug ('skipping block %d (%d bytes)' % 
-                #           (rec_type_id, rec['numDataBytes']))
+                log.debug ('pack_scan_tree: Skipping internal Igor block %d (%d bytes)' % 
+                           (rec_type_id, rec['numDataBytes']))
                 f.seek (rec['numDataBytes'], 1)
 
             elif PackedFileRecordType[rec_type_id] == 'DataFolderStart':
@@ -666,6 +674,8 @@ def pack_scan_tree (filename, dbg_folder_prefix=''):
 
             else:
                 # default behavior is to ignore all other fields
+                log.debug ("pack_scan_tree: Skipping block '%s' (%d bytes)" % 
+                           (PackedFileRecordType[rec_type_id], rec['numDataBytes']))
                 f.seek (rec['numDataBytes'], 1)
         
     finally:
@@ -717,7 +727,7 @@ def main_read_ibw(options):
 
 
 def main_read_pack(options):
-    log.debug ("reading...")
+    log.debug ("reading %s..." % options.infile)
     #pack_tree = pack_scan_tree (options.infile)
     #pprint.pprint (pack_tree)
     #print "found: %s" % wave_find (options.infile+":HO2:gr2")
