@@ -620,27 +620,20 @@ def pack_scan_tree (filename, dbg_folder_prefix=''):
     if hasattr(filename, 'read'):
         f = filename  # filename is actually a stream object
     else:
-        log.debug ("get_pack_tree: Reading %s" % filename)
+        log.debug ("get_pack_tree: Reading file %s" % filename)
         f = open(filename, 'rb')
     try:
 
         num_waves = 0
         
         while True:
-
-            log.debug ("reading %d bytes from..." % PackedFileRecordHeader.size)
-
             b = buffer(f.read(PackedFileRecordHeader.size))
-
-            log.debug ("done")
 
             if (len(b) < PackedFileRecordHeader.size):
                 break
 
             rec = PackedFileRecordHeader.unpack_dict_from(b)
             rec_type_id = rec['recordType'] & 0x7fff
-
-            log.debug ("record: %d" % rec_type_id)
 
             if rec_type_id >= 11:
                 log.debug ('pack_scan_tree: Skipping internal Igor block %d (%d bytes)' % 
@@ -652,7 +645,10 @@ def pack_scan_tree (filename, dbg_folder_prefix=''):
                 log.debug ("pack_scan_tree: Folder %s/%s (%d bytes)" %
                            (dbg_folder_prefix, folder_name, rec['numDataBytes']))
                 # recursively scan the folder
-                pack_tree[folder_name] = pack_scan_tree (f, "%s/%s" % (dbg_folder_prefix, folder_name))
+                pack_tree[folder_name] = { 'type': 'folder',
+                                           'name': folder_name,
+                                           'sub': pack_scan_tree (f, "%s/%s" % 
+                                                                  (dbg_folder_prefix, folder_name)) }
 
             elif PackedFileRecordType[rec_type_id] == 'DataFolderEnd':
                 f.seek (rec['numDataBytes'], 1)
@@ -664,8 +660,10 @@ def pack_scan_tree (filename, dbg_folder_prefix=''):
                 wpos2 = f.tell()
                 wname = ''.join(winfo.setdefault('bname', 'wave%d' % num_waves))
                 pack_tree[wname] = {
+                    'type': 'wave',
                     'offset': wpos1, 
                     'size': rec['numDataBytes'],
+                    'name': wname
                     }
                 num_waves = num_waves + 1
                 log.debug ("pack_scan_tree: Wave %s/%s (%d bytes, offset %d)" %
@@ -694,49 +692,52 @@ def pack_unpack (filename, basedir=".", igordir="", packtree=None):
     if packtree == None:
         packtree = pack_scan_tree (filename)
 
+    src = open (filename, "rb")
+
     for key in packtree:
-        val = packtree[key]
-        basedir_new = os.path.join(basedir, key)
-        wpath_igor = igordir+":"+key   # complete igor path, inside the PXP
-        wname = key                    # igor wave name
-        if val.has_key('offset'):
-            print "unpacking IBW file %s \t(from %s)" % (basedir_new, wpath_igor)
+        branch = packtree[key]
+        path_real = os.path.join(basedir, branch['name'])
+        path_igor = igordir+":"+branch['name']   # complete igor path, inside the PXP
+
+        if branch['type'] == 'folder':
+            pack_unpack (filename, basedir=path_real, igordir=path_igor, packtree=branch['sub'])
+        elif branch['type'] == 'wave':
+            print "Unpacking IBW file %s \t(from %s)" % (path_real, path_igor)
             if not os.path.isdir (basedir):
                 os.makedirs (basedir)
-            dst = open(basedir_new+".ibw", "wb")
-            src = open (filename, "rb")
-            src.seek (val['offset'])
-            dst.write (src.read(val['size']))
-            src.close()
+            dst = open(path_real+".ibw", "wb")
+            src.seek (branch['offset'])
+            dst.write (src.read(branch['size']))
             dst.close()
-        else:
-            pack_unpack (filename, basedir_new, wpath_igor, val)
 
+    log.debug ("Unpacking finished.")
+    src.close()
 
 
 def main_read_ibw(options):
     """
     IBW -> ASCII conversion
     """
-
-    wav = wave_read (options.infile)
-    numpy.savetxt(options.outfile, data, fmt='%g', delimiter='\t')
-
-    if options.verbose > 0:
-        pprint.pprint(wav)
+    log.debug ("Converting %s..." % options.ibwread)
+    wav = wave_read (options.ibwread)
+    numpy.savetxt(options.output, data, fmt='%g', delimiter='\t')
 
 
-def main_read_pack(options):
-    log.debug ("reading %s..." % options.infile)
-    #pack_tree = pack_scan_tree (options.infile)
-    #pprint.pprint (pack_tree)
-    #print "found: %s" % wave_find (options.infile+":HO2:gr2")
-    #print "found: %s" % wave_find (options.infile, pack_tree)
+def main_pack_unpack(options):
+    '''
+    Unpacking Igor packed file
+    '''
+    log.debug ("Unpacking %s..." % options.unpack)
+    pack_unpack (options.unpack, basedir=options.output)
 
-    pack_unpack (options.infile)
-
-
-
+def main_pack_list (options):
+    '''
+    Lists contents of Igor Packed file
+    '''
+    log.debug ("Scanning %s...")
+    pack_tree = pack_scan_tree (options.packlist)
+    print "Pack Tree:"
+    pprint.pprint (pack_tree)
 
 
 if __name__ == '__main__':
@@ -752,19 +753,43 @@ if __name__ == '__main__':
 
     # parsing options
     p = optparse.OptionParser(version=__version__)
-    p.add_option('-f', '--infile', dest='infile', metavar='FILE',
-                 default='-', help='Input IGOR (.ibw, .pxp, .pxt) file.')
-    p.add_option('-o', '--outfile', dest='outfile', metavar='FILE',
-                 default='-', help='File for ASCII output.')
+    p.add_option('-i', '--ibwread', dest='ibwread', metavar='FILE',
+                 help='Input IGOR (.ibw, .pxp, .pxt) file.')
+    p.add_option('-l', '--packlist', dest='packlist', metavar='FILE',
+                 help='Lists contents of Igor Packed file (PXP or PXT).')
+    p.add_option('-u', '--unpack', dest='unpack', metavar='FILE',
+                 help='Extracts all waves from specified Igor Packed file.')
+    p.add_option('-x', '--extract', dest='extract', metavar='FILE',
+                 help='Extracts specified wave from Igor Packed file.')
+    p.add_option('-o', '--output', dest='output', metavar='FILE',
+                 help='File for ASCII output (IBW), or directory for unpacking (PXP).')
     options,args = p.parse_args()
 
-    # some defaults...
-    if len(args) > 0 and options.infile == None:
-        options.infile = args[0]
-    if options.infile == '-':
-        options.infile = sys.stdin
-    if options.outfile == '-':
-        options.outfile = sys.stdout
+    if options.ibwread == '-':
+        log.debug ("Expecting IBW on STDIN.")
+        options.ibwread = sys.stdin
 
-    # testing tasks
-    main_read_pack(options)
+    #if options.packlist == '-':
+    #    log.debug ("Reading packed file from STDIN...")
+    #    options.packlist = sys.stdin
+
+    if options.output == None:
+        if options.unpack == None:
+            log.debug ("Implicit argument: wave output is STDOUT.")
+            options.output = sys.stdout
+        else:
+            log.debug ("Implicit argument: unpacking into %s." % os.getcwd())
+            options.output = os.getcwd()
+
+    if not options.ibwread == None:
+        main_read_ibw (options)
+
+    elif not options.packlist == None:
+        main_pack_list (options)
+
+    elif not options.unpack == None:
+        main_pack_unpack (options)
+
+    else:
+        main_test()
+

@@ -51,9 +51,7 @@ class MatplotlibWidget(FigureCanvas):
 
     # Called to plot file specified by the given full path
     @QtCore.pyqtSlot ('QString')
-    def plotFile (self, filename):
-        log.debug ("Plotting %s" % filename)
-        data = igor.load (filename)
+    def plotWave (self, data):
         if (data.ndim == 1):
             log.debug ("1D plot")
             self.axes.plot(data)

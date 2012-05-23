@@ -1,6 +1,6 @@
 from PyQt4 import QtGui, QtCore
 
-from paul.browser.matplotlibwidget import MatplotlibWidget
+from paul.viewer.viewerwindow import ViewerWindow
 from matplotlib.backends.backend_qt4agg import NavigationToolbar2QTAgg as NavigationToolbar
 
 import logging
@@ -13,26 +13,24 @@ class BrowserWindow (QtGui.QMainWindow):
 
         # some defaults
         self.start_path = start_path
-        self.last_path = start_path
 
         # create UI elements
         self.initMainFrame()
         self.initBrowser()
-        self.initPlotter()
+        self.initViewer()
 
         # move to default start directory
         self.dirActivated (self.filesys.index(self.start_path))
 
 
     def initMainFrame(self):
-        self.main_frame = QtGui.QWidget()
-        self.setCentralWidget (self.main_frame)
-
         self.hbox = QtGui.QHBoxLayout()
+        self.main_frame = QtGui.QWidget()
         self.main_frame.setLayout (self.hbox)
-
+        self.setCentralWidget (self.main_frame)
         self.splitter = QtGui.QSplitter(self.main_frame)
         self.hbox.addWidget (self.splitter)
+
 
     def initBrowser(self):
         # model for the file system (dir tree)
@@ -55,53 +53,10 @@ class BrowserWindow (QtGui.QMainWindow):
         self.wave_list.selectionModel().selectionChanged.connect(self.waveSelected)
 
 
-    def initPlotter(self):
-        # main layout manager for the plot area
-        self.plot_frame = QtGui.QWidget(self.splitter)
+    def initViewer(self):
+        self.viewer = ViewerWindow(self.splitter)
+        self.viewer.show()
         
-        self.vbox_plot = QtGui.QVBoxLayout()
-        self.plot_frame.setLayout (self.vbox_plot)
-
-        # the plotting area (matplotlib's FigureCanvas and NavigationToolbar)
-        self.plot_canvas = MatplotlibWidget()
-        self.plot_tools = NavigationToolbar(self.plot_canvas, self.plot_frame)
-        for w in [ self.plot_tools, self.plot_canvas ]:
-            self.vbox_plot.addWidget (w)
-
-        # the script load/save area (a combo box with a (re)load button)
-        self.hbox_plotfile = QtGui.QHBoxLayout()
-        self.vbox_plot.addLayout (self.hbox_plotfile)
-        
-
-        self.plot_scr_list = QtGui.QComboBox()
-        self.plot_scr_list.setSizePolicy (QtGui.QSizePolicy.Expanding,
-                                            QtGui.QSizePolicy.Minimum)
-        #self.plot_scr_browse = QtGui.QPushButton ("&Browse")
-        #self.plot_scr_browse.setSizePolicy (QtGui.QSizePolicy.Minimum,
-        #                                    QtGui.QSizePolicy.Minimum)
-        self.plot_scr_load = QtGui.QPushButton("&Load")
-        self.plot_scr_load.setSizePolicy (QtGui.QSizePolicy.Minimum,
-                                          QtGui.QSizePolicy.Minimum)
-        self.plot_scr_load.clicked.connect (self.plotScriptLoad)
-        for w in [ self.plot_scr_list, self.plot_scr_load ]:
-            self.hbox_plotfile.addWidget (w)
-
-
-    @QtCore.pyqtSlot()
-    def plotScriptLoad (self):
-        '''
-        Called when user selects the "Load" button in the main window.
-        
-        Ultimately, it loads a plotting script (i.e. a script that
-        will beautify the FigureCanvas we are using).
-
-        (Still fighting whether this will select an input from
-        the combo box, or pop up a  file-select window.)
-        '''
-        script_file = QtGui.QFileDialog.getOpenFileName (self, "Select Paul plot csript",
-                                                         self.last_path, "Python scripts (*.py)")
-        log.debug ("BrowserWindow::plotScriptLoad: Script file is %s" % str(script_file))
-
 
 
     @QtCore.pyqtSlot('QModelIndex')
@@ -130,7 +85,7 @@ class BrowserWindow (QtGui.QMainWindow):
             self.last_path = str(fpath)
         if finfo.isFile() and finfo.isReadable():
             log.info ("Loading %s" % fpath)
-            self.plot_canvas.plotFile (fpath)
+            self.viewer.plotFile (fpath)
 
     # called when the selection changed in the waveList
     @QtCore.pyqtSlot ('QItemSelection', 'QItemSelection')
