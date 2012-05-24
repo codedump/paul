@@ -15,7 +15,7 @@ from paul.base.wave import Wave
 from paul.viewer.matplotlibwidget import MatplotlibWidget
 from paul.viewer.plotscript import *
 
-import imp
+import imp, subprocess
 
 class ViewerWindow(QtGui.QMainWindow):
     def __init__(self, parent=None, name=None, width=5, height=4, dpi=100,
@@ -209,7 +209,7 @@ class ViewerWindow(QtGui.QMainWindow):
         '''
         Loads or re-loads the plotscript.
         '''
-        log.debug ("BrowserWindow::plotScriptLoad: Loading %s" % str(script_file))
+        log.debug ("ViewerWindow::plotScriptLoad: Loading %s" % str(script_file))
         if not os.path.isfile(str(script_file)):
             # file doesn't exist, so we'll just tear down the plotscript
             self.statusBar().showMessage("Missing plotscript %s" % str(script_file))
@@ -221,11 +221,13 @@ class ViewerWindow(QtGui.QMainWindow):
                 self.plotscript = imp.load_module ('paul.viewer.plotscript.loaded', f, 
                                                    str(script_file), ('', 'r', imp.PY_SOURCE))
                 self.statusBar().showMessage ("Plotscript %s" % str(script_file))
-                self.watcher.addPath (script_file)
+                log.debug ("ViewerWindow::plotScriptLoad: Watching '%s'" % str(script_file))
+                self.watcher.addPath(script_file)
 
         # execute this in any case.
-        if len(self.plotscript_file) > 0:
+        if len(self.plotscript_file) > 0 and self.plotscript_file != str(script_file):
             self.watcher.removePath (self.plotscript_file)
+            log.debug ("ViewerWindow::plotScriptLoad: Un-watching '%s'" % self.plotscript_file)
         self.plotscript_file = str(script_file)
         self.plotScriptRun (self.plot_waves)
 
@@ -240,7 +242,7 @@ class ViewerWindow(QtGui.QMainWindow):
         if len(self.plotscript_file) == 0:
             log.warn ("Nothing to edit!... (do something useful here, like create a new script?)")
             return
-        os.system("%s %s" % (editor, self.plotscript_file))
+        subprocess.Popen([editor, self.plotscript_file])
 
     @QtCore.pyqtSlot()
     def plotScriptBrowse (self, start_path=''):
@@ -286,15 +288,6 @@ class ViewerWindow(QtGui.QMainWindow):
         has to be called using 'key' as a parameter
         (see PlotscriptModel() for more information).
         '''
-
-        ## First, check how we got here. If it's because the "Other..."
-        ## item was selected in the plotscript QComboBox, then just ignore
-        ## the event. It will be properly processed when the newly selected
-        ## file (from the file dialog that was processed after "Other...")
-        ## will be marked.
-
-        #if (key == self.plot_scr_combo_otherindex):
-        #    return
 
         locator = self.plot_scr_combo.itemData(key).toPyObject()
         if locator is None:
