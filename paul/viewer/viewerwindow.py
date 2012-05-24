@@ -70,16 +70,21 @@ class ViewerWindow(QtGui.QMainWindow):
 
             
         self.plot_scr_combo.addItem ('(none)',         None)
+        self.plot_scr_combo.addItem ('Other...', self.plotScriptBrowse)
+        self.plot_scr_combo_otherindex = 1  # index of the "Other..." entry --
+                                            # this one gets special treament.
+        self.plot_scr_combo.insertSeparator(2)
         self.plot_scr_combo.addItem ('Automagic',      self.locateAutomagicPlotscript)
         self.plot_scr_combo.addItem ('File Default',   self.locateFilePlotscript)
         self.plot_scr_combo.addItem ('Folder Default', self.locateFolderPlotscript)
         self.plot_scr_combo.addItem ('User Default',   self.locateUserPlotscript)
-        self.plot_scr_combo.insertSeparator(5)
-        self.plot_scr_combo.addItem ('Other...', self.plotScriptBrowse)
+        self.plot_scr_combo.insertSeparator(7)
+        self.plot_scr_combo_userinsert = 8  # index at which we can insert user-selected
+                                            # plotscripts into the combo box :-)
 
         self.plot_scr_combo.setCurrentIndex (-1)
         self.plot_scr_combo.currentIndexChanged.connect (self.plotScriptSelected)
-        self.plot_scr_combo.setCurrentIndex (1) # trigger the 'Automagic' loader
+        self.plot_scr_combo.setCurrentIndex (3) # trigger the 'Automagic' loader
 
 
     def locateAutomagicPlotscript(self, wave_path):
@@ -94,14 +99,14 @@ class ViewerWindow(QtGui.QMainWindow):
         '''
         path = self.locateFilePlotscript(wave_path)
         if os.path.isfile(path):
-            log.debug ("Automagic Plotscript (file) for %s: %s" % (wave_path, path))
+            log.debug ("ViewerWindow::locateAutomagicPlotscript:: Automagic Plotscript (file) for %s: %s" % (wave_path, path))
             return path
 
         base = wave_path
         while True:
             path = self.locateFolderPlotscript(base)
             if os.path.isfile(path):
-                log.debug ("Automagic Plotscript (folder family) for %s: %s" % (wave_path, path))
+                log.debug ("ViewerWindow::locateAutomagicPlotscript:: Automagic Plotscript (folder family) for %s: %s" % (wave_path, path))
                 return path
             new_base = os.path.dirname(str(base))
             if new_base == base:
@@ -110,7 +115,7 @@ class ViewerWindow(QtGui.QMainWindow):
 
         path = self.locateUserPlotscript(wave_path)
         if os.path.isfile(path):
-            log.debug ("Automagic Plotscript (user template) for %s: %s" % (wave_path, path))
+            log.debug ("ViewerWindow::locateAutomagicPlotscript:: Automagic Plotscript (user template) for %s: %s" % (wave_path, path))
             return path
 
         return ''
@@ -134,7 +139,7 @@ class ViewerWindow(QtGui.QMainWindow):
         the plotscript is '_default.pp'.
         '''
         path = os.path.join (os.path.dirname (str(wave_path)), "_default.pp")
-        log.debug ("Folder Plotscript for %s: %s" % (wave_path, path))
+        log.debug ("ViewerWindow::locateFolderPlotscript:: Folder Plotscript for %s: %s" % (wave_path, path))
         return path
 
 
@@ -144,16 +149,18 @@ class ViewerWindow(QtGui.QMainWindow):
         home directory, or empty string if the script is not available.
         '''
         path = os.path.expanduser ("~/.paul/_default.pp")
-        log.debug ("User Plotscript for %s: %s" % (wave_path, path))
+        log.debug ("ViewerWindow::locateUserPlotscript:: User Plotscript for %s: %s" % (wave_path, path))
         return path
 
 
-    def locateCustomPlotscript (self, wave_path):
+    def locateComboPlotscript (self, wave_path):
         '''
         Return the path of the plotscript currently selected by the user.
+        The wave_path parameter is ignored.
         '''
-        log.debug ("Previously user-selected Plotscript is %s" % self.plotscript_file)
-        return self.plotscript_file
+        path = str(self.plot_scr_combo.currentText())
+        log.debug ("ViewerWindow::locateComboPlotscript:: Previously user-selected Plotscript is '%s'" % path)
+        return path
         
 
     @QtCore.pyqtSlot('QString')
@@ -214,9 +221,7 @@ class ViewerWindow(QtGui.QMainWindow):
                 self.plotscript = imp.load_module ('paul.viewer.plotscript.loaded', f, 
                                                    str(script_file), ('', 'r', imp.PY_SOURCE))
                 self.statusBar().showMessage ("Plotscript %s" % str(script_file))
-                if len(self.plotscript_file) > 0:
-                    self.watcher.removePath (self.plotscript_file)
-                self.watcher.addPath (self.script_file)
+                self.watcher.addPath (script_file)
 
         # execute this in any case.
         if len(self.plotscript_file) > 0:
@@ -252,7 +257,11 @@ class ViewerWindow(QtGui.QMainWindow):
             start_path = self.last_path
         script_file = QtGui.QFileDialog.getOpenFileName (self, "Select Paul plot csript",
                                                          start_path, "Python scripts (*.pp)")
-        self.plotScriptLoad (script_file)
+        if len(str(script_file)) and self.plot_scr_combo.findText (script_file) < 0:
+            self.plot_scr_combo.insertItem (self.plot_scr_combo_userinsert,
+                                            script_file, self.locateComboPlotscript)
+
+        return str(script_file)
         
 
     @QtCore.pyqtSlot('QString')
@@ -277,11 +286,24 @@ class ViewerWindow(QtGui.QMainWindow):
         has to be called using 'key' as a parameter
         (see PlotscriptModel() for more information).
         '''
+
+        ## First, check how we got here. If it's because the "Other..."
+        ## item was selected in the plotscript QComboBox, then just ignore
+        ## the event. It will be properly processed when the newly selected
+        ## file (from the file dialog that was processed after "Other...")
+        ## will be marked.
+
+        #if (key == self.plot_scr_combo_otherindex):
+        #    return
+
         locator = self.plot_scr_combo.itemData(key).toPyObject()
         if locator is None:
+            log.debug ("ViewerWindow::plotScriptSelected: Item %d has no locator." % key)
             path = ''
         else:
+            log.debug ("ViewerWindow::plotScriptSelected: Item %d has locator %s." % (key, locator))
             path = locator(self.plot_filename)
-        log.debug ("ViewerWindow::plotScriptSelected: Plot script path is '%s'" % path)
+        log.debug ("ViewerWindow::plotScriptSelected: Plot script path is '%s' (locator: %s, combo index: %d)" 
+                   % (path, locator, key))
         self.plotScriptLoad(path)
         self.replot()
