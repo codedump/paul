@@ -61,10 +61,10 @@ class ViewerWindow(QtGui.QMainWindow):
         self.plot_scr_combo = QtGui.QComboBox()
         self.plot_scr_combo.setSizePolicy (QtGui.QSizePolicy.Expanding,
                                             QtGui.QSizePolicy.Minimum)
-        self.plot_scr_load = QtGui.QPushButton("&Load")
+        self.plot_scr_load = QtGui.QPushButton("&Edit")
         self.plot_scr_load.setSizePolicy (QtGui.QSizePolicy.Minimum,
                                           QtGui.QSizePolicy.Minimum)
-        self.plot_scr_load.clicked.connect (self.plotScriptBrowse)
+        self.plot_scr_load.clicked.connect (self.plotScriptEdit)
         for w in [ self.plot_scr_combo, self.plot_scr_load ]:
             self.hbox_plotfile.addWidget (w)
 
@@ -208,18 +208,34 @@ class ViewerWindow(QtGui.QMainWindow):
             self.statusBar().showMessage("Missing plotscript %s" % str(script_file))
             if hasattr(self, 'plotscript'):
                 del self.plotscript
-        else:            
+        else:
+            # ...otherwise we'll load the script as 'self.plotscript'.
             with open (str(script_file), 'r') as f:
                 self.plotscript = imp.load_module ('paul.viewer.plotscript.loaded', f, 
                                                    str(script_file), ('', 'r', imp.PY_SOURCE))
                 self.statusBar().showMessage ("Plotscript %s" % str(script_file))
                 if len(self.plotscript_file) > 0:
                     self.watcher.removePath (self.plotscript_file)
-                    self.plotscript_file = str(script_file)
-                    self.watcher.addPath (self.plotscript_file)
-                # with 'with', the file will be closed automatically
+                self.watcher.addPath (self.script_file)
+
+        # execute this in any case.
+        if len(self.plotscript_file) > 0:
+            self.watcher.removePath (self.plotscript_file)
+        self.plotscript_file = str(script_file)
         self.plotScriptRun (self.plot_waves)
 
+
+    @QtCore.pyqtSlot()
+    def plotScriptEdit (self):
+        '''
+        Called when user clicks the "Edit" button in the viewer window.
+        It is supposed to start an editor on the current plotscript file.
+        '''
+        editor = "emacs"
+        if len(self.plotscript_file) == 0:
+            log.warn ("Nothing to edit!... (do something useful here, like create a new script?)")
+            return
+        os.system("%s %s" % (editor, self.plotscript_file))
 
     @QtCore.pyqtSlot()
     def plotScriptBrowse (self, start_path=''):
