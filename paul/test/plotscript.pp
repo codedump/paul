@@ -27,5 +27,5 @@ def decorate (fig, waves):
                         containing the data. Usually, the first of these
                         waves will be already plotted.
     '''
-    fig.axes.set_title ('Example Plotscript')
+    fig.axes.set_title ('Example Plotscript...')
     fig.draw()

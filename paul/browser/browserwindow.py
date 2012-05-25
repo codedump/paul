@@ -54,9 +54,9 @@ class BrowserWindow (QtGui.QMainWindow):
 
 
     def initViewer(self):
-        self.viewer = ViewerWindow(self.splitter)
+        self.viewer = ViewerWindow()
+        self.viewer.setParent (self.splitter)
         self.viewer.show()
-        
 
 
     @QtCore.pyqtSlot('QModelIndex')
@@ -85,7 +85,7 @@ class BrowserWindow (QtGui.QMainWindow):
             self.last_path = str(fpath)
         if finfo.isFile() and finfo.isReadable():
             log.info ("Loading %s" % fpath)
-            self.viewer.plotFile (fpath)
+            self.viewer.plotFiles ([str(fpath)])
 
     # called when the selection changed in the waveList
     @QtCore.pyqtSlot ('QItemSelection', 'QItemSelection')
