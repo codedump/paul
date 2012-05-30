@@ -55,9 +55,15 @@ class MatplotlibWidget(FigureCanvas):
         if (data.ndim == 1):
             log.debug ("1D plot")
             self.axes.plot(data)
+
         elif (data.ndim == 2):
             log.debug ("2D imshow")
-            self.axes.imshow(data, aspect='auto', extent=data.imgLim())
+
+            # use the correct axis scaling, if this happens to be a Wave() object.
+            if hasattr(data, 'imgLim'):
+                self.axes.imshow(data, aspect='auto', extent=data.imgLim())
+            else:
+                self.axes.imshow(data, aspect='auto')
         else:
             log.error ("Not implemented for dim > 2")
         self.draw()
