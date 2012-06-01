@@ -23,7 +23,8 @@
 # to support IBW writing aswell.
 #
 
-"""Provides pure Python interface between IGOR Binary
+"""
+Provides pure Python interface between IGOR Binary
 Wave files and Numpy arrays.
 """
 
