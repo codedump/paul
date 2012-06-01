@@ -25,10 +25,6 @@ class MatplotlibWidget(FigureCanvas):
 
         self.fig = Figure(figsize=(width, height), dpi=dpi, 
                           facecolor=bgcolor, edgecolor=bgcolor)
-        self.axes = self.fig.add_subplot(111)
-        self.axes.hold(False)  # We want the axes cleared every time
-                               # plot() is called
-
         FigureCanvas.__init__(self, self.fig)
         self.setParent(parent)
         self.setSizePolicy(QtGui.QSizePolicy.Expanding,
@@ -52,12 +48,24 @@ class MatplotlibWidget(FigureCanvas):
     # Called to plot file specified by the given full path
     @QtCore.pyqtSlot ('QString')
     def plotWave (self, data):
+
+        self.fig.clear()
+        self.axes = self.fig.add_subplot(111)
+        self.axes.hold(False)  # We want the axes cleared every time
+                               # plot() is called
+
         if (data.ndim == 1):
             log.debug ("1D plot")
             self.axes.plot(data)
+
         elif (data.ndim == 2):
             log.debug ("2D imshow")
-            self.axes.imshow(data, aspect='auto', extent=data.imgLim())
+
+            # use the correct axis scaling, if this happens to be a Wave() object.
+            if hasattr(data, 'imgLim'):
+                self.axes.imshow(data, aspect='auto', extent=data.imgLim())
+            else:
+                self.axes.imshow(data, aspect='auto')
         else:
             log.error ("Not implemented for dim > 2")
         self.draw()

@@ -386,6 +386,8 @@ def wave_read_header(filename):
 
         bin_info['tail_data'] = numpy.array(b[-bin_info['tail_size']:])
         bin_info['byte_order'] = byteOrder
+
+        wave_info['name'] = ''.join(wave_info.setdefault('bname', '(bastard wave)'))
         
         return wave_info, bin_info
 
@@ -497,12 +499,12 @@ def wave_read_info(f, wave_info, bin_info):
             labels = str(f.read(size)).split(chr(0)) # split null-delimited strings
             bin_info['dimLabels'].append([L for L in labels if len(L) > 0])
         if wave_info['type'] == 0:  # text wave
-            bin_info['sIndices'] = f.read(bin_info['sIndicesSize'])    
+            bin_info['sIndices'] = f.read(bin_info['sIndicesSize'])
 
     return bin_info
 
 
-def wave_read(filename):
+def wave_read (filename):
     '''
     Loads an Igor binary wave from the specified file (either a file stream
     or a file name).
