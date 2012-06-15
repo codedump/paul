@@ -207,14 +207,36 @@ class ViewerWindow(QtGui.QMainWindow):
 
     @QtCore.pyqtSlot(Wave)
     def plotWaves (self, wavlist):
-        if len(wavlist) < 1:
-            log.debug ("ViewerWindow::plotWaves: Empty list, nothing to do.")
-            return
-
         self.plot.waves = wavlist
-        self.plot.canvas.plotWave (wavlist[0])
-        self.pscrRun()
-        self.setWindowTitle ("Paul Viewer: %s" % wavlist[0].info['name'])
+
+        #
+        # run the plotscript: if 'populate' is available, it will
+        # take care of plotting the wave(s) itself.
+        # if only 'decorate' is available, then we are supposed
+        # to plot the wave(s) and have 'decorate' only do the
+        # plot decorations afterwards.
+        #
+        if (not hasattr(self.pscr, 'obj')) or (not hasattr(self.pscr.obj, 'populate')):
+            # we're supposed to plot the graph ourselves:
+
+            if len(wavlist) > 0:
+                self.plot.canvas.plotWave (wavlist[0])
+            else:
+                self.plot.canvas.axes.clear()
+
+            if hasattr(self.pscr, 'obj') and hasattr(self.pscr.obj, 'decorate'):
+                log.debug ("ViewerWindow::plotWaves: Decorating plot (with %s)." % self.pscr.file)
+                self.pscr.obj.decorate (self.plot.canvas, self.plot.waves)
+                self.plot.canvas.draw()
+        elif hasattr(self.pscr, 'obj') and hasattr(self.pscr.obj, 'populate') and len(wavlist) > 0:
+                log.debug ("ViewerWindow::plotWaves: Populating plot (with %s)." % self.pscr.file)
+                self.pscr.obj.populate (self.plot.canvas, self.plot.waves)
+                self.plot.canvas.draw()
+
+        if len(wavlist):
+            self.setWindowTitle ("Paul Viewer: %s" % wavlist[0].info['name'])
+        else:
+            self.setWindowTitle ("Paul Viewer")
 
 
     @QtCore.pyqtSlot('QString')
@@ -234,17 +256,13 @@ class ViewerWindow(QtGui.QMainWindow):
 
     def replot(self):
         '''
-        Wrapper for plotFile() to easily trigger a replot of the last selection,
+        Wrapper for plotWaves() to easily trigger a replot of the last selection,
         including all the dance (like running the plotscript, etc).
-        A the current, it only re-calls plotFile() using the stored file name.
-        Later, if the plotting process on its way from file->plot becomes
-        more complex, it might do more.
+        
+        WARNING: This will _not_ reload the files from disk!
+                 (Need a reload() method for that?)
         '''
-        if len(self.plot.files) == 0 or not os.path.isfile(self.plot.files[0]):
-            self.plot.canvas.fig.clear()
-            self.pscrRun()
-        else:
-            self.plotFiles (self.plot.files)  # will call pscrRun() itself
+        self.plotWaves(self.plot.waves)
 
 
     def pscrLocBrowse (self, path_hint='default'):
@@ -269,19 +287,11 @@ class ViewerWindow(QtGui.QMainWindow):
     def pscrRun(self):
         '''
         If a plotscript has been defined, run it on the current plots.
+        This is actually just a wrapper for plotWaves(), since
+        the plotting of the waves is dependent on which methods the
+        plotscript provides.
         '''
-        if hasattr(self.pscr, 'obj') and not self.pscr.obj == None:
-            if hasattr(self.pscr.obj, 'populate'):
-                self.pscr.obj.populate (self.plot.canvas, self.plot.waves)
-            elif hasattr(self.pscr.obj, 'decorate'):
-                self.pscr.obj.decorate (self.plot.canvas, self.plot.waves)
-            else:
-                log.warn ("ViewerWindow::pscrRun: Ploscript is useless: has neither 'populate' nor 'decorate' functions.")
-        else:
-            log.debug ("ViewerWindow::pscrRun: No plotscript defined")
-
-        # update the canvas after script execution
-        self.plot.canvas.draw()
+        plotWaves(self.plot.waves)
 
 
     def pscrLoad (self, script_file):
