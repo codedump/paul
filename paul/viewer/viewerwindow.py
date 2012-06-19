@@ -205,6 +205,7 @@ class ViewerWindow(QtGui.QMainWindow):
         log.debug ("ViewerWindow::pscrLocByCombo:: User-selected plotscripts is '%s'" % path)
         return path
 
+
     @QtCore.pyqtSlot(Wave)
     def plotWaves (self, wavlist):
         self.plot.waves = wavlist
@@ -221,7 +222,7 @@ class ViewerWindow(QtGui.QMainWindow):
 
             if len(wavlist) > 0:
                 self.plot.canvas.plotWave (wavlist[0])
-            else:
+            elif hasattr(self.plot.canvas, 'axes'):
                 self.plot.canvas.axes.clear()
 
             if hasattr(self.pscr, 'obj') and hasattr(self.pscr.obj, 'decorate'):
@@ -239,7 +240,7 @@ class ViewerWindow(QtGui.QMainWindow):
             self.setWindowTitle ("Paul Viewer")
 
 
-    @QtCore.pyqtSlot('QString')
+    @QtCore.pyqtSlot('QStringList')
     def plotFiles(self, flist):
         '''
         Loads the specified data file(s) and plots them.
@@ -253,6 +254,7 @@ class ViewerWindow(QtGui.QMainWindow):
         data.info.setdefault('name', os.path.basename(str(flist[0])))
         self.plot.files = flist
         self.plotWaves ([data])
+
 
     def replot(self):
         '''

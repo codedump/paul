@@ -9,7 +9,7 @@ ch = logging.StreamHandler()
 ch.setLevel (logging.DEBUG)
 log.addHandler (ch)
 
-fmt = logging.Formatter('%(asctime)s %(levelname)s(%(name)s): %(message)s')
+fmt = logging.Formatter('%(asctime)s %(levelname)s: %(name)s: %(module)s.%(funcName)s: %(message)s')
 ch.setFormatter(fmt)
 
 log.debug ("Starting...")
