@@ -20,7 +20,8 @@ class TreeWindow (QtGui.QMainWindow):
 
         # create UI elements
         self.initMainFrame()
-        self.initBrowser()
+        self.initToolbar()
+        self.initTree()
 
         # move to default start directory
         self.setRoot (start_path)
@@ -34,7 +35,31 @@ class TreeWindow (QtGui.QMainWindow):
         self.setCentralWidget (self.main_frame)
 
 
-    def initBrowser(self):
+    def initToolbar(self):
+        # create general tree browser layout:
+        # one giant VBox, holding the buttons (toolbar?) in the upper part
+        # and the file tree in the lower part.
+        self.tools_hbox = QtGui.QHBoxLayout()
+        self.vbox.addLayout (self.tools_hbox)
+
+        self.tools_label = QtGui.QLabel ("Dir: ")
+
+        self.tools_treedrop = QtGui.QComboBox ()
+        self.tools_treedrop.setSizePolicy (QtGui.QSizePolicy.Expanding,
+                                           QtGui.QSizePolicy.Minimum)
+        self.tools_treedrop.currentIndexChanged['QString'].connect (self.setRoot)
+
+        self.tools_btnUp = QtGui.QPushButton ("&Up")
+        self.tools_btnUp.show()
+        self.tools_btnUp.setSizePolicy (QtGui.QSizePolicy.Minimum,
+                                        QtGui.QSizePolicy.Minimum)
+        self.tools_btnUp.clicked.connect (self.treeUp)
+
+        for w in [ self.tools_label, self.tools_treedrop, self.tools_btnUp ]:
+            self.tools_hbox.addWidget (w)
+
+
+    def initTree(self):
         '''Initializes browser specific stuff (tree-view and buttons)'''
 
         # model for the file system (dir tree)
@@ -44,18 +69,6 @@ class TreeWindow (QtGui.QMainWindow):
         self.filesys.setNameFilters ("*.ibw")
         self.filesys.setNameFilterDisables (False)
 
-        # create general tree browser layout:
-        # one giant VBox, holding the buttons (toolbar?) in the upper part
-        # and the file tree in the lower part.
-        self.tools_hbox = QtGui.QHBoxLayout()
-        self.vbox.addLayout (self.tools_hbox)
-        self.tools_btnUp = QtGui.QPushButton ("&Up")
-        self.tools_btnUp.show()
-        self.tools_btnUp.setSizePolicy (QtGui.QSizePolicy.Minimum,
-                                        QtGui.QSizePolicy.Minimum)
-        self.tools_btnUp.clicked.connect (self.treeUp)
-        self.tools_hbox.addWidget (self.tools_btnUp)
-
         # the file system browser tree
         self.filetree = QtGui.QTreeView()
         self.vbox.addWidget (self.filetree)
@@ -63,17 +76,51 @@ class TreeWindow (QtGui.QMainWindow):
         self.filetree.setModel (self.filesys)
         self.filetree.selectionModel().selectionChanged.connect(self.itemSelected)
 
-        
-    def setRoot (self, path):
+    
+    @QtCore.pyqtSlot('QString')
+    def setRoot (self, path, silent=0):
         '''
         Sets the specified path as the current root path. Typically
         called when the user double-clicked an entry in the tree view.
+        If 'silent' is not 0, then the action will be performed silently
+        (i.e. no entry will be changed in the path history dropdown).
         '''
-        self.current_path = os.path.abspath(path)
+
+        new_path = os.path.abspath(str(path))
+        if (os.path.abspath(new_path) == self.current_path):
+            # this usually happens when we call setCurrentIndex() manually,
+            # see below...
+            return
+
+        self.current_path = new_path
         self.statusBar().showMessage (self.current_path)
         index = self.filesys.index (self.current_path)
         self.filetree.setRootIndex (index)
         self.filetree.scrollTo (index)
+
+        if silent != 0:
+            return
+
+        # add path to combo box and make the added entry the current one
+        combo_index = self.tools_treedrop.findText (self.current_path)
+        if combo_index < 0:
+            self.tools_treedrop.insertItem (0, self.current_path)
+            combo_index = 0
+        self.tools_treedrop.setCurrentIndex (combo_index)
+
+
+    def treeMakeDrop (self):
+        '''
+        Updates the tree dropdown list.
+        The tree-dropdown list is a combo box which contains all
+        parent nodes from the currently displayed node (the root
+        of the tree-view) to the root of the file system,
+        for fast selection.
+        Additionally, the dropdown may contain recently selected
+        list items.
+        '''
+        pass
+        
 
         
     @QtCore.pyqtSlot()
