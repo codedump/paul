@@ -48,7 +48,7 @@ class ViewerWindow(QtGui.QMainWindow):
     
     def __del__(self):
         for i in self.pscr.tmp_files:
-            log.debug ("ViewerWindow::__destroy__: Removing temporary plotscript %s" % i)
+            log.debug ("Removing temporary plotscript %s" % i)
             os.remove(i)
 
 
@@ -116,7 +116,7 @@ class ViewerWindow(QtGui.QMainWindow):
     #
 
     def mplOnPick(self, event):
-        log.debug ("ViewerWindow::mplOnPick: Clicked a bar at %s" 
+        log.debug ("Clicked a bar at %s" 
                    % event.artist.get_bbox().get_points())
 
 
@@ -136,14 +136,14 @@ class ViewerWindow(QtGui.QMainWindow):
         '''
         path = self.pscrLocByFile(wave_path)
         if os.path.isfile(path):
-            log.debug ("ViewerWindow::locateAutomagicPs:: Automagic Ps (file) for %s: %s" % (wave_path, path))
+            log.debug ("Automagic Ps (file) for %s: %s" % (wave_path, path))
             return path
 
         base = wave_path
         while True:
             path = self.pscrLocByFolder(base)
             if os.path.isfile(path):
-                log.debug ("ViewerWindow::locateAutomagicPs:: Automagic Ps (folder family) for %s: %s"
+                log.debug ("Automagic Ps (folder family) for %s: %s"
                            % (wave_path, path))
                 return path
             new_base = os.path.dirname(str(base))
@@ -153,7 +153,7 @@ class ViewerWindow(QtGui.QMainWindow):
 
         path = self.pscrLocByUser(wave_path)
         if os.path.isfile(path):
-            log.debug ("ViewerWindow::locateAutomagicPs:: Automagic Ps (user template) for %s: %s"
+            log.debug ("Automagic Ps (user template) for %s: %s"
                        % (wave_path, path))
             return path
 
@@ -178,7 +178,7 @@ class ViewerWindow(QtGui.QMainWindow):
         the plotscript is 'default.pp'.
         '''
         path = os.path.join (os.path.dirname (str(wave_path)), "default"+self.pscr.file_ext)
-        log.debug ("ViewerWindow::locateFolderPs:: Folder Ps for %s: %s" % (wave_path, path))
+        log.debug ("Folder Ps for %s: %s" % (wave_path, path))
         return path
 
 
@@ -188,7 +188,7 @@ class ViewerWindow(QtGui.QMainWindow):
         home directory, or empty string if the script is not available.
         '''
         path = os.path.expanduser ("~/.paul/default"+self.pscr.file_ext)
-        log.debug ("ViewerWindow::pscrLocByUser:: User plotscript for %s: %s" % (wave_path, path))
+        log.debug ("User plotscript for %s: %s" % (wave_path, path))
         return path
 
 
@@ -202,7 +202,7 @@ class ViewerWindow(QtGui.QMainWindow):
         make some kind of mapping for this...).
         '''
         path = str(self.pscr.ui.combo.currentText())
-        log.debug ("ViewerWindow::pscrLocByCombo:: User-selected plotscripts is '%s'" % path)
+        log.debug ("User-selected plotscripts is '%s'" % path)
         return path
 
 
@@ -226,11 +226,11 @@ class ViewerWindow(QtGui.QMainWindow):
                 self.plot.canvas.axes.clear()
 
             if hasattr(self.pscr, 'obj') and hasattr(self.pscr.obj, 'decorate'):
-                log.debug ("ViewerWindow::plotWaves: Decorating plot (with %s)." % self.pscr.file)
+                log.debug ("Decorating plot (with %s)." % self.pscr.file)
                 self.pscr.obj.decorate (self.plot.canvas, self.plot.waves)
                 self.plot.canvas.draw()
         elif hasattr(self.pscr, 'obj') and hasattr(self.pscr.obj, 'populate') and len(wavlist) > 0:
-                log.debug ("ViewerWindow::plotWaves: Populating plot (with %s)." % self.pscr.file)
+                log.debug ("Populating plot (with %s)." % self.pscr.file)
                 self.pscr.obj.populate (self.plot.canvas, self.plot.waves)
                 self.plot.canvas.draw()
 
@@ -246,7 +246,7 @@ class ViewerWindow(QtGui.QMainWindow):
         Loads the specified data file(s) and plots them.
         '''
         if len(flist) < 1:
-            log.debug ("ViewerWindow::plotFiles: Empty list, nothing to do.")
+            log.debug ("Empty list, nothing to do.")
             return
         log.debug ("Plotting %s" % flist[0])
         data = igor.load (flist[0])
@@ -318,22 +318,22 @@ class ViewerWindow(QtGui.QMainWindow):
             self.watcher.removePath (self.pscr.file)
 
         if not os.path.isfile(str(script_file)): # file doesn't exist, so we'll just tear down the plotscript
-            log.debug ("ViewerWindow::pscrLoad: Killing currently loaded plotscript %s" % script_file)
+            log.debug ("Killing currently loaded plotscript %s" % script_file)
             self.statusBar().showMessage("Missing plotscript %s" % str(script_file))
             if hasattr(self.pscr, 'obj'):
                 if hasattr(self.pscr.obj, 'exit'):
-                    log.debug ("ViewerWindow::pscrLoad: exit()'ing old plotscript (%s)" % self.pscr.file)
+                    log.debug ("exit()'ing old plotscript (%s)" % self.pscr.file)
                     self.pscr.obj.exit(self.plot.canvas)
                 del self.pscr.obj
         else:                                     # ...otherwise we'll load the script as 'self.plotscript'.
             with open (str(script_file), 'r') as f:                
-                log.debug ("ViewerWindow::pscrLoad: Loading '%s'" % str(script_file))
+                log.debug ("Loading '%s'" % str(script_file))
                 self.pscr.obj = imp.load_module ('paul.viewer.plotscript', f, 
                                                   str(script_file), ('', 'r', imp.PY_SOURCE))
                 self.statusBar().showMessage ("Plotscript %s" % str(script_file))
                 self.watcher.addPath(script_file)
                 if hasattr(self.pscr.obj, 'init'):
-                    log.debug ("ViewerWindow::pscrLoad: init()'ing plotscript (%s)" % str(script_file))
+                    log.debug ("init()'ing plotscript (%s)" % str(script_file))
                     self.pscr.obj.init(self.plot.canvas)
 
         # watch the file (if it's non-zero)
@@ -349,7 +349,7 @@ class ViewerWindow(QtGui.QMainWindow):
             self.pscrLoad(filename)
             self.replot()
         else:
-            log.debug ("ViewerWindow::pscrOnFileChanged: Don't know what to do with %s." % str(filename))
+            log.debug ("Don't know what to do with %s." % str(filename))
 
 
 
@@ -368,7 +368,7 @@ class ViewerWindow(QtGui.QMainWindow):
                      "def decorate (fig, waves):\n"
                      "    pass\n")
             os.close(tmp_fd)
-            log.debug ("ViewerWindow::pscrOnEdit: Loading temporary plotscript %s" % tmp_path)
+            log.debug ("Loading temporary plotscript %s" % tmp_path)
             self.pscr.tmp_files.append (tmp_path)
             self.pscr.ui.combo.insertItem (self.pscr.ui.id_user, tmp_path, self.pscrLocByCombo)
             self.pscrLoad (tmp_path)
@@ -396,7 +396,7 @@ class ViewerWindow(QtGui.QMainWindow):
         if locator is not None:
             pscr_path = locator(wave_path)
 
-        log.debug ("ViewerWindow::pscrOnSelected: Plot script path is '%s' (locator: %s, combo index: %d)" 
+        log.debug ("Plot script path is '%s' (locator: %s, combo index: %d)" 
                    % (pscr_path, locator, key))
 
         self.pscrLoad(pscr_path)

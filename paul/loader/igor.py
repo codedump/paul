@@ -356,7 +356,7 @@ def wave_read_header(filename):
         b = buffer(b + f.read(bin_struct.size + wave_struct.size - BinHeaderCommon.size))
         c = checksum(b, byteOrder, 0, checkSumSize)
         if c != 0:
-            raise VersionError('load: %s: error in checksum - should be 0, is %d.  '
+            raise VersionError('%s: error in checksum - should be 0, is %d.  '
                                'This does not appear to be a valid Igor binary wave file.'
                                % (filename, c))
         bin_info = bin_struct.unpack_dict_from(b)
@@ -393,7 +393,7 @@ def wave_read_header(filename):
 
     finally:
         if not hasattr(filename, 'read'):
-            log.debug ("wave_read_header: Closing %s" % filename)
+            log.debug ("Closing %s" % filename)
             f.close()
 
 
@@ -529,12 +529,12 @@ def wave_read (filename):
         data.info.update (wave_info)
 
         # have all the data, now set explicit scaling information
-        log.debug ("load: setting scale on %d dimensions" % len(data.shape))
+        log.debug ("setting scale on %d dimensions" % len(data.shape))
     
         # set the intrinsic scaling information of the wave.
         for mydim in range(0,len(data.shape)):
             igordim = mydim
-            log.debug ("load: Setting scaling info for dimension %d here (%d with Igor): %f/%f"
+            log.debug ("Setting scaling info for dimension %d here (%d with Igor): %f/%f"
                        % (mydim, igordim, wave_info["sfA"][igordim], wave_info["sfB"][igordim]))
             data.setScale (mydim, wave_info["sfA"][igordim], wave_info["sfB"][igordim])
 
@@ -573,7 +573,7 @@ def wave_find (filename='', pack_tree={}):
     if not os.path.exists(filename):
         real_filename = os.path.join (os.path.dirname(filename), os.path.basename(filename).split(':')[0])
         igor_path = os.path.basename(filename).split(':')[1:]
-        print log.debug ("wave_open: Path: filesystem=%s, igor=%s" % (real_filename, igor_path))
+        print log.debug ("Path: filesystem=%s, igor=%s" % (real_filename, igor_path))
     else:
         real_filename = filename
         igor_path = ''
@@ -589,10 +589,10 @@ def wave_find (filename='', pack_tree={}):
             tree = tree[idir]
 
         if not tree.has_key('offset'):
-            log.error ("wave_find: %s (in %s) is not a wave." % (igor_path, real_filename))
-            raise IOError ("wave_find: Component '%s' (inside packed file '%s') is not a wave." % (igor_path, real_filename))
+            log.error ("%s (in %s) is not a wave." % (igor_path, real_filename))
+            raise IOError ("Component '%s' (inside packed file '%s') is not a wave." % (igor_path, real_filename))
 
-        log.debug ("wave_find: Have branch: %s" % tree)
+        log.debug ("Have branch: %s" % tree)
     
         tree['wname'] = igor_path[-1]
         tree['wpath'] = igor_path[:-1]
@@ -623,7 +623,7 @@ def pack_scan_tree (filename, dbg_folder_prefix=''):
     if hasattr(filename, 'read'):
         f = filename  # filename is actually a stream object
     else:
-        log.debug ("get_pack_tree: Reading file %s" % filename)
+        log.debug ("Reading file %s" % filename)
         f = open(filename, 'rb')
     try:
 
@@ -639,13 +639,13 @@ def pack_scan_tree (filename, dbg_folder_prefix=''):
             rec_type_id = rec['recordType'] & 0x7fff
 
             if rec_type_id >= 11:
-                log.debug ('pack_scan_tree: Skipping internal Igor block %d (%d bytes)' % 
+                log.debug ('Skipping internal Igor block %d (%d bytes)' % 
                            (rec_type_id, rec['numDataBytes']))
                 f.seek (rec['numDataBytes'], 1)
 
             elif PackedFileRecordType[rec_type_id] == 'DataFolderStart':
                 folder_name = str(f.read(rec["numDataBytes"])).split("\0")[0]
-                log.debug ("pack_scan_tree: Folder %s/%s (%d bytes)" %
+                log.debug ("Folder %s/%s (%d bytes)" %
                            (dbg_folder_prefix, folder_name, rec['numDataBytes']))
                 # recursively scan the folder
                 pack_tree[folder_name] = { 'type': 'folder',
@@ -669,13 +669,13 @@ def pack_scan_tree (filename, dbg_folder_prefix=''):
                     'name': wname
                     }
                 num_waves = num_waves + 1
-                log.debug ("pack_scan_tree: Wave %s/%s (%d bytes, offset %d)" %
+                log.debug ("Wave %s/%s (%d bytes, offset %d)" %
                            (dbg_folder_prefix, wname, rec['numDataBytes'], wpos1))
                 f.seek ((rec['numDataBytes'] - (wpos2-wpos1)), 1)  # skip the res of the wave data
 
             else:
                 # default behavior is to ignore all other fields
-                log.debug ("pack_scan_tree: Skipping block '%s' (%d bytes)" % 
+                log.debug ("Skipping block '%s' (%d bytes)" % 
                            (PackedFileRecordType[rec_type_id], rec['numDataBytes']))
                 f.seek (rec['numDataBytes'], 1)
         

@@ -9,7 +9,7 @@ ch = logging.StreamHandler()
 ch.setLevel (logging.DEBUG)
 log.addHandler (ch)
 
-fmt = logging.Formatter('%(asctime)s %(levelname)s(%(name)s): %(message)s')
+fmt = logging.Formatter('%(asctime)s %(levelname)s: %(name)s: %(module)s.%(funcName)s: %(message)s')
 ch.setFormatter(fmt)
 
 log.debug ("Starting...")
@@ -51,7 +51,7 @@ def plot (args, win=None):
     elif isinstance(wavs[0], str):
         win.plotFiles(wavs)
     else:
-        log.error ("plot: Don't know what to do with %s." % wavs)
+        log.error ("Don't know what to do with %s." % wavs)
 
 
 def run (argv=[]):
