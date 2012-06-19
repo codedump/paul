@@ -14,7 +14,7 @@ class TreeWindow (QtGui.QMainWindow):
 
     current_path = ''
 
-    def __init__ (self, start_path="/home/florin"):
+    def __init__ (self, start_path='~'):
         QtGui.QMainWindow.__init__(self)
         self.setWindowTitle ("Paul Browser")
 
@@ -24,7 +24,7 @@ class TreeWindow (QtGui.QMainWindow):
         self.initTree()
 
         # move to default start directory
-        self.setRoot (start_path)
+        self.setRoot (os.path.expanduser(start_path))
 
 
     def initMainFrame(self):
@@ -182,3 +182,9 @@ class TreeWindow (QtGui.QMainWindow):
             log.debug ("Selected dir: %s" % str(fpath))
         else:
             log.debug ("...what to do with %s?" % str(fpath))
+
+        # if the column 0 (the one with the names) is too narrow,
+        # expand it to fit the names.
+        new_width = self.filetree.sizeHintForColumn (0)
+        if (self.filetree.columnWidth(0) < new_width):
+            self.filetree.setColumnWidth (0, new_width)

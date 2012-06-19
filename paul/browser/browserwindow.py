@@ -8,7 +8,7 @@ import logging
 log = logging.getLogger (__name__)
 
 class BrowserWindow (QtGui.QMainWindow):
-    def __init__ (self, start_path="/home/florin"):
+    def __init__ (self, start_path='~'):
         QtGui.QMainWindow.__init__(self)
         self.setWindowTitle ("Paul Browser")
 
