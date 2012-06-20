@@ -42,13 +42,11 @@ class BrowserWindow (QtGui.QMainWindow):
         # model for the file system (dir tree)
         self.tree = TreeWindow()
         self.tree.setParent (self.splitter)
-        self.tree.show()
 
 
     def initViewer(self):
         self.viewer = ViewerWindow()
         self.viewer.setParent (self.splitter)
-        self.viewer.show()
 
 
     @QtCore.pyqtSlot('QStringList')

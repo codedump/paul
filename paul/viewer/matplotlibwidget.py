@@ -53,7 +53,9 @@ class MatplotlibWidget(FigureCanvas):
     @QtCore.pyqtSlot ('QString')
     def plotWave (self, data, redraw=True):
 
-        self.clear() # this one takes a _lot_ of time...
+        if (data.ndim > 1):
+            self.clear() # this one takes a _lot_ of time, and is probably
+                         # not needed for 2D waves
         self.axes = self.fig.add_subplot(111)
         self.axes.hold(False)  # We want the axes cleared every time plot() is called
 

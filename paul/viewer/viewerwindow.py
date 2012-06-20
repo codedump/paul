@@ -28,7 +28,6 @@ class ViewerWindow(QtGui.QMainWindow):
 
     def __init__(self, parent=None, name=None, width=5, height=4, dpi=100,
                  bgcolor=None, plotscript='Automagic'):
-
         QtGui.QWidget.__init__(self, parent)
 
         self.setWindowTitle ("Paul Viewer")
@@ -247,11 +246,7 @@ class ViewerWindow(QtGui.QMainWindow):
                 self.plot.waves = wavlist
                 self.pscr.obj.populate (self.plot.canvas, self.plot.waves)
 
-        # ...otherwise we do it ourselves. Note that since we don't know 
-        # in what state the canvas was left, this operation involves
-        # completely clearing the canvas. With matplotlib, this is a
-        # quite a lot (~250ms on a P4?) slower than initializing the plot
-        # once (in plotscript.init()) and poplating the plot by hand.
+        # ...otherwise we do it ourselves.
         else:
             self.plot.waves = wavlist
             self.plot.canvas.plotWave (self.plot.waves[0], redraw=False)
@@ -260,8 +255,10 @@ class ViewerWindow(QtGui.QMainWindow):
                 self.pscr.obj.decorate (self.plot.canvas, self.plot.waves)
 
         self.plot.canvas.draw()
-        self.setWindowTitle ("Paul Viewer: %s" % self.plot.waves[0].info['name'])
-
+        if hasattr (self.plot.waves[0], 'info'):
+            self.setWindowTitle ("Paul Viewer: %s" % self.plot.waves[0].info['name'])
+        else:
+            self.setWindowTitle ("Paul Viewer <name missing>")
 
     @QtCore.pyqtSlot('QStringList')
     def plotFiles(self, flist):
@@ -278,6 +275,13 @@ class ViewerWindow(QtGui.QMainWindow):
         data.info.setdefault('name', os.path.basename(str(flist[0])))
         self.plot.files = flist
         self.plotWaves ([data])
+
+    def refresh(self):
+        '''
+        This will trigger a plot canvas redraw without all the plotscript
+        involved. It is meant to be called when the data changes.
+        '''
+        self.plot.canvas.draw()
 
 
     def replot(self):
