@@ -45,14 +45,17 @@ class MatplotlibWidget(FigureCanvas):
     def compute_initial_figure(self):
        	pass
 
+    def clear(self):
+        ''' Clears the figure. '''
+        self.fig.clear()
+
     # Called to plot file specified by the given full path
     @QtCore.pyqtSlot ('QString')
-    def plotWave (self, data):
+    def plotWave (self, data, redraw=True):
 
-        self.fig.clear()
+        self.clear() # this one takes a _lot_ of time...
         self.axes = self.fig.add_subplot(111)
-        self.axes.hold(False)  # We want the axes cleared every time
-                               # plot() is called
+        self.axes.hold(False)  # We want the axes cleared every time plot() is called
 
         if (data.ndim == 1):
             log.debug ("1D plot")
@@ -68,4 +71,6 @@ class MatplotlibWidget(FigureCanvas):
                 self.axes.imshow(data, aspect='auto')
         else:
             log.error ("Not implemented for dim > 2")
-        self.draw()
+
+        if redraw == True:
+                self.draw()

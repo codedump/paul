@@ -27,8 +27,6 @@ def run():
         start_path = sys.argv[1]
     main_win = BrowserWindow(start_path)
     main_win.show()
-    #canvas = main_win.plotCanvas
-
     sys.exit(app.exec_())
 
 if __name__ == "__main__":

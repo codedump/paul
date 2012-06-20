@@ -12,7 +12,7 @@ from matplotlib.backends.backend_qt4agg import NavigationToolbar2QTAgg as Naviga
 from paul.loader import igor
 from paul.base.wave import Wave
 from paul.viewer.matplotlibwidget import MatplotlibWidget
-from paul.viewer.plotscript import *
+#from paul.viewer.plotscript import *
 
 class ViewerWindow(QtGui.QMainWindow):
 
@@ -25,10 +25,9 @@ class ViewerWindow(QtGui.QMainWindow):
     class Plotter:
         pass
             
-            
 
     def __init__(self, parent=None, name=None, width=5, height=4, dpi=100,
-                 bgcolor=None):
+                 bgcolor=None, plotscript='Automagic'):
 
         QtGui.QWidget.__init__(self, parent)
 
@@ -43,10 +42,26 @@ class ViewerWindow(QtGui.QMainWindow):
         
         self.initMainFrame()
         self.initPlotter()
-        self.initScriptLoader()
+        self.initScriptLoader(default=plotscript)
 
-    
     def __del__(self):
+        self.cleanup()
+
+    @QtCore.pyqtSlot()
+    def cleanup(self):
+        '''
+        This function is meant to be called when the application / ViewerWindow
+        shuts down.
+        However, owing to a change of default behavior, there is no way of
+        knowing when the window is destroyed: __del__ operator is not called
+        anymore when the interpreter shuts down, also prevents the
+        destroyed() event from being emitted.
+        Until further notice, we'll pack all cleanup tasks in this function,
+        but be aware that this still leaves the area un-cleaned...
+        '''
+        log.debug ("ViewerWindow cleaning up.")
+        if hasattr(self.pscr, 'obj') and hasattr(self.pscr.obj, 'exit'):
+            self.pscr.obj.exit(self.plot.canvas)
         for i in self.pscr.tmp_files:
             log.debug ("Removing temporary plotscript %s" % i)
             os.remove(i)
@@ -71,11 +86,12 @@ class ViewerWindow(QtGui.QMainWindow):
             self.vbox.addWidget (w)
 
 
-    def initScriptLoader(self):
+    def initScriptLoader(self, default='Automagic'):
 
         # the script load/save area (a combo box with a (re)load button)
         self.hbox_plotfile = QtGui.QHBoxLayout()
         self.vbox.addLayout (self.hbox_plotfile)
+        self.vbox.setContentsMargins (0, 0, 0, 0)
 
         self.pscr.obj  = None
         self.pscr.file = ''
@@ -108,7 +124,8 @@ class ViewerWindow(QtGui.QMainWindow):
 
         self.pscr.ui.combo.setCurrentIndex (-1)
         self.pscr.ui.combo.currentIndexChanged.connect (self.pscrOnSelected)
-        self.pscr.ui.combo.setCurrentIndex (3) # trigger the 'Automagic' loader
+        def_id = self.pscr.ui.combo.findText (default)
+        self.pscr.ui.combo.setCurrentIndex (def_id) # trigger the 'Automagic' loader
 
 
     #
@@ -208,36 +225,42 @@ class ViewerWindow(QtGui.QMainWindow):
 
     @QtCore.pyqtSlot(Wave)
     def plotWaves (self, wavlist):
-        self.plot.waves = wavlist
-
-        #
-        # run the plotscript: if 'populate' is available, it will
-        # take care of plotting the wave(s) itself.
-        # if only 'decorate' is available, then we are supposed
-        # to plot the wave(s) and have 'decorate' only do the
-        # plot decorations afterwards.
-        #
-        if (not hasattr(self.pscr, 'obj')) or (not hasattr(self.pscr.obj, 'populate')):
-            # we're supposed to plot the graph ourselves:
-
-            if len(wavlist) > 0:
-                self.plot.canvas.plotWave (wavlist[0])
-            elif hasattr(self.plot.canvas, 'axes'):
-                self.plot.canvas.axes.clear()
-
-            if hasattr(self.pscr, 'obj') and hasattr(self.pscr.obj, 'decorate'):
-                log.debug ("Decorating plot (with %s)." % self.pscr.file)
-                self.pscr.obj.decorate (self.plot.canvas, self.plot.waves)
-                self.plot.canvas.draw()
-        elif hasattr(self.pscr, 'obj') and hasattr(self.pscr.obj, 'populate') and len(wavlist) > 0:
-                log.debug ("Populating plot (with %s)." % self.pscr.file)
-                self.pscr.obj.populate (self.plot.canvas, self.plot.waves)
-                self.plot.canvas.draw()
-
-        if len(wavlist):
-            self.setWindowTitle ("Paul Viewer: %s" % wavlist[0].info['name'])
-        else:
+        '''
+        Plot the specified waves and run the plotscript:
+        if 'populate' is available, it will
+        take care of plotting the wave(s) itself.
+        if only 'decorate' is available, then we are supposed
+        to plot the wave(s) and have 'decorate' only do the
+        plot decorations afterwards.
+        '''
+        if not len(wavlist):
+            self.plot.waves = []
             self.setWindowTitle ("Paul Viewer")
+            if hasattr(self.plot.canvas, 'axes'):
+                self.plot.canvas.clear()
+            return
+
+        # If the 'populate' method is available in the plotscript, 
+        # we pass all responsibility for plotting to the plotscript.
+        if hasattr(self.pscr, 'obj') and hasattr(self.pscr.obj, 'populate'):
+                log.debug ("Populating plot (with '%s')." % self.pscr.file)
+                self.plot.waves = wavlist
+                self.pscr.obj.populate (self.plot.canvas, self.plot.waves)
+
+        # ...otherwise we do it ourselves. Note that since we don't know 
+        # in what state the canvas was left, this operation involves
+        # completely clearing the canvas. With matplotlib, this is a
+        # quite a lot (~250ms on a P4?) slower than initializing the plot
+        # once (in plotscript.init()) and poplating the plot by hand.
+        else:
+            self.plot.waves = wavlist
+            self.plot.canvas.plotWave (self.plot.waves[0], redraw=False)
+            if hasattr(self.pscr, 'obj') and hasattr(self.pscr.obj, 'decorate'):
+                log.debug ("Decorating plot (with '%s')." % self.pscr.file)
+                self.pscr.obj.decorate (self.plot.canvas, self.plot.waves)
+
+        self.plot.canvas.draw()
+        self.setWindowTitle ("Paul Viewer: %s" % self.plot.waves[0].info['name'])
 
 
     @QtCore.pyqtSlot('QStringList')
@@ -248,6 +271,7 @@ class ViewerWindow(QtGui.QMainWindow):
         if len(flist) < 1:
             log.debug ("Empty list, nothing to do.")
             return
+
         log.debug ("Plotting %s" % flist[0])
         data = igor.load (flist[0])
 
@@ -317,7 +341,8 @@ class ViewerWindow(QtGui.QMainWindow):
         if len(self.pscr.file) > 0:
             self.watcher.removePath (self.pscr.file)
 
-        if not os.path.isfile(str(script_file)): # file doesn't exist, so we'll just tear down the plotscript
+        if hasattr(self.pscr, 'obj'):
+            # tear down the old plotscript
             log.debug ("Killing currently loaded plotscript %s" % script_file)
             self.statusBar().showMessage("Missing plotscript %s" % str(script_file))
             if hasattr(self.pscr, 'obj'):
@@ -325,10 +350,14 @@ class ViewerWindow(QtGui.QMainWindow):
                     log.debug ("exit()'ing old plotscript (%s)" % self.pscr.file)
                     self.pscr.obj.exit(self.plot.canvas)
                 del self.pscr.obj
-        else:                                     # ...otherwise we'll load the script as 'self.plotscript'.
+                self.pscr.obj = None
+            self.plot.canvas.clear()
+
+        if os.path.isfile(str(script_file)):
+            # load the script as 'self.plotscript'.
             with open (str(script_file), 'r') as f:                
                 log.debug ("Loading '%s'" % str(script_file))
-                self.pscr.obj = imp.load_module ('paul.viewer.plotscript', f, 
+                self.pscr.obj = imp.load_module ('%s.plotscript' % __name__, f, 
                                                   str(script_file), ('', 'r', imp.PY_SOURCE))
                 self.statusBar().showMessage ("Plotscript %s" % str(script_file))
                 self.watcher.addPath(script_file)
