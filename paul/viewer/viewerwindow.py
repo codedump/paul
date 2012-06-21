@@ -288,6 +288,7 @@ class ViewerWindow(QtGui.QMainWindow):
         self.main_frame = QtGui.QWidget()
         self.setCentralWidget (self.main_frame)
         self.vbox = QtGui.QVBoxLayout()
+        self.vbox.setContentsMargins (0, 0, 0, 0)
         self.main_frame.setLayout (self.vbox)
 
 

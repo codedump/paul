@@ -17,9 +17,6 @@ class BrowserWindow (QtGui.QMainWindow):
         self.initBrowser()
         self.initViewer()
 
-        for w in [ self.viewer, self.tree ]:
-            w.vbox.setContentsMargins (0, 0, 0, 0)
-
         # inter-component connections
         self.tree.wavesSelected.connect(self.viewer.plotFiles)
 

@@ -30,6 +30,7 @@ class TreeWindow (QtGui.QMainWindow):
     def initMainFrame(self):
         '''Initializes the inner frame of the tree-view window (main browser feature)'''
         self.vbox = QtGui.QVBoxLayout()
+        self.vbox.setContentsMargins (0, 0, 0, 0)
         self.main_frame = QtGui.QWidget()
         self.main_frame.setLayout (self.vbox)
         self.setCentralWidget (self.main_frame)

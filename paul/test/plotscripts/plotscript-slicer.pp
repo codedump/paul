@@ -68,7 +68,10 @@ def slicingChanged(i):
     data = PLOT.waves[0]
     x_from = GUI.slice_from.value()
     x_to = x_from + GUI.slice_delta.value()
-    PLOT.cur_slice = data[x_from]
+    delta = x_to - x_from
+    if delta <= 0:
+        delta = 1
+    PLOT.cur_slice = data[x_from:x_to,0:].sum(0) / (x_to-x_from)
     GUI.slicewin.plotWaves([PLOT.cur_slice])
     #GUI.slicewin.refresh()
     
@@ -89,47 +92,20 @@ def init(canvas, mainwin):
     # main window layout, resulting in:
     #   . ctrlwin: window containing parameter control widgets
     #   . plotwin: plotting window (ViewerWindow instance)
-    GUI.mainwin = QtGui.QWidget()
-    GUI.hbox = QtGui.QHBoxLayout(GUI.mainwin)
-    GUI.splitter = QtGui.QSplitter(GUI.mainwin)
-    GUI.hbox.setContentsMargins (0, 0, 0, 0)
-    GUI.hbox.addWidget (GUI.splitter)    
-    GUI.ctrlwin = QtGui.QWidget(GUI.splitter)
-    GUI.ctrlbox = QtGui.QGridLayout(GUI.ctrlwin)
-    GUI.ctrlwin.setLayout (GUI.ctrlbox)
-    GUI.mainwin.setWindowTitle ("2D Slicer")
 
     # some setup variables (graph coloring etc)
-    GUI.col_min = ValueWidget (None, "Color min: ",  QtGui.QDoubleSpinBox(), -99, 99, 0.01, 0.00, colValueChanged)
-    GUI.col_max = ValueWidget (None, "Color max: ",  QtGui.QDoubleSpinBox(), -99, 99, 0.01, 1.00, colValueChanged)
-    GUI.toolbar = mainwin.addToolBar("Color Settings")
-    for w in GUI.col_min, GUI.col_max:
-        GUI.toolbar.addWidget(w)
+    GUI.col_min = ValueWidget (None, "Color min: ", QtGui.QDoubleSpinBox(), -99, 99, 0.01, 0.00, colValueChanged)
+    GUI.col_max = ValueWidget (None, "Color max: ", QtGui.QDoubleSpinBox(), -99, 99, 0.01, 1.00, colValueChanged)
+    GUI.toolbar = QtGui.QToolBar()
+    mainwin.addToolBar(QtCore.Qt.RightToolBarArea, GUI.toolbar)
 
+    GUI.slice_from  = ValueWidget (None, "X-from: ", QtGui.QSpinBox(), 0, 99, 1, 0, slicingChanged)
+    GUI.slice_delta = ValueWidget (None, "X-to: ", QtGui.QSpinBox(), 0, 99, 1, 0, slicingChanged)
+    for w in GUI.col_min, GUI.col_max, GUI.slice_from, GUI.slice_delta:
+        GUI.toolbar.addWidget (w)
 
-    # slice display: we'll create a ViewerWindow() instance here
-    # -- after all, that's what it is made for :-)
-    # however, if 'Automagic' plot script will be loaded, then
-    # there exists the risk that we will end up in a recursion
-    # (e.g. if this plotscript is in the Automagic path).
-    # We need to break recurtion by starting up with 'none' plotscript.
-    GUI.slicewin = ViewerWindow(plotscript='(none)')
-    GUI.slicewin.setParent (GUI.splitter)
-
-    GUI.slice_from  = QtGui.QSpinBox (GUI.ctrlwin)
-    GUI.slice_delta = QtGui.QSpinBox (GUI.ctrlwin)
-    for w in GUI.slice_from, GUI.slice_delta:
-        w.valueChanged.connect (slicingChanged)
-
-    # layout stuff
-    #GUI.ctrlbox.addWidget (GUI.col_min, 0, 0, 2, 1)
-    #GUI.ctrlbox.addWidget (GUI.col_max, 1, 0, 2, 1)
-    GUI.ctrlbox.addWidget (QtGui.QLabel ("Slice from: ", GUI.ctrlwin), 2, 0)
-    GUI.ctrlbox.addWidget (GUI.slice_from, 2, 1)
-    GUI.ctrlbox.addWidget (QtGui.QLabel ("Slice delta: ", GUI.ctrlwin), 3, 0)
-    GUI.ctrlbox.addWidget (GUI.slice_delta, 3, 1)
-
-    GUI.mainwin.show()
+    GUI.slicewin = ViewerWindow()
+    GUI.slicewin.show()
 
     PLOT.canvas = canvas
     PLOT.waves = []
@@ -154,13 +130,11 @@ def decorate(can, wav):
     if not len(wav) > 0:
         log.debug ("No waves.")
         return
-    if not GUI.mainwin.isVisible():
-        GUI.mainwin.show()
 
     PLOT.waves = wav
 
     for w in GUI.slice_from, GUI.slice_delta:
-        w.setRange (0, wav[0].shape[0])
+        w.spin.setRange (0, wav[0].shape[0])
     slicingChanged(-1)
 
     can.axes.set_xlabel (r'$k_{||}$ ($^\circ$)')
