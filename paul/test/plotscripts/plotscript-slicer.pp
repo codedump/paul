@@ -15,6 +15,27 @@ class PlotElements:
 GUI = UiElements()
 PLOT = PlotElements()
 
+# simple container to hold a label and a SpinBox
+class ValueWidget(QtGui.QWidget):
+    def __init__ (self, parent=None, label='value', spin=None, vmin=0, vmax=99, vinc=1, vdef=0, slot=None):
+        QtGui.QWidget.__init__ (self, parent)
+        self.label = QtGui.QLabel (label, self)
+        if spin is None:
+            spin = QtGui.QSpinBox(self)
+        self.spin = spin
+        self.spin.setRange (vmin, vmax)
+        self.spin.setSingleStep (vinc)
+        self.spin.setValue (vdef)
+        if slot is not None:
+            self.spin.valueChanged.connect (slot)
+        self.box = QtGui.QHBoxLayout(self)
+        self.box.addWidget (self.label)
+        self.box.addWidget (self.spin)
+    
+    def value(self):
+        return self.spin.value()
+
+
 @QtCore.pyqtSlot('double')
 def colValueChanged(i):
     ''' this one is called when the spin box color value changed '''
@@ -27,6 +48,8 @@ def colValueChanged(i):
     if not len(PLOT.canvas.axes.images) > 0:
         return
     img = PLOT.canvas.axes.images[0]
+
+    log.debug ("values: %f, %f" % (GUI.col_min.value(), GUI.col_max.value()))
 
     dmin = data.min()
     dmax = data.max()
@@ -50,7 +73,7 @@ def slicingChanged(i):
     #GUI.slicewin.refresh()
     
 
-def init(canvas):
+def init(canvas, mainwin):
     '''
     Initialize the plotscript: this is a more complicated one. We are
     creating a fully function Qt GUI for this one, which will get
@@ -60,6 +83,8 @@ def init(canvas):
     '''
     log.debug ("INIT")
     global GUI, PLOT
+
+    GUI.viewer = mainwin
 
     # main window layout, resulting in:
     #   . ctrlwin: window containing parameter control widgets
@@ -75,16 +100,12 @@ def init(canvas):
     GUI.mainwin.setWindowTitle ("2D Slicer")
 
     # some setup variables (graph coloring etc)
-    GUI.col_min = QtGui.QDoubleSpinBox (GUI.ctrlwin)
-    GUI.col_max = QtGui.QDoubleSpinBox (GUI.ctrlwin)
-    GUI.col_max.setValue (1)
-    row = 0
+    GUI.col_min = ValueWidget (None, "Color min: ",  QtGui.QDoubleSpinBox(), -99, 99, 0.01, 0.00, colValueChanged)
+    GUI.col_max = ValueWidget (None, "Color max: ",  QtGui.QDoubleSpinBox(), -99, 99, 0.01, 1.00, colValueChanged)
+    GUI.toolbar = mainwin.addToolBar("Color Settings")
     for w in GUI.col_min, GUI.col_max:
-        w.valueChanged.connect(colValueChanged)
-        w.setSingleStep (0.01)
-        w.setRange (-99, 99)
-        GUI.ctrlbox.addWidget (w, row, 1)
-        row += 1
+        GUI.toolbar.addWidget(w)
+
 
     # slice display: we'll create a ViewerWindow() instance here
     # -- after all, that's what it is made for :-)
@@ -101,10 +122,8 @@ def init(canvas):
         w.valueChanged.connect (slicingChanged)
 
     # layout stuff
-    GUI.ctrlbox.addWidget (QtGui.QLabel ("Color min: ", GUI.ctrlwin), 0, 0)
-    GUI.ctrlbox.addWidget (GUI.col_min, 0, 1)
-    GUI.ctrlbox.addWidget (QtGui.QLabel ("Color max: ", GUI.ctrlwin), 1, 0)
-    GUI.ctrlbox.addWidget (GUI.col_max, 1, 1)
+    #GUI.ctrlbox.addWidget (GUI.col_min, 0, 0, 2, 1)
+    #GUI.ctrlbox.addWidget (GUI.col_max, 1, 0, 2, 1)
     GUI.ctrlbox.addWidget (QtGui.QLabel ("Slice from: ", GUI.ctrlwin), 2, 0)
     GUI.ctrlbox.addWidget (GUI.slice_from, 2, 1)
     GUI.ctrlbox.addWidget (QtGui.QLabel ("Slice delta: ", GUI.ctrlwin), 3, 0)
@@ -116,8 +135,9 @@ def init(canvas):
     PLOT.waves = []
 
 
-def exit(canvas):
+def exit(canvas, mainwin):
     log.debug ("EXIT")
+    GUI.viewer.removeToolBar (GUI.toolbar)
     global GUI
     del GUI
     return
@@ -143,7 +163,7 @@ def decorate(can, wav):
         w.setRange (0, wav[0].shape[0])
     slicingChanged(-1)
 
-    can.axes.set_xlabel (r'$k_{||}$ (deg.)')
+    can.axes.set_xlabel (r'$k_{||}$ ($^\circ$)')
     can.axes.set_ylabel (r'E$_{total}$ (meV)')
 
     yax = can.axes.get_ylim()

@@ -27,6 +27,7 @@ class PlotscriptToolbar(QtGui.QToolBar):
     def __init__ (self, parent=None, name=None, default='(none)'):
         QtGui.QToolBar.__init__ (self, parent)
 
+        self.path_ref  = os.getcwd()
         self.tmp_files = []            # list of temporary files we create --
                                        # should be deleted, but that probably won't work.
         self.file_cur  = ''            # holds the currently selected file name
@@ -307,6 +308,7 @@ class ViewerWindow(QtGui.QMainWindow):
 
         self.pscr.cur_file = ''
         self.pscr.toolbar = PlotscriptToolbar(self)
+        self.addToolBarBreak()
         self.addToolBar (self.pscr.toolbar)
         self.pscr.toolbar.fileSelected.connect (self.pscrLoad)
 
@@ -360,6 +362,7 @@ class ViewerWindow(QtGui.QMainWindow):
             self.setWindowTitle ("Paul Viewer: %s" % self.plot.waves[0].info['name'])
         else:
             self.setWindowTitle ("Paul Viewer <name missing>")
+
 
     @QtCore.pyqtSlot('QStringList')
     def plotFiles(self, flist):
@@ -436,7 +439,7 @@ class ViewerWindow(QtGui.QMainWindow):
             if hasattr(self.pscr, 'obj'):
                 if hasattr(self.pscr.obj, 'exit'):
                     log.debug ("exit()'ing old plotscript (%s)" % self.pscr.cur_file)
-                    self.pscr.obj.exit(self.plot.canvas)
+                    self.pscr.obj.exit(self.plot.canvas, self)
                 del self.pscr.obj
                 self.pscr.obj = None
             self.plot.canvas.clear()
@@ -451,7 +454,7 @@ class ViewerWindow(QtGui.QMainWindow):
                 self.watcher.addPath(script_file)
                 if hasattr(self.pscr.obj, 'init'):
                     log.debug ("init()'ing plotscript (%s)" % str(script_file))
-                    self.pscr.obj.init(self.plot.canvas)
+                    self.pscr.obj.init(self.plot.canvas, self)
 
         # watch the file (if it's non-zero)
         self.pscr.cur_file = str(script_file)
