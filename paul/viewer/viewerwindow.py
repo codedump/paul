@@ -14,7 +14,225 @@ from paul.base.wave import Wave
 from paul.viewer.matplotlibwidget import MatplotlibWidget
 #from paul.viewer.plotscript import *
 
+class PlotscriptToolbar(QtGui.QToolBar):
+    '''
+    Small widget responsible for selection of a plotscript.
+    It contains a dropdown list with several options suitable
+    for selecting a plotscript, aswell as a number of
+    plotscript-related buttons (Edit, Reload, ...).
+    '''
+
+    fileSelected = QtCore.pyqtSignal('QString')
+
+    def __init__ (self, parent=None, name=None, default='(none)'):
+        QtGui.QToolBar.__init__ (self, parent)
+
+        self.tmp_files = []            # list of temporary files we create --
+                                       # should be deleted, but that probably won't work.
+        self.file_cur  = ''            # holds the currently selected file name
+        self.file_ext  = ".pp"         # plotscript extension
+        self.file_hint = os.getcwd()   # holds the reference path (i.e. the path
+                                       # that we will use as a hint for different
+                                       # locators). can be a directory or a file name,
+                                       # is usually the path of the currently displayed
+                                       # wave, and is set by the parent widget.
+
+        self.combo = QtGui.QComboBox()
+        self.combo.setSizePolicy (QtGui.QSizePolicy.Expanding,
+                                  QtGui.QSizePolicy.Minimum)
+        self.btn_edit = QtGui.QPushButton("&Edit")
+        self.btn_edit.setSizePolicy (QtGui.QSizePolicy.Minimum,
+                                                  QtGui.QSizePolicy.Minimum)
+        self.btn_edit.clicked.connect (self.onEdit)
+        for w in [ self.combo, self.btn_edit ]:
+            self.addWidget (w)
+
+        self.combo.addItem ('(none)',         None)
+        self.combo.addItem ('Other...',       self.locBrowse)
+        self.id_other = 1  # index of the "Other..." entry --
+                                               # this one gets special treament.
+        self.combo.insertSeparator(2)
+        self.combo.addItem ('Automagic',      self.locAuto)
+        self.combo.addItem ('File Default',   self.locByFile)
+        self.combo.addItem ('Folder Default', self.locByFolder)
+        self.combo.addItem ('User Default',   self.locByUser)
+        self.combo.insertSeparator(7)
+        self.id_user = 8  # index at which we can insert user-selected
+                          # plotscripts into the combo box :-)
+
+        self.combo.setCurrentIndex (-1)
+        self.combo.currentIndexChanged.connect (self.onSelected)
+        def_id = self.combo.findText (default)
+        self.combo.setCurrentIndex (def_id) # trigger the default loader
+
+    def __del__(self):
+        for i in self.tmp_files:
+            log.debug ("Removing temporary plotscript %s" % i)
+            os.remove(i)
+
+    #
+    # Ps management stuff (resolving script paths, loading modules...)
+    #
+    def locAuto(self, ref_path):
+        '''
+        Tries to automagically guess a correct plot script for the current
+        wave by trying subsequently:
+            . the file plotscript (.pp)
+            . the directory plotscript (default.pp in the wave's dir)
+            . the directory plotscript of any parent directories
+            . the user plotscript
+        It returns an empty string if none of the tried paths exist.
+        '''
+        path = self.locByFile(ref_path)
+        if os.path.isfile(path):
+            log.debug ("Automagic Ps (file) for %s: %s" % (ref_path, path))
+            return path
+
+        base = ref_path
+        while True:
+            path = self.locByFolder(base)
+            if os.path.isfile(path):
+                log.debug ("Automagic Ps (folder family) for %s: %s"
+                           % (ref_path, path))
+                return path
+            new_base = os.path.dirname(str(base))
+            if new_base == base:
+                break
+            base = new_base
+
+        path = self.locByUser(ref_path)
+        if os.path.isfile(path):
+            log.debug ("Automagic Ps (user template) for %s: %s"
+                       % (ref_path, path))
+            return path
+
+        return ''
+
+
+    def locByFile(self, ref_path):
+        '''
+        Return an indivitual plotscript for the currently
+        selected wave. The naming convention is <ref_path>.pp.
+        If it doesn't exist, return an empty string.
+        '''
+        path = ref_path+self.file_ext
+        log.debug ("File Ps for wave %s: %s" % (ref_path, path))
+        return path
+
+
+    def locByFolder(self, ref_path):
+        '''
+        Return the default plotscript for the folder in which
+        the specified wave is saved. The name of
+        the plotscript is 'default.pp'.
+        '''
+        path = os.path.join (os.path.dirname (str(ref_path)), "default"+self.file_ext)
+        log.debug ("Folder Ps for %s: %s" % (ref_path, path))
+        return path
+
+
+    def locByUser(self, ref_path):
+        '''
+        Return the path of the template plotscript in the current user's
+        home directory, or empty string if the script is not available.
+        '''
+        path = os.path.expanduser ("~/.paul/default"+self.file_ext)
+        log.debug ("User plotscript for %s: %s" % (ref_path, path))
+        return path
+
+
+    def locByCombo (self, ref_path):
+        '''
+        Return the path of the plotscript currently selected by the user.
+        The ref_path parameter is ignored. This is the default locator
+        script attributed to all user-selected files that appear in the
+        combo box. This is why the full path is necessary in the combo box.
+        (If we ever decide to show short paths in the combo, we'll need to
+        make some kind of mapping for this...).
+        '''
+        path = str(self.combo.currentText())
+        log.debug ("User-selected plotscripts is '%s'" % path)
+        return path
+
+    def locBrowse (self, path_hint='default'):
+        '''
+        Pops up a 'Browse file' dialog box and returns the selected file name.
+        '''
+        script_file = str(QtGui.QFileDialog.getOpenFileName (self, "Select Paul plot csript", path_hint,
+                                                             "Python scripts (*%s)" % self.pscr.file_ext))
+
+        if len(script_file) == 0:  # aborted by user
+            return
+
+        if len(script_file) < len(self.file_ext) or script_file[-3:] != self.file_ext:
+            script_file = script_file+self.file_ext
+        
+        if self.combo.findText(script_file) < 0:
+            self.combo.insertItem (self.id_user, script_file, self.locByCombo)
+                
+        return script_file
+
+    
+    @QtCore.pyqtSlot()
+    def onEdit (self):
+        '''
+        Called when user clicks the "Edit" button in the viewer window.
+        It is supposed to start an editor on the current plotscript file.
+        '''
+        editor = "emacs"
+        if len(self.file_cur) == 0:
+            tmp_fd, tmp_path = tempfile.mkstemp(suffix=".pp", prefix="paul-")
+            os.write(tmp_fd,
+                     "#!/usr/bin/python\n"
+                     "\n"
+                     "def decorate (fig, waves):\n"
+                     "    pass\n")
+            os.close(tmp_fd)
+            log.debug ("Loading temporary plotscript %s" % tmp_path)
+            self.tmp_files.append (tmp_path)
+            self.combo.insertItem (self.id_user, tmp_path, self.locByCombo)
+            self.emitPath(tmp_path)
+        subprocess.Popen([editor, self.file_cur])
+        
+
+    @QtCore.pyqtSlot('int')
+    def onSelected (self, key):
+        '''
+        Called when a plot script is selected from the dropdown box.
+        The parameter is the currently selected string. To obtain
+        the real path of the script to be loaded, the 'locator'
+        has to be called using 'key' as a parameter
+        (see psModel() for more information).
+        '''
+
+        pscr_path = ''
+        locator = self.combo.itemData(key).toPyObject()
+        if locator is not None:
+            pscr_path = locator(self.path_ref)
+
+        log.debug ("Plot script path is '%s' (locator: %s, combo index: %d)" 
+                   % (pscr_path, locator, key))
+        self.emitPath(pscr_path)
+
+    def emitPath (self, path):
+        '''
+        Called when a new file has been selected (or file has been updated).
+        This is a wrapper for emitting the corresponding signal and doing
+        some related work, to avoid bugs.
+        '''
+        self.file_cur = path
+        self.fileSelected.emit(path)
+
+
+
+
 class ViewerWindow(QtGui.QMainWindow):
+    '''
+    Class for the main window of the viewer (surprise! :-)
+    Displays a plotting canvas and some controls (for plotting,
+    plotscript selection etc). Also, plotscripts may attach their
+    own toolbars here.
+    '''
 
     # some container classes to get us better organized
     class Plotscript:
@@ -37,14 +255,16 @@ class ViewerWindow(QtGui.QMainWindow):
         self.plot = self.Plotter()
 
         self.watcher = QtCore.QFileSystemWatcher()
-        self.watcher.fileChanged.connect (self.pscrOnFileChanged)
+        self.watcher.fileChanged.connect (self.fileChanged)
         
         self.initMainFrame()
         self.initPlotter()
         self.initScriptLoader(default=plotscript)
 
+
     def __del__(self):
         self.cleanup()
+
 
     @QtCore.pyqtSlot()
     def cleanup(self):
@@ -61,9 +281,6 @@ class ViewerWindow(QtGui.QMainWindow):
         log.debug ("ViewerWindow cleaning up.")
         if hasattr(self.pscr, 'obj') and hasattr(self.pscr.obj, 'exit'):
             self.pscr.obj.exit(self.plot.canvas)
-        for i in self.pscr.tmp_files:
-            log.debug ("Removing temporary plotscript %s" % i)
-            os.remove(i)
 
 
     def initMainFrame(self):
@@ -78,148 +295,28 @@ class ViewerWindow(QtGui.QMainWindow):
 
         self.plot.waves = []        # the currently plotted wave(s)
         self.plot.files = ''
-
         self.plot.canvas = MatplotlibWidget()
+        self.plot.canvas.reset()
         self.plot.tools = NavigationToolbar(self.plot.canvas, self.main_frame)
-        for w in [ self.plot.tools, self.plot.canvas ]:
+        self.addToolBar (self.plot.tools)
+        for w in [ self.plot.canvas ]:
             self.vbox.addWidget (w)
 
 
     def initScriptLoader(self, default='Automagic'):
 
-        # the script load/save area (a combo box with a (re)load button)
-        self.hbox_plotfile = QtGui.QHBoxLayout()
-        self.vbox.addLayout (self.hbox_plotfile)
-        self.vbox.setContentsMargins (0, 0, 0, 0)
-
-        self.pscr.obj  = None
-        self.pscr.file = ''
-        self.pscr.file_ext = ".pp"
-        self.pscr.tmp_files = []
-        
-        self.pscr.ui.combo = QtGui.QComboBox()
-        self.pscr.ui.combo.setSizePolicy (QtGui.QSizePolicy.Expanding,
-                                                QtGui.QSizePolicy.Minimum)
-        self.pscr.ui.btn_edit = QtGui.QPushButton("&Edit")
-        self.pscr.ui.btn_edit.setSizePolicy (QtGui.QSizePolicy.Minimum,
-                                                  QtGui.QSizePolicy.Minimum)
-        self.pscr.ui.btn_edit.clicked.connect (self.pscrOnEdit)
-        for w in [ self.pscr.ui.combo, self.pscr.ui.btn_edit ]:
-            self.hbox_plotfile.addWidget (w)
-
-            
-        self.pscr.ui.combo.addItem ('(none)',         None)
-        self.pscr.ui.combo.addItem ('Other...',       self.pscrLocBrowse)
-        self.pscr.ui.id_other = 1  # index of the "Other..." entry --
-                                               # this one gets special treament.
-        self.pscr.ui.combo.insertSeparator(2)
-        self.pscr.ui.combo.addItem ('Automagic',      self.pscrLocAuto)
-        self.pscr.ui.combo.addItem ('File Default',   self.pscrLocByFile)
-        self.pscr.ui.combo.addItem ('Folder Default', self.pscrLocByFolder)
-        self.pscr.ui.combo.addItem ('User Default',   self.pscrLocByUser)
-        self.pscr.ui.combo.insertSeparator(7)
-        self.pscr.ui.id_user = 8  # index at which we can insert user-selected
-                                              # plotscripts into the combo box :-)
-
-        self.pscr.ui.combo.setCurrentIndex (-1)
-        self.pscr.ui.combo.currentIndexChanged.connect (self.pscrOnSelected)
-        def_id = self.pscr.ui.combo.findText (default)
-        self.pscr.ui.combo.setCurrentIndex (def_id) # trigger the 'Automagic' loader
+        self.pscr.cur_file = ''
+        self.pscr.toolbar = PlotscriptToolbar(self)
+        self.addToolBar (self.pscr.toolbar)
+        self.pscr.toolbar.fileSelected.connect (self.pscrLoad)
 
 
     #
     # Matplotlib UI Events
     #
-
     def mplOnPick(self, event):
         log.debug ("Clicked a bar at %s" 
                    % event.artist.get_bbox().get_points())
-
-
-    #
-    # Ps management stuff (resolving script paths, loading modules...)
-    #
-
-    def pscrLocAuto(self, wave_path):
-        '''
-        Tries to automagically guess a correct plot script for the current
-        wave by trying subsequently:
-            . the file plotscript (.pp)
-            . the directory plotscript (default.pp in the wave's dir)
-            . the directory plotscript of any parent directories
-            . the user plotscript
-        It returns an empty string if none of the tried paths exist.
-        '''
-        path = self.pscrLocByFile(wave_path)
-        if os.path.isfile(path):
-            log.debug ("Automagic Ps (file) for %s: %s" % (wave_path, path))
-            return path
-
-        base = wave_path
-        while True:
-            path = self.pscrLocByFolder(base)
-            if os.path.isfile(path):
-                log.debug ("Automagic Ps (folder family) for %s: %s"
-                           % (wave_path, path))
-                return path
-            new_base = os.path.dirname(str(base))
-            if new_base == base:
-                break
-            base = new_base
-
-        path = self.pscrLocByUser(wave_path)
-        if os.path.isfile(path):
-            log.debug ("Automagic Ps (user template) for %s: %s"
-                       % (wave_path, path))
-            return path
-
-        return ''
-
-
-    def pscrLocByFile(self, wave_path):
-        '''
-        Return an indivitual plotscript for the currently
-        selected wave. The naming convention is <wave_path>.pp.
-        If it doesn't exist, return an empty string.
-        '''
-        path = wave_path+self.pscr.file_ext
-        log.debug ("File Ps for wave %s: %s" % (wave_path, path))
-        return path
-
-
-    def pscrLocByFolder(self, wave_path):
-        '''
-        Return the default plotscript for the folder in which
-        the specified wave is saved. The name of
-        the plotscript is 'default.pp'.
-        '''
-        path = os.path.join (os.path.dirname (str(wave_path)), "default"+self.pscr.file_ext)
-        log.debug ("Folder Ps for %s: %s" % (wave_path, path))
-        return path
-
-
-    def pscrLocByUser(self, wave_path):
-        '''
-        Return the path of the template plotscript in the current user's
-        home directory, or empty string if the script is not available.
-        '''
-        path = os.path.expanduser ("~/.paul/default"+self.pscr.file_ext)
-        log.debug ("User plotscript for %s: %s" % (wave_path, path))
-        return path
-
-
-    def pscrLocByCombo (self, wave_path):
-        '''
-        Return the path of the plotscript currently selected by the user.
-        The wave_path parameter is ignored. This is the default locator
-        script attributed to all user-selected files that appear in the
-        combo box. This is why the full path is necessary in the combo box.
-        (If we ever decide to show short paths in the combo, we'll need to
-        make some kind of mapping for this...).
-        '''
-        path = str(self.pscr.ui.combo.currentText())
-        log.debug ("User-selected plotscripts is '%s'" % path)
-        return path
 
 
     @QtCore.pyqtSlot(Wave)
@@ -236,25 +333,29 @@ class ViewerWindow(QtGui.QMainWindow):
             self.plot.waves = []
             self.setWindowTitle ("Paul Viewer")
             if hasattr(self.plot.canvas, 'axes'):
-                self.plot.canvas.clear()
+                self.plot.canvas.reset()
             return
 
         # If the 'populate' method is available in the plotscript, 
         # we pass all responsibility for plotting to the plotscript.
         if hasattr(self.pscr, 'obj') and hasattr(self.pscr.obj, 'populate'):
-                log.debug ("Populating plot (with '%s')." % self.pscr.file)
+                log.debug ("Populating plot (with '%s')." % self.pscr.cur_file)
                 self.plot.waves = wavlist
                 self.pscr.obj.populate (self.plot.canvas, self.plot.waves)
+                self.plot.canvas.draw()
 
         # ...otherwise we do it ourselves.
         else:
             self.plot.waves = wavlist
-            self.plot.canvas.plotWave (self.plot.waves[0], redraw=False)
             if hasattr(self.pscr, 'obj') and hasattr(self.pscr.obj, 'decorate'):
-                log.debug ("Decorating plot (with '%s')." % self.pscr.file)
+                self.plot.canvas.reset()
+                self.plot.canvas.plot(self.plot.waves[0], redraw=False)
+                log.debug ("Decorating plot (with '%s')." % self.pscr.cur_file)
                 self.pscr.obj.decorate (self.plot.canvas, self.plot.waves)
+                self.plot.canvas.draw()
+            else:
+                self.plot.canvas.plot(self.plot.waves[0], redraw=True)
 
-        self.plot.canvas.draw()
         if hasattr (self.plot.waves[0], 'info'):
             self.setWindowTitle ("Paul Viewer: %s" % self.plot.waves[0].info['name'])
         else:
@@ -273,6 +374,7 @@ class ViewerWindow(QtGui.QMainWindow):
         data = igor.load (flist[0])
 
         data.info.setdefault('name', os.path.basename(str(flist[0])))
+        self.pscr.toolbar.path_ref = str(flist[0])
         self.plot.files = flist
         self.plotWaves ([data])
 
@@ -295,25 +397,6 @@ class ViewerWindow(QtGui.QMainWindow):
         self.plotWaves(self.plot.waves)
 
 
-    def pscrLocBrowse (self, path_hint='default'):
-        '''
-        Pops up a 'Browse file' dialog box and returns the selected file name.
-        '''
-        script_file = str(QtGui.QFileDialog.getOpenFileName (self, "Select Paul plot csript", path_hint,
-                                                             "Python scripts (*%s)" % self.pscr.file_ext))
-
-        if len(script_file) == 0:  # aborted by user
-            return
-
-        if len(script_file) < len(self.pscr.file_ext) or script_file[-3:] != self.pscr.file_ext:
-            script_file = script_file+self.pscr.file_ext
-        
-        if self.pscr.ui.combo.findText(script_file) < 0:
-            self.pscr.ui.combo.insertItem (self.pscr.ui.id_user, script_file, self.pscrLocByCombo)
-                
-        return script_file
-
-
     def pscrRun(self):
         '''
         If a plotscript has been defined, run it on the current plots.
@@ -324,6 +407,7 @@ class ViewerWindow(QtGui.QMainWindow):
         plotWaves(self.plot.waves)
 
 
+    @QtCore.pyqtSlot('QString')
     def pscrLoad (self, script_file):
         '''
         Loads or re-loads the plotscript, then runs it.
@@ -342,8 +426,8 @@ class ViewerWindow(QtGui.QMainWindow):
         or any of the currently displayed wave(s).
         '''
 
-        if len(self.pscr.file) > 0:
-            self.watcher.removePath (self.pscr.file)
+        if len(self.pscr.cur_file) > 0:
+            self.watcher.removePath (self.pscr.cur_file)
 
         if hasattr(self.pscr, 'obj'):
             # tear down the old plotscript
@@ -351,7 +435,7 @@ class ViewerWindow(QtGui.QMainWindow):
             self.statusBar().showMessage("Missing plotscript %s" % str(script_file))
             if hasattr(self.pscr, 'obj'):
                 if hasattr(self.pscr.obj, 'exit'):
-                    log.debug ("exit()'ing old plotscript (%s)" % self.pscr.file)
+                    log.debug ("exit()'ing old plotscript (%s)" % self.pscr.cur_file)
                     self.pscr.obj.exit(self.plot.canvas)
                 del self.pscr.obj
                 self.pscr.obj = None
@@ -370,67 +454,13 @@ class ViewerWindow(QtGui.QMainWindow):
                     self.pscr.obj.init(self.plot.canvas)
 
         # watch the file (if it's non-zero)
-        self.pscr.file = str(script_file)
+        self.pscr.cur_file = str(script_file)
+        self.replot()
 
 
     @QtCore.pyqtSlot('QString')
-    def pscrOnFileChanged (self, filename):
+    def fileChanged (self, filename):
         '''
         Called by the file system watcher when the script file has changed.
         '''
-        if str(filename) == self.pscr.file:
-            self.pscrLoad(filename)
-            self.replot()
-        else:
-            log.debug ("Don't know what to do with %s." % str(filename))
-
-
-
-    @QtCore.pyqtSlot()
-    def pscrOnEdit (self):
-        '''
-        Called when user clicks the "Edit" button in the viewer window.
-        It is supposed to start an editor on the current plotscript file.
-        '''
-        editor = "emacs"
-        if len(self.pscr.file) == 0:
-            tmp_fd, tmp_path = tempfile.mkstemp(suffix=".pp", prefix="paul-")
-            os.write(tmp_fd,
-                     "#!/usr/bin/python\n"
-                     "\n"
-                     "def decorate (fig, waves):\n"
-                     "    pass\n")
-            os.close(tmp_fd)
-            log.debug ("Loading temporary plotscript %s" % tmp_path)
-            self.pscr.tmp_files.append (tmp_path)
-            self.pscr.ui.combo.insertItem (self.pscr.ui.id_user, tmp_path, self.pscrLocByCombo)
-            self.pscrLoad (tmp_path)
-            self.replot()
-
-        subprocess.Popen([editor, self.pscr.file])
-        
-
-    @QtCore.pyqtSlot('int')
-    def pscrOnSelected (self, key):
-        '''
-        Called when a plot script is selected from the dropdown box.
-        The parameter is the currently selected string. To obtain
-        the real path of the script to be loaded, the 'locator'
-        has to be called using 'key' as a parameter
-        (see psModel() for more information).
-        '''
-
-        pscr_path = ''
-        wave_path = ''
-        locator = self.pscr.ui.combo.itemData(key).toPyObject()
-
-        if len(self.plot.files) > 0:
-            wave_path = self.plot.files[0]
-        if locator is not None:
-            pscr_path = locator(wave_path)
-
-        log.debug ("Plot script path is '%s' (locator: %s, combo index: %d)" 
-                   % (pscr_path, locator, key))
-
-        self.pscrLoad(pscr_path)
-        self.replot()
+        self.pscrLoad (filename)

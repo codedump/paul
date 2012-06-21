@@ -13,6 +13,7 @@ from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt4agg import NavigationToolbar2QTAgg as NavigationToolbar
 from matplotlib.figure import Figure
 from paul.loader import igor
+from paul.base import wave
 
 
 class MatplotlibWidget(FigureCanvas):
@@ -31,48 +32,76 @@ class MatplotlibWidget(FigureCanvas):
                            QtGui.QSizePolicy.Expanding)
         self.updateGeometry()
 
-        #self.tools = NavigationToolbar (self, self.parent)
-        #self.tools.show()
 
     def sizeHint(self):
         w = self.fig.get_figwidth()
         h = self.fig.get_figheight()
         return QtCore.QSize(w, h)
 
-    def minimumSizeHint(self):
-        return QtCore.QSize(100, 100)
-
-    def compute_initial_figure(self):
-       	pass
-
+    @QtCore.pyqtSlot()
     def clear(self):
         ''' Clears the figure. '''
         self.fig.clear()
 
-    # Called to plot file specified by the given full path
-    @QtCore.pyqtSlot ('QString')
-    def plotWave (self, data, redraw=True):
 
-        if (data.ndim > 1):
-            self.clear() # this one takes a _lot_ of time, and is probably
-                         # not needed for 2D waves
+    @QtCore.pyqtSlot()
+    def reset(self):
+        '''
+        Clears the figure and prepares a new plot.
+        The difference between this and clear() is that
+        the latter only clears the figure, while this
+        also prepares the canvas for the plot commands.
+        '''
+        self.clear()
         self.axes = self.fig.add_subplot(111)
         self.axes.hold(False)  # We want the axes cleared every time plot() is called
 
-        if (data.ndim == 1):
-            log.debug ("1D plot")
-            self.axes.plot(data)
 
-        elif (data.ndim == 2):
-            log.debug ("2D imshow")
+    @QtCore.pyqtSlot (wave.Wave)
+    def plot1d (self, data, redraw=True):
+        '''
+        Called to plot the specified wave. It will be passed
+        to matplotlib's plot() as it is. This typically means
+        that if it's a higher-D matrix, it will be plotted as a
+        series of 1D graphs.
+        '''
+        self.axes.plot(data)
+        if redraw == True:
+                self.draw()
 
-            # use the correct axis scaling, if this happens to be a Wave() object.
-            if hasattr(data, 'imgLim'):
-                self.axes.imshow(data, aspect='auto', extent=data.imgLim())
-            else:
-                self.axes.imshow(data, aspect='auto')
+
+    @QtCore.pyqtSlot (wave.Wave)
+    def plot2d (self, data, redraw=True):
+        '''
+        Called to plot the specified 2D wave. Uses matplotlib's
+        imshow() to show the specified image.
+        '''
+        if hasattr(data, 'imgLim'):
+            self.axes.imshow(data, aspect='auto', extent=data.imgLim())
         else:
-            log.error ("Not implemented for dim > 2")
+            self.axes.imshow(data, aspect='auto')
 
         if redraw == True:
                 self.draw()
+
+
+    @QtCore.pyqtSlot(wave.Wave)
+    def plot(self, data, redraw=True):
+        '''
+        Convenience wrapper for plot1d() or plot2d().
+        Assuming that 'data' is one single Wave (or ndarray object),
+        it calls plot1d() or plot2d(), depending on the dimensionality
+        of the data.
+        '''
+        if not hasattr(data, 'ndim'):
+            log.error ("Don't know how to plot data: %s" % data)
+            return
+
+        if data.ndim == 1:
+            self.plot1d(data, redraw)
+        elif data.ndim == 2:
+            self.plot2d(data, redraw)
+        else:
+            log.error ("Don't know how to work with %d dimensions of data: %s"
+                       % (data.ndim, data))
+        
