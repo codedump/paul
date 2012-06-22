@@ -427,7 +427,7 @@ class ViewerWindow(QtGui.QMainWindow):
         if hasattr(self.pscr, 'obj'):
             # tear down the old plotscript
             log.debug ("Killing currently loaded plotscript %s" % script_file)
-            self.statusBar().showMessage("Missing plotscript %s" % str(script_file))
+            #self.statusBar().showMessage("Missing plotscript %s" % str(script_file))
             if hasattr(self.pscr, 'obj'):
                 if hasattr(self.pscr.obj, 'exit'):
                     log.debug ("exit()'ing old plotscript (%s)" % self.pscr.cur_file)
@@ -442,7 +442,7 @@ class ViewerWindow(QtGui.QMainWindow):
                 log.debug ("Loading '%s'" % str(script_file))
                 self.pscr.obj = imp.load_module ('%s.plotscript' % __name__, f, 
                                                   str(script_file), ('', 'r', imp.PY_SOURCE))
-                self.statusBar().showMessage ("Plotscript %s" % str(script_file))
+                #self.statusBar().showMessage ("Plotscript %s" % str(script_file))
                 self.watcher.addPath(script_file)
                 if hasattr(self.pscr.obj, 'init'):
                     log.debug ("init()'ing plotscript (%s)" % str(script_file))

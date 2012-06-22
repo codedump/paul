@@ -70,6 +70,7 @@ class WaveSlice (ViewerWindow):
         self.val_axis =  ValueWidget (None, "Axis: ",  QtGui.QSpinBox(), 0, 99, 1, 0, self.slice)
         self.val_from  = ValueWidget (None, "From: ",  QtGui.QSpinBox(), 0, 99, 1, 0, self.slice)
         self.val_delta = ValueWidget (None, "Delta: ", QtGui.QSpinBox(), 1, 99, 1, 0, self.slice)
+        self.slice_label = QtGui.QLabel ("<info>")
 
         # attach toolbar to parent, by default (or to us, if no parent)
         self.tools_parent = self
@@ -77,7 +78,7 @@ class WaveSlice (ViewerWindow):
             self.tools_parent = tp
         self.tools_parent.addToolBarBreak()
         self.tools_parent.addToolBar(self.tools)
-        for w in [ self.val_axis, self.val_from, self.val_delta ]:
+        for w in [ self.val_axis, self.val_from, self.val_delta, self.slice_label ]:
             self.tools.addWidget(w)
 
 
@@ -121,10 +122,10 @@ class WaveSlice (ViewerWindow):
         #   . sum along slice_axis (we want to integrate out the
         #     dimension we slice along...)
         self.slice_wave = self.master_wave.swapaxes(0,self.slice_axis)[xfrom:xto].swapaxes(self.slice_axis,0).sum(self.slice_axis)
-        self.statusBar().showMessage("%s (axis %d) from %5.2f to %5.2f"
-                                     % (self.slice_wave.info['name'], self.slice_axis,
-                                        self.slice_wave.i2f(self.slice_axis, xfrom),
-                                        self.slice_wave.i2f(self.slice_axis, xto)))
+        self.slice_label.setText(" ax%d: %5.2f : %5.2f"
+                                 % (self.slice_axis,
+                                    self.slice_wave.i2f(self.slice_axis, xfrom),
+                                    self.slice_wave.i2f(self.slice_axis, xto)))
         self.plotWaves (self.slice_wave)
 
 
