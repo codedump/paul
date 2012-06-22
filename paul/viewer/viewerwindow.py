@@ -160,7 +160,7 @@ class PlotscriptToolbar(QtGui.QToolBar):
         Pops up a 'Browse file' dialog box and returns the selected file name.
         '''
         script_file = str(QtGui.QFileDialog.getOpenFileName (self, "Select Paul plot csript", path_hint,
-                                                             "Python scripts (*%s)" % self.pscr.file_ext))
+                                                             "Python scripts (*%s)" % self.file_ext))
 
         if len(script_file) == 0:  # aborted by user
             return

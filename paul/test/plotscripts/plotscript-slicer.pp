@@ -7,7 +7,8 @@ from PyQt4 import QtGui, QtCore
 from paul.viewer.viewerwindow import ViewerWindow
 from paul.base.wave import Wave
 
-class UiElements:
+
+class UiElements(QtCore.QObject):
     pass
 
 class PlotElements:
@@ -66,15 +67,16 @@ class WaveSlice (ViewerWindow):
         
         # initialize GUI
         self.tools = QtGui.QToolBar()
-        self.val_axis =  ValueWidget (None, "Axis: ", QtGui.QSpinBox(), 0, 99, 1, 0, self.slice)
-        self.val_from  = ValueWidget (None, "From: ", QtGui.QSpinBox(), 0, 99, 1, 0, self.slice)
-        self.val_delta = ValueWidget (None, "Delta: ",   QtGui.QSpinBox(), 0, 99, 1, 0, self.slice)
+        self.val_axis =  ValueWidget (None, "Axis: ",  QtGui.QSpinBox(), 0, 99, 1, 0, self.slice)
+        self.val_from  = ValueWidget (None, "From: ",  QtGui.QSpinBox(), 0, 99, 1, 0, self.slice)
+        self.val_delta = ValueWidget (None, "Delta: ", QtGui.QSpinBox(), 1, 99, 1, 0, self.slice)
 
         # attach toolbar to parent, by default (or to us, if no parent)
         self.tools_parent = self
         if tp is not None and hasattr(tp, 'addToolBar'):
             self.tools_parent = tp
-        self.tools_parent.addToolBar(QtCore.Qt.RightToolBarArea, self.tools)
+        self.tools_parent.addToolBarBreak()
+        self.tools_parent.addToolBar(self.tools)
         for w in [ self.val_axis, self.val_from, self.val_delta ]:
             self.tools.addWidget(w)
 
@@ -92,7 +94,7 @@ class WaveSlice (ViewerWindow):
         '''
         Called when the slicing parameters or the master wave change.
         '''
-        #log.debug ("Slicing...")
+        #log.debug ("Slicing along axis %d" % self.slice_axis)
 
         if wave is not None:
             # set a new master wave and adjust spinbox limits
@@ -119,11 +121,15 @@ class WaveSlice (ViewerWindow):
         #   . sum along slice_axis (we want to integrate out the
         #     dimension we slice along...)
         self.slice_wave = self.master_wave.swapaxes(0,self.slice_axis)[xfrom:xto].swapaxes(self.slice_axis,0).sum(self.slice_axis)
+        self.statusBar().showMessage("%s (axis %d) from %5.2f to %5.2f"
+                                     % (self.slice_wave.info['name'], self.slice_axis,
+                                        self.slice_wave.i2f(self.slice_axis, xfrom),
+                                        self.slice_wave.i2f(self.slice_axis, xto)))
         self.plotWaves (self.slice_wave)
 
 
 @QtCore.pyqtSlot('double')
-def colValueChanged(i):
+def setColor(i):
     ''' this one is called when the spin box color value changed '''
     global GUI, PLOT
 
@@ -144,6 +150,15 @@ def colValueChanged(i):
     col_max = GUI.col_max.value() * (dmax-dmin) + dmin
     img.set_clim (col_min, col_max)
     PLOT.canvas.draw()
+
+
+@QtCore.pyqtSlot()
+def addSlice():
+    global GUI, PLOT
+    GUI.slices.append(WaveSlice(axis=0))
+    GUI.slices[-1].resize (400, 350)
+    GUI.slices[-1].slice(wave=PLOT.waves)
+    GUI.slices[-1].show()
      
 
 def init(canvas, mainwin):
@@ -157,27 +172,26 @@ def init(canvas, mainwin):
     log.debug ("INIT")
     global GUI, PLOT
 
+    # some variables
+    GUI.slices = []
+    GUI.waves = []
     GUI.mainwin = mainwin
+    PLOT.canvas = canvas
+    PLOT.waves = []
 
     # main window layout, resulting in:
     #   . ctrlwin: window containing parameter control widgets
     #   . plotwin: plotting window (ViewerWindow instance)
 
     # some setup variables (graph coloring etc)
-    GUI.col_min = ValueWidget (None, "Color min: ", QtGui.QDoubleSpinBox(), -99, 99, 0.01, 0.00, colValueChanged)
-    GUI.col_max = ValueWidget (None, "Color max: ", QtGui.QDoubleSpinBox(), -99, 99, 0.01, 1.00, colValueChanged)
+    GUI.col_min = ValueWidget (None, "Color min: ", QtGui.QDoubleSpinBox(), -99, 99, 0.01, 0.00, setColor)
+    GUI.col_max = ValueWidget (None, " max: ", QtGui.QDoubleSpinBox(), -99, 99, 0.01, 1.00, setColor)
     GUI.toolbar = QtGui.QToolBar()
-    GUI.mainwin.addToolBar(QtCore.Qt.RightToolBarArea, GUI.toolbar)
-
+    GUI.mainwin.addToolBarBreak()
+    GUI.mainwin.addToolBar(GUI.toolbar)
     for w in GUI.col_min, GUI.col_max:
         GUI.toolbar.addWidget (w)
-
-    GUI.slices = []
-    GUI.slices.append(WaveSlice(axis=0, tp=GUI.mainwin))
-    GUI.slices[0].show()
-
-    PLOT.canvas = canvas
-    PLOT.waves = []
+    GUI.toolbar.addAction ("+Slice", addSlice)
 
 
 def exit(canvas, mainwin):
@@ -186,9 +200,9 @@ def exit(canvas, mainwin):
     GUI.mainwin.removeToolBar (GUI.toolbar)
     for s in GUI.slices:
         log.debug ("Removing slicer %s" % s)
-        GUI.mainwin.removeToolBar (s.tools) # sometimes the __del__ function
-                                            # is not called -- need to remove
-                                            # the toolbar by hand.
+        #GUI.mainwin.removeToolBar (s.tools) # sometimes the __del__ function
+        #                                    # is not called -- need to remove
+        #                                    # the toolbar by hand.
         del s
     del GUI.slices
     del GUI
@@ -217,7 +231,12 @@ def decorate(can, wav):
     #can.fig.colorbar(can.axes.images[0])
 
     for s in GUI.slices:
-        s.slice (wave=wav)
+        if (s.isVisible()):
+            log.debug ("Calling slice window %s (for axis %d)" % (s, s.slice_axis))
+            s.slice (wave=wav)
+        else:
+            log.debug ("Removing hidden slice window %s (for axis %d)" % (s, s.slice_axis))
+            GUI.slices.remove(s)
 
-    log.debug ("Displayed.")
+
     

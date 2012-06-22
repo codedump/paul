@@ -103,6 +103,19 @@ class Wave(ndarray):
     def imgLim (self):
         return (self.axOffset(1), self.axEndpoint(1), self.axEndpoint(0), self.axOffset(0))
 
+    def i2f(self, aindex, pindex):
+        '''
+        For the specified axis 'aindex', returns the axis value corresponding
+        to the specified point index 'pindex'.
+        '''
+        return self.ax[aindex].offset + self.ax[aindex].delta*pindex
+
+    def f2i(self, aindex, pt):
+        '''
+        For the specified axis 'aindex', returns the index corresponding
+        to the specified point 'pt' on the axis.
+        '''
+        return int((pt-self.ax[aindex].offset) / self.ax[aindex].delta)
 
     # 
     # () operator for Wave instaces.
