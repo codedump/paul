@@ -102,6 +102,6 @@ class MatplotlibWidget(FigureCanvas):
         elif data.ndim == 2:
             self.plot2d(data, redraw)
         else:
-            log.error ("Don't know how to work with %d dimensions of data: %s"
-                       % (data.ndim, data))
+            log.error ("Don't know what to do with %d-dimensional data."
+                       % (data.ndim))
         
