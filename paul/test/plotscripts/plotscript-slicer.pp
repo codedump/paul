@@ -17,6 +17,14 @@ class PlotElements:
 GUI = UiElements()
 PLOT = PlotElements()
 
+#class LazySpinbox(QtGui.QSpinBox):
+#    def keyPessEvent(self, ev):
+#        log.debug("Press")
+#
+#    def keyReleaseEvent(self, ev):
+#        log.debug("Release")
+    
+
 class ValueWidget(QtGui.QWidget):
     '''
     Simple container to hold a label and a SpinBox.
@@ -28,6 +36,8 @@ class ValueWidget(QtGui.QWidget):
         if spin is None:
             spin = QtGui.QSpinBox(self)
         self.spin = spin
+        self.spin.setKeyboardTracking (False)  # ...updates are so terribly slow
+        self.spin.setAccelerated (True)
         self.spin.setRange (vmin, vmax)
         self.spin.setSingleStep (vinc)
         self.spin.setValue (vdef)
@@ -38,6 +48,7 @@ class ValueWidget(QtGui.QWidget):
         self.box.setSpacing (0)
         self.box.addWidget (self.label)
         self.box.addWidget (self.spin)
+
     
     def value(self):
         return self.spin.value()
@@ -64,12 +75,19 @@ class WaveSlice (ViewerWindow):
         self.master_wave = master  # reference to the wave we will be slicing
         self.slice_wave  = None
         self.slice_axis  = axis
+
+        # to prevent the sluggish updates, upon spinbox action we will
+        # trigger a timer. upon timeout, we will perform the slicing.
+        # this way, UI will remain responsive upon repeated key presses.
+        self.timer = QtCore.QTimer()
+        self.timer.setSingleShot (True)
+        self.timer.timeout.connect(self.slice)
         
         # initialize GUI
         self.tools = QtGui.QToolBar()
-        self.val_axis =  ValueWidget (None, "Axis: ",  QtGui.QSpinBox(), 0, 99, 1, 0, self.slice)
-        self.val_from  = ValueWidget (None, "From: ",  QtGui.QSpinBox(), 0, 99, 1, 0, self.slice)
-        self.val_delta = ValueWidget (None, "Delta: ", QtGui.QSpinBox(), 1, 99, 1, 0, self.slice)
+        self.val_axis =  ValueWidget (None, "Axis: ",  QtGui.QSpinBox(), 0, 99, 1, 0, self.startUpdateTimer)
+        self.val_from  = ValueWidget (None, "From: ",  QtGui.QSpinBox(), 0, 99, 1, 0, self.startUpdateTimer)
+        self.val_delta = ValueWidget (None, "Delta: ", QtGui.QSpinBox(), 1, 99, 1, 0, self.startUpdateTimer)
         self.slice_label = QtGui.QLabel ("<info>")
 
         # attach toolbar to parent, by default (or to us, if no parent)
@@ -89,8 +107,11 @@ class WaveSlice (ViewerWindow):
         self.tools_parent.removeToolBar (self.tools)
 
 
+    def startUpdateTimer(self, val=0):
+        self.timer.start (100)  # wait 100 ms for repeated key input
 
-    @QtCore.pyqtSlot('int')
+
+    @QtCore.pyqtSlot()
     def slice (self, vfrom=0, vdel=0, wave=None):
         '''
         Called when the slicing parameters or the master wave change.
