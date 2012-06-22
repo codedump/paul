@@ -94,7 +94,7 @@ class TreeWindow (QtGui.QMainWindow):
             return
 
         self.current_path = new_path
-        self.statusBar().showMessage (self.current_path)
+        #self.statusBar().showMessage (self.current_path)
         index = self.filesys.index (self.current_path)
         self.filetree.setRootIndex (index)
         self.filetree.scrollTo (index)
