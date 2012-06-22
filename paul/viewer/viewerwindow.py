@@ -215,6 +215,7 @@ class PlotscriptToolbar(QtGui.QToolBar):
                    % (pscr_path, locator, key))
         self.emitPath(pscr_path)
 
+
     def emitPath (self, path):
         '''
         Called when a new file has been selected (or file has been updated).
@@ -295,7 +296,7 @@ class ViewerWindow(QtGui.QMainWindow):
     def initPlotter(self):
         # the plotting area (matplotlib's FigureCanvas and NavigationToolbar)
 
-        self.plot.waves = []        # the currently plotted wave(s)
+        self.plot.waves = None        # the currently plotted wave(s)
         self.plot.files = ''
         self.plot.canvas = MatplotlibWidget()
         self.plot.canvas.reset()
@@ -332,8 +333,8 @@ class ViewerWindow(QtGui.QMainWindow):
         to plot the wave(s) and have 'decorate' only do the
         plot decorations afterwards.
         '''
-        if not len(wavlist):
-            self.plot.waves = []
+        if wavlist is None or not len(wavlist):
+            self.plot.waves = None
             self.setWindowTitle ("Paul Viewer")
             if hasattr(self.plot.canvas, 'axes'):
                 self.plot.canvas.reset()
@@ -352,15 +353,15 @@ class ViewerWindow(QtGui.QMainWindow):
             self.plot.waves = wavlist
             if hasattr(self.pscr, 'obj') and hasattr(self.pscr.obj, 'decorate'):
                 self.plot.canvas.reset()
-                self.plot.canvas.plot(self.plot.waves[0], redraw=False)
+                self.plot.canvas.plot(self.plot.waves, redraw=False)
                 log.debug ("Decorating plot (with '%s')." % self.pscr.cur_file)
                 self.pscr.obj.decorate (self.plot.canvas, self.plot.waves)
                 self.plot.canvas.draw()
             else:
-                self.plot.canvas.plot(self.plot.waves[0], redraw=True)
+                self.plot.canvas.plot(self.plot.waves, redraw=True)
 
-        if hasattr (self.plot.waves[0], 'info'):
-            self.setWindowTitle ("Paul Viewer: %s" % self.plot.waves[0].info['name'])
+        if hasattr (self.plot.waves, 'info'):
+            self.setWindowTitle ("Paul Viewer: %s" % self.plot.waves.info['name'])
         else:
             self.setWindowTitle ("Paul Viewer <name missing>")
 
@@ -380,7 +381,7 @@ class ViewerWindow(QtGui.QMainWindow):
         data.info.setdefault('name', os.path.basename(str(flist[0])))
         self.pscr.toolbar.path_ref = str(flist[0])
         self.plot.files = flist
-        self.plotWaves ([data])
+        self.plotWaves (data)
 
     def refresh(self):
         '''
@@ -392,23 +393,13 @@ class ViewerWindow(QtGui.QMainWindow):
 
     def replot(self):
         '''
-        Wrapper for plotWaves() to easily trigger a replot of the last selection,
+        Wrapper for plot() to easily trigger a replot of the last selection,
         including all the dance (like running the plotscript, etc).
         
         WARNING: This will _not_ reload the files from disk!
                  (Need a reload() method for that?)
         '''
         self.plotWaves(self.plot.waves)
-
-
-    def pscrRun(self):
-        '''
-        If a plotscript has been defined, run it on the current plots.
-        This is actually just a wrapper for plotWaves(), since
-        the plotting of the waves is dependent on which methods the
-        plotscript provides.
-        '''
-        plotWaves(self.plot.waves)
 
 
     @QtCore.pyqtSlot('QString')
@@ -443,7 +434,7 @@ class ViewerWindow(QtGui.QMainWindow):
                     self.pscr.obj.exit(self.plot.canvas, self)
                 del self.pscr.obj
                 self.pscr.obj = None
-            self.plot.canvas.clear()
+            self.plot.canvas.reset()
 
         if os.path.isfile(str(script_file)):
             # load the script as 'self.plotscript'.
