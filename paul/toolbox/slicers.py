@@ -14,7 +14,7 @@ log = logging.getLogger (__name__)
 Some base classes for wave slicing in plotscripts.
 '''
 
-class BaseSlicer(ViewerWindow):
+class BaseSlicer:
     '''
     Base class for a slicer. SingleSlice and MultiSlice will be derived
     from this class.
@@ -37,7 +37,7 @@ class BaseSlicer(ViewerWindow):
     slice(), but to triggerSlicing() instead
     '''
 
-    def __init__(self, parent=None, axis=0, master=None, tparent=None):
+    def __init__(self, parent=None, axis=0, master=None, tparent=None, viewer=None):
         '''
         Parameters:
            parent:  The plotting widget parent (where the plotting widget will be shown)
@@ -45,10 +45,14 @@ class BaseSlicer(ViewerWindow):
            tparent: Toolbar parent, i.e. to which QMainWindow to attach
                     the toolbar to.
         '''
-        ViewerWindow.__init__(self, parent)
+        
+        if viewer is not None:
+            self.viewer = viewer
+        else:
+            self.viewer = ViewerWindow (parent)
         
         if parent is not None:
-            self.setParent (parent)
+            self.viewer.setParent (parent)
 
         self.master_wave = master  # reference to the wave we will be slicing
         self.slice_wave  = None    # the result (i.e. wave to be plotted)
@@ -61,8 +65,9 @@ class BaseSlicer(ViewerWindow):
         self.timer.timeout.connect(self.slice)
         
         # attach toolbar to parent, by default (or to us, if no parent)
-        self.tools_parent = self
-        if tparent is not None and hasattr(tparent, 'addToolBar'):
+        if tparent is None:
+            self.tools_parent = self.viewer
+        else:
             self.tools_parent = tparent
         self.tools_parent.addToolBarBreak()
         self.tools_parent.addToolBar(self.tools)
@@ -77,6 +82,8 @@ class BaseSlicer(ViewerWindow):
         self.tools_parent.removeToolBar (self.tools)
 
 
+    @QtCore.pyqtSlot()
+    @QtCore.pyqtSlot(int)
     def triggerSlicing(self, val=0):
         '''
         The slicing timer. The timeout() signal is connected to self.slice().
@@ -197,7 +204,7 @@ class SingleSlicer (AxisSlicer):
                                  % (self.slice_axis,
                                     self.slice_wave.i2f(self.slice_axis, xfrom),
                                     self.slice_wave.i2f(self.slice_axis, xto)))
-        self.plotWaves (self.slice_wave)
+        self.viewer.plotWaves (self.slice_wave)
 
 
 
@@ -236,15 +243,16 @@ class WaterfallSlicer (AxisSlicer):
         # Initialize GUI.
         self.val_step = ValueWidget (None, "Step: ",    QtGui.QSpinBox(), 1, 99, 1, 1,    self.triggerSlicing)
         self.val_intg = ValueWidget (None, "Intg.: ",   QtGui.QSpinBox(), 1, 99, 1, 1,    self.triggerSlicing)
-        self.val_iadd = ValueWidget (None, "Spacing: ", QtGui.QDoubleSpinBox(), 0, 99, 1,  1, self.triggerSlicing)
-        self.val_imul = ValueWidget (None, "Scaling: ", QtGui.QDoubleSpinBox(), 0, 99, 1,  1, self.triggerSlicing)
+        #self.val_iadd = ValueWidget (None, "Spacing: ", QtGui.QDoubleSpinBox(), 0, 99, 1,  0, self.triggerSlicing)
+        #self.val_imul = ValueWidget (None, "Scaling: ", QtGui.QDoubleSpinBox(), 0, 99, 1,  1, self.triggerSlicing)
         self.chk_norm = QtGui.QCheckBox ("Normalize")
+        self.chk_norm.stateChanged.connect (self.triggerSlicing)
 
         self.val_step.spin.valueChanged.connect (self.stepChanged)
 
         # attach toolbar to parent, by default (or to us, if no parent)
         for w in [ self.val_step, self.val_intg,
-                   self.val_iadd, self.val_imul,
+                   #self.val_iadd, self.val_imul,
                    self.chk_norm ]:
             self.tools.addWidget(w)
 
@@ -284,8 +292,8 @@ class WaterfallSlicer (AxisSlicer):
         ax = self.slice_axis
         self.old_step = step = self.val_step.value()
         self.old_intg = intg = self.val_intg.value()
-        iadd = self.val_iadd.value()
-        imul = self.val_imul.value()
+        #iadd = self.val_iadd.value()
+        #imul = self.val_imul.value()
         log.debug ("Waterfall along axis %d, %d slices every %d points" % (self.slice_axis, intg, step))
 
         new_shape = list(self.master_wave.shape)
@@ -299,8 +307,17 @@ class WaterfallSlicer (AxisSlicer):
         for s in range(0, intg):
             # marker:  select every N-th poiunt ...but ignore bogus points at the end
             marker = [ ((((step+i-s) % step) == 0) and (i < max_i))*1 for i in range (0, self.master_wave.shape[ax]) ]
-            print marker, " shape:", self.master_wave.shape
-            new_wave += (self.master_wave.compress (marker, ax) / intg)
-        self.slice_wave = new_wave
+            tmp = self.master_wave.compress (marker, ax)
 
-        self.plotWaves (self.slice_wave)
+            norm = (1.0/intg)
+            if self.chk_norm.isChecked():
+                log.error ("'Normalize' is checked, but no normalization will be performed!")
+                #norm /= tmp.max() # this will actually not work, because we need to
+                                   # normalize every single slice by hand. basically,
+                                   # if we'd really want normalized lines, we'd have
+                                   # to reimplement compress() to do it.
+                
+            new_wave += (tmp * norm)  # ignoring iadd -- will do that at plot-time
+
+        self.slice_wave = new_wave
+        self.viewer.plotWaves (self.slice_wave)

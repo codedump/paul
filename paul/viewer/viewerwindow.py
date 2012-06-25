@@ -12,7 +12,7 @@ from matplotlib.backends.backend_qt4agg import NavigationToolbar2QTAgg as Naviga
 from paul.loader import igor
 from paul.base.wave import Wave
 from paul.viewer.matplotlibwidget import MatplotlibWidget
-#from paul.viewer.plotscript import *
+
 
 class PlotscriptToolbar(QtGui.QToolBar):
     '''
@@ -324,7 +324,7 @@ class ViewerWindow(QtGui.QMainWindow):
 
 
     @QtCore.pyqtSlot(Wave)
-    def plotWaves (self, wavlist):
+    def plotWaves (self, wavlist, mode='auto'):
         '''
         Plot the specified waves and run the plotscript:
         if 'populate' is available, it will
@@ -438,10 +438,11 @@ class ViewerWindow(QtGui.QMainWindow):
 
         if os.path.isfile(str(script_file)):
             # load the script as 'self.plotscript'.
-            with open (str(script_file), 'r') as f:                
-                log.debug ("Loading '%s'" % str(script_file))
-                self.pscr.obj = imp.load_module ('%s.plotscript' % __name__, f, 
-                                                  str(script_file), ('', 'r', imp.PY_SOURCE))
+            with open (str(script_file), 'r') as f:          
+                ps_name = '%s.plotscript' % __name__
+                log.debug ("Loading '%s' as module '%s'" % (str(script_file), ps_name))
+                self.pscr.obj = imp.load_module (ps_name, f, str(script_file),
+                                                 ('', 'r', imp.PY_SOURCE))
                 #self.statusBar().showMessage ("Plotscript %s" % str(script_file))
                 self.watcher.addPath(script_file)
                 if hasattr(self.pscr.obj, 'init'):
