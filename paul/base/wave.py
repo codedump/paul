@@ -32,9 +32,9 @@ class Wave(ndarray):
     def __new__ (subtype, shape, dtype=None, buffer=None, offset=0, strides=[], order='C'):
         obj = ndarray.__new__ (subtype, shape, dtype, buffer, offset, strides, order)
         for i in range(0,len(shape)):
-            #log.debug ("dim %d" % i)
             obj.ax.append(AxisInfo())
         #log.debug ("%d dimensions" % len(obj.ax))
+        obj.info['name']=''
         return obj
 
     def __array_finalize__ (self, obj):

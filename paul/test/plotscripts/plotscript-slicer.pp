@@ -7,6 +7,9 @@ from PyQt4 import QtGui, QtCore
 from paul.viewer.viewerwindow import ViewerWindow
 from paul.base.wave import Wave
 
+from paul.toolbox.slicers import SingleSlicer, WaterfallSlicer
+from paul.toolbox.widgets import ValueWidget
+
 
 class UiElements(QtCore.QObject):
     pass
@@ -16,138 +19,6 @@ class PlotElements:
 
 GUI = UiElements()
 PLOT = PlotElements()
-
-#class LazySpinbox(QtGui.QSpinBox):
-#    def keyPessEvent(self, ev):
-#        log.debug("Press")
-#
-#    def keyReleaseEvent(self, ev):
-#        log.debug("Release")
-    
-
-class ValueWidget(QtGui.QWidget):
-    '''
-    Simple container to hold a label and a SpinBox.
-    Used for convenience.
-    '''
-    def __init__ (self, parent=None, label='value', spin=None, vmin=0, vmax=99, vinc=1, vdef=0, slot=None):
-        QtGui.QWidget.__init__ (self, parent)
-        self.label = QtGui.QLabel (label, self)
-        if spin is None:
-            spin = QtGui.QSpinBox(self)
-        self.spin = spin
-        self.spin.setKeyboardTracking (False)  # ...updates are so terribly slow
-        self.spin.setAccelerated (True)
-        self.spin.setRange (vmin, vmax)
-        self.spin.setSingleStep (vinc)
-        self.spin.setValue (vdef)
-        if slot is not None:
-            self.spin.valueChanged.connect (slot)
-        self.box = QtGui.QHBoxLayout(self)
-        self.box.setContentsMargins (0, 0, 0, 0)
-        self.box.setSpacing (0)
-        self.box.addWidget (self.label)
-        self.box.addWidget (self.spin)
-
-    
-    def value(self):
-        return self.spin.value()
-
-
-class WaveSlice (ViewerWindow):
-    '''
-    Represents an (N-1)-dim slice of an N-dimensional wave.
-    This class holds both the GUI elements (most prominent
-    being the ViewerWindow used to display the slice, and
-    a tool bar used to control the slicing parameters) aswell
-    as the functionality (i.e. _creating_ the slice in the
-    first place).
-    '''
-
-    slicing = QtCore.pyqtSignal ([int, int, int])
-
-    def __init__(self, parent=None, axis=0, master=None, tp=None):
-        ViewerWindow.__init__(self, parent)
-        
-        if parent is not None:
-            self.setParent (parent)
-
-        self.master_wave = master  # reference to the wave we will be slicing
-        self.slice_wave  = None
-        self.slice_axis  = axis
-
-        # to prevent the sluggish updates, upon spinbox action we will
-        # trigger a timer. upon timeout, we will perform the slicing.
-        # this way, UI will remain responsive upon repeated key presses.
-        self.timer = QtCore.QTimer()
-        self.timer.setSingleShot (True)
-        self.timer.timeout.connect(self.slice)
-        
-        # initialize GUI
-        self.tools = QtGui.QToolBar()
-        self.val_axis =  ValueWidget (None, "Axis: ",  QtGui.QSpinBox(), 0, 99, 1, 0, self.startUpdateTimer)
-        self.val_from  = ValueWidget (None, "From: ",  QtGui.QSpinBox(), 0, 99, 1, 0, self.startUpdateTimer)
-        self.val_delta = ValueWidget (None, "Delta: ", QtGui.QSpinBox(), 1, 99, 1, 0, self.startUpdateTimer)
-        self.slice_label = QtGui.QLabel ("<info>")
-
-        # attach toolbar to parent, by default (or to us, if no parent)
-        self.tools_parent = self
-        if tp is not None and hasattr(tp, 'addToolBar'):
-            self.tools_parent = tp
-        self.tools_parent.addToolBarBreak()
-        self.tools_parent.addToolBar(self.tools)
-        for w in [ self.val_axis, self.val_from, self.val_delta, self.slice_label ]:
-            self.tools.addWidget(w)
-
-
-    def __del__(self):
-        # need to remove the toolbar by hand (because it might be attributed to
-        # the parent window...)
-        log.debug ("Deleting slice for axis %d" % self.slice_axis)
-        self.tools_parent.removeToolBar (self.tools)
-
-
-    def startUpdateTimer(self, val=0):
-        self.timer.start (100)  # wait 100 ms for repeated key input
-
-
-    @QtCore.pyqtSlot()
-    def slice (self, vfrom=0, vdel=0, wave=None):
-        '''
-        Called when the slicing parameters or the master wave change.
-        '''
-        #log.debug ("Slicing along axis %d" % self.slice_axis)
-
-        if wave is not None:
-            # set a new master wave and adjust spinbox limits
-            self.master_wave = wave
-        if self.master_wave is None:
-            return
-        if self.slice_axis != self.val_axis.value():
-            self.slice_axis = self.val_axis.value()
-
-        # need to re-set the range (mostly because slice_axis or master_wave changed
-        self.val_from.spin.setRange (0, self.master_wave.shape[self.slice_axis])
-        self.val_delta.spin.setRange (1, self.master_wave.shape[self.slice_axis])
-        self.val_axis.spin.setRange (0, self.master_wave.ndim-1)
-
-        xfrom = self.val_from.value()
-        delta = self.val_delta.value()
-        xto = xfrom + delta
-        log.debug ("Slicing axis %d, from %d to %d" % (self.slice_axis, xfrom, xto))
-        
-        # we want to slice along an arbitrary axis, here's the strategy:
-        #   . swap the axis 0 with slice_axis
-        #   . slice along axis 0
-        #   . swap back (slice_axis with 0)
-        #   . sum along slice_axis (we want to integrate out the
-        #     dimension we slice along...)
-        self.slice_wave = self.master_wave.swapaxes(0,self.slice_axis)[xfrom:xto].swapaxes(self.slice_axis,0).sum(self.slice_axis)
-        self.slice_label.setText(" ax%d: %5.2f : %5.2f"
-                                 % (self.slice_axis,
-                                    self.slice_wave.i2f(self.slice_axis, xfrom),
-                                    self.slice_wave.i2f(self.slice_axis, xto)))
-        self.plotWaves (self.slice_wave)
 
 
 @QtCore.pyqtSlot('double')
@@ -177,11 +48,19 @@ def setColor(i):
 @QtCore.pyqtSlot()
 def addSlice():
     global GUI, PLOT
-    GUI.slices.append(WaveSlice(axis=0))
+    GUI.slices.append(SingleSlicer(axis=0))
     GUI.slices[-1].resize (400, 350)
     GUI.slices[-1].slice(wave=PLOT.waves)
     GUI.slices[-1].show()
      
+@QtCore.pyqtSlot()
+def addWaterfall():
+    global GUI, PLOT
+    GUI.slices.append(WaterfallSlicer(axis=0))
+    GUI.slices[-1].resize (500, 350)
+    GUI.slices[-1].slice(wave=PLOT.waves)
+    GUI.slices[-1].show()
+
 
 def init(canvas, mainwin):
     '''
@@ -213,7 +92,8 @@ def init(canvas, mainwin):
     GUI.mainwin.addToolBar(GUI.toolbar)
     for w in GUI.col_min, GUI.col_max:
         GUI.toolbar.addWidget (w)
-    GUI.toolbar.addAction ("+Slice", addSlice)
+    GUI.toolbar.addAction ("+S", addSlice)
+    GUI.toolbar.addAction ("+W", addWaterfall)
 
 
 def exit(canvas, mainwin):

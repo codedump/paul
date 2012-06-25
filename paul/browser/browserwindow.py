@@ -11,6 +11,7 @@ class BrowserWindow (QtGui.QMainWindow):
     def __init__ (self, start_path='~'):
         QtGui.QMainWindow.__init__(self)
         self.setWindowTitle ("Paul Browser")
+        self.resize (800, 500)
 
         # create UI elements
         self.initMainFrame()
