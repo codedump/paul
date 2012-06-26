@@ -38,10 +38,10 @@ def colValueChanged(i):
     PLOT.canvas.draw()
     
 
-def init(canvas):
+def init(canvas, window):
     log.debug ("INIT")
     global GUI
-    GUI.win = QtGui.QWidget()
+    GUI.win = QtGui.QWidget ()
     GUI.win.setWindowTitle ("Volatile Plot Settings")
     GUI.layout = QtGui.QGridLayout(GUI.win)
     GUI.win.setLayout (GUI.layout)
@@ -64,7 +64,7 @@ def init(canvas):
 
     return
 
-def exit(canvas):
+def exit(canvas, window):
     log.debug ("EXIT")
     global GUI
     del GUI

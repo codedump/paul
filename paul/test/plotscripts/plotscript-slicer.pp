@@ -48,7 +48,7 @@ def setColor(i):
 @QtCore.pyqtSlot()
 def addSlice():
     global GUI, PLOT
-    GUI.slices.append(SingleSlicer(axis=0))
+    GUI.slices.append(SingleSlicer(axis=0, viewer=ViewerWindow()))
     GUI.slices[-1].viewer.resize (400, 350)
     GUI.slices[-1].slice(wave=PLOT.waves)
     GUI.slices[-1].viewer.show()
