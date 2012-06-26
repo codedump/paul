@@ -80,6 +80,10 @@ class Wave(ndarray):
     def axOffset (self, aindex):
         return self.ax[aindex].offset
 
+    # returns the axis increment
+    def axDelta (self, aindex):
+        return self.ax[aindex].delta
+
     # returns the axis endpoint (offset + dim*delta), opposite of offset.
     def axEndpoint (self, aindex):
         return self.ax[aindex].offset + self.ax[aindex].delta*self.shape[aindex]

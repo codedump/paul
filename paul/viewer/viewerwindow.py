@@ -2,7 +2,7 @@
 import logging
 log = logging.getLogger (__name__)
 
-import sys, os, random, imp, subprocess, tempfile
+import sys, os, random, imp, subprocess, tempfile, glob
 from PyQt4 import QtCore, QtGui
 
 import matplotlib
@@ -50,16 +50,26 @@ class PlotscriptToolbar(QtGui.QToolBar):
 
         self.combo.addItem ('(none)',         None)
         self.combo.addItem ('Other...',       self.locBrowse)
-        self.id_other = 1  # index of the "Other..." entry --
+        self.id_other = self.combo.count()-1   # index of the "Other..." entry --
                                                # this one gets special treament.
-        self.combo.insertSeparator(2)
+        self.combo.insertSeparator(self.combo.count())
         self.combo.addItem ('Automagic',      self.locAuto)
         self.combo.addItem ('File Default',   self.locByFile)
         self.combo.addItem ('Folder Default', self.locByFolder)
         self.combo.addItem ('User Default',   self.locByUser)
-        self.combo.insertSeparator(7)
-        self.id_user = 8  # index at which we can insert user-selected
-                          # plotscripts into the combo box :-)
+        self.combo.insertSeparator(self.combo.count())
+
+        # for convenience, insert the plotscripts from ~/.paul/plugins/
+        def_scrpath = os.path.expanduser("~/.paul/plotscripts/*.pp")
+        def_scripts = glob.glob(def_scrpath)
+        log.debug ("Default plotscripts from %s: %s" % (def_scrpath, def_scripts))
+        for f in def_scripts:
+            self.combo.addItem (f, self.locByCombo)
+        self.combo.insertSeparator(self.combo.count())
+
+        self.id_user = self.combo.count() # index at which we can insert
+                                          # user-selected scripts into
+                                          # the combo box :-)
 
         self.combo.setCurrentIndex (-1)
         self.combo.currentIndexChanged.connect (self.onSelected)
