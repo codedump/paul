@@ -43,6 +43,7 @@ from paul.base.struct_helper import *
 from paul.base.wave import Wave
 from paul.base.errors import *
 import os
+import pprint as pp
 
 __version__ = '0.1'
 
@@ -509,10 +510,12 @@ def wave_read (filename):
     Loads an Igor binary wave from the specified file (either a file stream
     or a file name).
     '''
+    filepath = ''
     if hasattr(filename, 'read'):
         f = filename  # filename is actually a stream object
     else:
         f = open(filename, 'rb')
+        filename = filepath
     try:
         
         wave_info, bin_info = wave_read_header (f)
@@ -525,8 +528,28 @@ def wave_read (filename):
         bin_info_new = wave_read_info (f, wave_info, bin_info)
         bin_info = bin_info_new
 
-        data.info.update (bin_info)
-        data.info.update (wave_info)
+        ## Initially, we updated the info dictionary
+        ## with everything that the Igor wave brought with it.
+        ## Along with useful information, there is a lot of trash
+        ## there. We don't do that now (uncomment the following lines
+        ## if you want to have it), but try to copy useful information
+        ## by hand instead.
+        #data.info.update (bin_info)
+        #data.info.update (wave_info)
+
+        # set some useful wave info
+        data.info['name'] = ''.join(wave_info.setdefault('bname', '(bastard wave)'))
+        data.info['version'] = bin_info['version']
+        data.info['path'] = filepath
+        
+
+        for n in bin_info['note'].split('\r'):
+            nv = n.split ("=")
+            if len(nv) < 2:
+                continue
+            data.info[nv[0].strip()] = nv[1].strip().split()
+
+        #print data.info
 
         # have all the data, now set explicit scaling information
         log.debug ("setting scale on %d dimensions" % len(data.shape))

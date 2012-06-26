@@ -24,14 +24,14 @@ class PlotscriptToolbar(QtGui.QToolBar):
 
     fileSelected = QtCore.pyqtSignal('QString')
 
-    def __init__ (self, parent=None, name=None, default='(none)'):
+    def __init__ (self, parent=None, name=None, default='(none)', pscr_ext=".pp"):
         QtGui.QToolBar.__init__ (self, parent)
 
         self.path_ref  = os.getcwd()
         self.tmp_files = []            # list of temporary files we create --
                                        # should be deleted, but that probably won't work.
         self.file_cur  = ''            # holds the currently selected file name
-        self.file_ext  = ".pp"         # plotscript extension
+        self.file_ext  = pscr_ext      # plotscript extension
         self.file_hint = os.getcwd()   # holds the reference path (i.e. the path
                                        # that we will use as a hint for different
                                        # locators). can be a directory or a file name,
@@ -264,6 +264,7 @@ class ViewerWindow(QtGui.QMainWindow):
 
         self.pscr = self.Plotscript()
         self.pscr.ui = self.Plotscript.Ui()
+        self.pscr.file_ext = ".pp"
         self.plot = self.Plotter()
 
         self.watcher = QtCore.QFileSystemWatcher()
@@ -319,7 +320,7 @@ class ViewerWindow(QtGui.QMainWindow):
     def initScriptLoader(self, default='Automagic'):
 
         self.pscr.cur_file = ''
-        self.pscr.toolbar = PlotscriptToolbar(self)
+        self.pscr.toolbar = PlotscriptToolbar(self, pscr_ext=self.pscr.file_ext)
         self.addToolBarBreak()
         self.addToolBar (self.pscr.toolbar)
         self.pscr.toolbar.fileSelected.connect (self.pscrLoad)
@@ -448,12 +449,11 @@ class ViewerWindow(QtGui.QMainWindow):
 
         if os.path.isfile(str(script_file)):
             # load the script as 'self.plotscript'.
-            with open (str(script_file), 'r') as f:          
-                ps_name = '%s.plotscript' % __name__
-                log.debug ("Loading '%s' as module '%s'" % (str(script_file), ps_name))
-                self.pscr.obj = imp.load_module (ps_name, f, str(script_file),
-                                                 ('', 'r', imp.PY_SOURCE))
-                #self.statusBar().showMessage ("Plotscript %s" % str(script_file))
+            sfn = str(script_file)
+            with open (sfn, 'r') as f:          
+                ps_name = '%s.pscr_%s' % (__name__, os.path.basename(sfn[:sfn.rfind(self.pscr.file_ext)]))
+                log.debug ("Loading '%s' as module '%s'" % (sfn, ps_name))
+                self.pscr.obj = imp.load_module (ps_name, f, sfn, ('', 'r', imp.PY_SOURCE))
                 self.watcher.addPath(script_file)
                 if hasattr(self.pscr.obj, 'init'):
                     log.debug ("init()'ing plotscript (%s)" % str(script_file))
