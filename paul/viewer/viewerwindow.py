@@ -442,16 +442,16 @@ class ViewerWindow(QtGui.QMainWindow):
         or 'False' otherwise.
         Please note that any return value from the method itself is ignored.
         '''
-        log.debug ("checking for '%s' in plotscript (%s)" % (method, self.pscr.cur_file))
         if self.pscrHasMethod (method):
                 proc = getattr(self.pscr.obj, method)
-                log.debug ("%s() in plotscript (%s)" % (method, self.pscr.cur_file))
+                log.debug ("Calling: '%s' in plotscript '%s'" % (method, self.pscr.cur_file))
                 try:
                     proc(*args)
                 except:
-                    log.error("%s() in %s failed" % (method, self.pscr.cur_file))
+                    log.error("Failed: '%s' in plotscript '%s'" % (method, self.pscr.cur_file))
                     raise
                 return True
+        log.debug ("No '%s' in plotscript '%s'" % (method, self.pscr.cur_file))
         return False
 
         
@@ -508,23 +508,24 @@ class ViewerWindow(QtGui.QMainWindow):
         else:
             try:
                 self.pscrCall ('exit', self.plot.canvas, self)
+                self.pscrUnload()
+                self.pscrLoad(str(script_file))
+                self.pscrCall ('init', self.plot.canvas, self, self.pscr.vars)
             except:
                 self.pscrUnload()
                 raise
-            self.pscrUnload()
-            self.pscrLoad(str(script_file))
-            self.pscrCall ('init', self.plot.canvas, self, self.pscr.vars)
 
         self.replot()  # trigger a replot, this will run the populate/decorate functions
 
 
     def pscrLoad (self, sfn):
         '''
-        Loads the plotscript as the specified module. Does not execute the init() function
+        Loads the plotscript as the specified module. Does not execute the init() function.
+        The module name is uniquely generated for this instance of the ViewerWindow.
         '''
         if os.path.isfile(sfn):
             with open (sfn, 'r') as f:
-                mod_name = '%s.pscr_%s' % (__name__, os.path.basename(sfn[:sfn.rfind(self.pscr.file_ext)]))
+                mod_name = '%s.%d_%s' % (__name__, id(self), os.path.basename(sfn[:sfn.rfind(self.pscr.file_ext)]))
                 log.debug ("Loading '%s' as module '%s'" % (sfn, mod_name))
                 self.pscr.obj = imp.load_module (mod_name, f, sfn, ('', 'r', imp.PY_SOURCE))
                 self.pscr.mod_name = mod_name

@@ -74,9 +74,12 @@ def waterfall (ws):
 
     #lines.set_array(x)
     G.fig.axes.add_collection(lines)
+    text = "%s" % ws.info['name']
+    if ws.info.has_key ("T"):
+        text += ", T=%s K" % ws.info['T'][0]
     G.fig.axes.add_artist (mp.text.Text(xmin+(xmax-xmin)/12.0,
                                         ymax-(ymax-ymin)/12.0,
-                                        ws.info['name']+", T=%s K" % ws.info['T'][0]))
+                                        text))
     G.fig.draw()
 
 
