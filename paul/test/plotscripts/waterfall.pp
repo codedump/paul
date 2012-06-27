@@ -12,25 +12,36 @@ log = logging.getLogger (__name__)
 class GlobalVars:
     pass
 
-def init(fig, view):
+def reload(fig, view, res):
+    '''
+    called in case of reload -- we don't want to lose our GUI settings
+    '''
+    global G
+    G = GlobalVars()
+    G.gui = res.gui
+    G.gui.sliced.connect (waterfall)
+    G.fig = fig
+
+def unload(fig, view, res):
+    global G
+    res.gui = G.gui
+    res.fig = G.fig
+    G.gui.sliced.disconnect (waterfall)
+
+def init(fig, view, res):
     log.debug ("Initializing waterfall plotscript")
     global G
     G = GlobalVars()
     G.gui = WaterfallSlicer(tparent=view)
     G.gui.sliced.connect (waterfall)
     G.fig = fig
-    G.fig.reset()
 
-
-def exit (fig, view):
-    log.debug ("Exiting waterfall plotscript")
-    global G
-    del G.gui
 
 def populate(fig, ws):
     global G
     G.fig = fig
     G.gui.slice(ws / ws.max())
+
 
 def waterfall (ws):
     global G
@@ -65,9 +76,8 @@ def waterfall (ws):
     G.fig.axes.add_collection(lines)
     G.fig.axes.add_artist (mp.text.Text(xmin+(xmax-xmin)/12.0,
                                         ymax-(ymax-ymin)/12.0,
-                                        ws.info['name']))
+                                        ws.info['name']+", T=%s K" % ws.info['T'][0]))
     G.fig.draw()
-    #print ws.info
 
 
 def decorate (fig, waves):

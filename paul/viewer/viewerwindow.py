@@ -45,8 +45,10 @@ class PlotscriptToolbar(QtGui.QToolBar):
         self.btn_edit.setSizePolicy (QtGui.QSizePolicy.Minimum,
                                                   QtGui.QSizePolicy.Minimum)
         self.btn_edit.clicked.connect (self.onEdit)
-        for w in [ self.combo, self.btn_edit ]:
+        for w in [ self.combo ]:
             self.addWidget (w)
+        self.addAction ("Edit", self.onEdit)
+        #self.addAction ("Kill", self.onKill)
 
         self.combo.addItem ('(none)',         None)
         self.combo.addItem ('Other...',       self.locBrowse)
@@ -204,6 +206,15 @@ class PlotscriptToolbar(QtGui.QToolBar):
             self.combo.insertItem (self.id_user, tmp_path, self.locByCombo)
             self.emitPath(tmp_path)
         subprocess.Popen([editor, self.file_cur])
+
+    #@QtCore.pyqtSlot()
+    #def onKill (self):
+    #    '''
+    #    Called when user clicks the "Kill" button in the viewer window.
+    #    Selects the empty script, this will tell the parent object
+    #    to unconditionally kill the plotscript.
+    #    '''
+    #    self.emitPath('')
         
 
     @QtCore.pyqtSlot('int')
@@ -252,6 +263,11 @@ class ViewerWindow(QtGui.QMainWindow):
         class Ui:    # container for Plotscript Ui elements
             pass
 
+        class Vars:  # class for 'resident elements', i.e.
+            pass     # elements that need to survive between
+                     # two reloads of the same plotscript,
+                     # but need to be killed on a new plotscript load.
+
     class Plotter:
         pass
             
@@ -265,6 +281,8 @@ class ViewerWindow(QtGui.QMainWindow):
         self.pscr = self.Plotscript()
         self.pscr.ui = self.Plotscript.Ui()
         self.pscr.file_ext = ".pp"
+        self.pscr.mod_name = ''
+        self.pscr.vars = self.Plotscript.Vars()
         self.plot = self.Plotter()
 
         self.watcher = QtCore.QFileSystemWatcher()
@@ -323,7 +341,7 @@ class ViewerWindow(QtGui.QMainWindow):
         self.pscr.toolbar = PlotscriptToolbar(self, pscr_ext=self.pscr.file_ext)
         self.addToolBarBreak()
         self.addToolBar (self.pscr.toolbar)
-        self.pscr.toolbar.fileSelected.connect (self.pscrLoad)
+        self.pscr.toolbar.fileSelected.connect (self.loadPlotScript)
 
 
     #
@@ -353,23 +371,18 @@ class ViewerWindow(QtGui.QMainWindow):
 
         # If the 'populate' method is available in the plotscript, 
         # we pass all responsibility for plotting to the plotscript.
-        if hasattr(self.pscr, 'obj') and hasattr(self.pscr.obj, 'populate'):
-                log.debug ("Populating plot (with '%s')." % self.pscr.cur_file)
-                self.plot.waves = wavlist
-                self.pscr.obj.populate (self.plot.canvas, self.plot.waves)
-                self.plot.canvas.draw()
+        self.plot.waves = wavlist
 
-        # ...otherwise we do it ourselves.
+        if self.pscrCall ('populate', self.plot.canvas, self.plot.waves):
+            self.plot.canvas.draw()
+        elif self.pscrHasMethod ('decorate'):
+            self.plot.canvas.reset()
+            self.plot.canvas.plot(self.plot.waves, redraw=False)
+            self.pscrCall ('decorate', self.plot.canvas, self.plot.waves)
+            self.plot.canvas.draw()
         else:
-            self.plot.waves = wavlist
-            if hasattr(self.pscr, 'obj') and hasattr(self.pscr.obj, 'decorate'):
-                self.plot.canvas.reset()
-                self.plot.canvas.plot(self.plot.waves, redraw=False)
-                log.debug ("Decorating plot (with '%s')." % self.pscr.cur_file)
-                self.pscr.obj.decorate (self.plot.canvas, self.plot.waves)
-                self.plot.canvas.draw()
-            else:
-                self.plot.canvas.plot(self.plot.waves, redraw=True)
+            self.plot.canvas.plot(self.plot.waves, redraw=True)
+
 
         if hasattr (self.plot.waves, 'info'):
             self.setWindowTitle ("Paul Viewer: %s" % self.plot.waves.info['name'])
@@ -412,9 +425,60 @@ class ViewerWindow(QtGui.QMainWindow):
         '''
         self.plotWaves(self.plot.waves)
 
+    
+    def pscrHasMethod (self, method):
+        '''
+        Checks if the plotscript has the specified method.
+        Returns True or False.
+        '''
+        return (hasattr(self.pscr, 'obj') and self.pscr.obj is not None and hasattr(self.pscr.obj, method))
+
+    def pscrCall (self, method, *args):
+        '''
+        Runs the specified method in the plotscript. This is just a wrapper
+        that implements all due diligence, like checking if the method
+        exists (if not, it is ignored) etc.
+        Returns 'True' if the method was called (i.e. if it was available),
+        or 'False' otherwise.
+        Please note that any return value from the method itself is ignored.
+        '''
+        log.debug ("checking for '%s' in plotscript (%s)" % (method, self.pscr.cur_file))
+        if self.pscrHasMethod (method):
+                proc = getattr(self.pscr.obj, method)
+                log.debug ("%s() in plotscript (%s)" % (method, self.pscr.cur_file))
+                try:
+                    proc(*args)
+                except:
+                    log.error("%s() in %s failed" % (method, self.pscr.cur_file))
+                    raise
+                return True
+        return False
+
+        
+    def pscrUnload (self, kill_vars=True):
+        '''
+        Unloads the current plotscript module. If 'call_exit' is True,
+        then the plotscript's exit() method will be called.
+        Otherwise it will be ignored.
+        '''
+        if len(self.pscr.cur_file) > 0:
+            self.watcher.removePath (self.pscr.cur_file)
+
+        if hasattr(self.pscr, 'obj') and self.pscr.obj is not None:
+            log.debug ("Killing currently loaded plotscript '%s'" % self.pscr.cur_file)
+            if kill_vars:
+                del self.pscr.vars  # also kill the resident elements
+                self.pscr.vars = self.Plotscript.Vars()
+            if len(self.pscr.mod_name):
+                del sys.modules[self.pscr.mod_name]
+            self.pscr.mod_name = ''
+            self.pscr.cur_file = ''
+            self.pscr.obj = None
+            self.plot.canvas.reset()
+
 
     @QtCore.pyqtSlot('QString')
-    def pscrLoad (self, script_file):
+    def loadPlotScript(self, script_file):
         '''
         Loads or re-loads the plotscript, then runs it.
 
@@ -431,37 +495,41 @@ class ViewerWindow(QtGui.QMainWindow):
         is changed on disk. This can be either the plotscript-file,
         or any of the currently displayed wave(s).
         '''
+        
+        is_reload = (os.path.abspath(self.pscr.cur_file) == os.path.abspath(str(script_file))) and (self.pscrHasMethod('reload'))
 
-        if len(self.pscr.cur_file) > 0:
-            self.watcher.removePath (self.pscr.cur_file)
+        ## different behavior on reload: don't call init/exit, call only reload
+        ## after the new script has been loaded.
+        if is_reload:
+            self.pscrCall ('unload', self.plot.canvas, self, self.pscr.vars)
+            self.pscrUnload (kill_vars=False)
+            self.pscrLoad (str(script_file))
+            self.pscrCall ('reload', self.plot.canvas, self, self.pscr.vars)
+        else:
+            try:
+                self.pscrCall ('exit', self.plot.canvas, self)
+            except:
+                self.pscrUnload()
+                raise
+            self.pscrUnload()
+            self.pscrLoad(str(script_file))
+            self.pscrCall ('init', self.plot.canvas, self, self.pscr.vars)
 
-        if hasattr(self.pscr, 'obj'):
-            # tear down the old plotscript
-            log.debug ("Killing currently loaded plotscript %s" % script_file)
-            #self.statusBar().showMessage("Missing plotscript %s" % str(script_file))
-            if hasattr(self.pscr, 'obj'):
-                if hasattr(self.pscr.obj, 'exit'):
-                    log.debug ("exit()'ing old plotscript (%s)" % self.pscr.cur_file)
-                    self.pscr.obj.exit(self.plot.canvas, self)
-                del self.pscr.obj
-                self.pscr.obj = None
-            self.plot.canvas.reset()
+        self.replot()  # trigger a replot, this will run the populate/decorate functions
 
-        if os.path.isfile(str(script_file)):
-            # load the script as 'self.plotscript'.
-            sfn = str(script_file)
-            with open (sfn, 'r') as f:          
-                ps_name = '%s.pscr_%s' % (__name__, os.path.basename(sfn[:sfn.rfind(self.pscr.file_ext)]))
-                log.debug ("Loading '%s' as module '%s'" % (sfn, ps_name))
-                self.pscr.obj = imp.load_module (ps_name, f, sfn, ('', 'r', imp.PY_SOURCE))
-                self.watcher.addPath(script_file)
-                if hasattr(self.pscr.obj, 'init'):
-                    log.debug ("init()'ing plotscript (%s)" % str(script_file))
-                    self.pscr.obj.init(self.plot.canvas, self)
 
-        # watch the file (if it's non-zero)
-        self.pscr.cur_file = str(script_file)
-        self.replot()
+    def pscrLoad (self, sfn):
+        '''
+        Loads the plotscript as the specified module. Does not execute the init() function
+        '''
+        if os.path.isfile(sfn):
+            with open (sfn, 'r') as f:
+                mod_name = '%s.pscr_%s' % (__name__, os.path.basename(sfn[:sfn.rfind(self.pscr.file_ext)]))
+                log.debug ("Loading '%s' as module '%s'" % (sfn, mod_name))
+                self.pscr.obj = imp.load_module (mod_name, f, sfn, ('', 'r', imp.PY_SOURCE))
+                self.pscr.mod_name = mod_name
+                self.pscr.cur_file = sfn
+                self.watcher.addPath(sfn)
 
 
     @QtCore.pyqtSlot('QString')
@@ -469,4 +537,4 @@ class ViewerWindow(QtGui.QMainWindow):
         '''
         Called by the file system watcher when the script file has changed.
         '''
-        self.pscrLoad (filename)
+        self.loadPlotScript (filename)

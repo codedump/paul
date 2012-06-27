@@ -62,7 +62,7 @@ def addWaterfall():
     GUI.slices[-1].viewer.show()
 
 
-def init(canvas, mainwin):
+def init(canvas, mainwin, var):
     '''
     Initialize the plotscript: this is a more complicated one. We are
     creating a fully function Qt GUI for this one, which will get
