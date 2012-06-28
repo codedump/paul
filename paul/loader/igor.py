@@ -655,11 +655,13 @@ def wave_write (filename, wave):
 
     # Find the data type by going through the TYPE_TABLE dict.
     # Indexing the reverse dictionary just won't do it... (need to understand why later... :-) )
+    wtype_ = None
     wtype_id = 0
     rev_types = dict((v,k) for k,v in TYPE_TABLE.iteritems())
     for k,v in TYPE_TABLE.iteritems():
         if wave.dtype == v:
-           wtype_id = k
+            wtype = v
+            wtype_id = k
     whead['type'] = wtype_id
 
     # generate the note text: save wave.info in a codified node text, as follows:
@@ -676,6 +678,38 @@ def wave_write (filename, wave):
     
 
     # calculate sizes and checksums etc
+    data_fill = len(wave.data) % 8  # the data block has to be aligned for 64 bits
+    bhead['wfmSize'] = WaveHeader5.size + len(wave.data) + data_fill
+    bhead['checksum'] = checksum (BinHeader5.pack_dict(bhead) + WaveHeader5.pack_dict(whead),
+                                  byte_order(0),
+                                  bhead['checksum'],
+                                  BinHeader5.size+WaveHeader5.size)
+    print "sum: ", bhead['checksum']
+
+    bhead['checksum'] = checksum (BinHeader5.pack_dict(bhead) + WaveHeader5.pack_dict(whead),
+                                  byte_order(0),
+                                  bhead['checksum'],
+                                  BinHeader5.size+WaveHeader5.size)
+    print "sum: ", bhead['checksum']
+
+    bhead['checksum'] = checksum (BinHeader5.pack_dict(bhead) + WaveHeader5.pack_dict(whead),
+                                  byte_order(0),
+                                  bhead['checksum'],
+                                  BinHeader5.size+WaveHeader5.size)
+    print "sum: ", bhead['checksum']
+
+    bhead['checksum'] = checksum (BinHeader5.pack_dict(bhead) + WaveHeader5.pack_dict(whead),
+                                  byte_order(0),
+                                  bhead['checksum'],
+                                  BinHeader5.size+WaveHeader5.size)
+    print "sum: ", bhead['checksum']
+
+    bhead['checksum'] = checksum (BinHeader5.pack_dict(bhead) + WaveHeader5.pack_dict(whead),
+                                  byte_order(0),
+                                  bhead['checksum'],
+                                  BinHeader5.size+WaveHeader5.size)
+    print "sum: ", bhead['checksum']
+
 
     pp.pprint (whead)
 
