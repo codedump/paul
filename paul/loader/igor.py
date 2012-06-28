@@ -653,19 +653,31 @@ def wave_write (filename, wave):
     whead['topTullScale'] = numpy.amax(wave)
     whead['botFullScale'] = numpy.amin(wave)
 
-    pp.pprint (dict((v,k) for k,v in TYPE_TABLE.iteritems()))
+    # Find the data type by going through the TYPE_TABLE dict.
+    # Indexing the reverse dictionary just won't do it... (need to understand why later... :-) )
+    wtype_id = 0
+    rev_types = dict((v,k) for k,v in TYPE_TABLE.iteritems())
+    for k,v in TYPE_TABLE.iteritems():
+        if wave.dtype == v:
+           wtype_id = k
+    whead['type'] = wtype_id
 
-    print wave.dtype
-    print numpy.dtype(wave.dtype)
-    print type(wave.dtype)
-    print type(numpy.dtype(wave.dtype))
-    print numpy.dtype(type(wave.dtype))
+    # generate the note text: save wave.info in a codified node text, as follows:
+    #
+    # [key1.subkey1]
+    # item = value
+    # item = value
+    #
+    # [key2]
+    # item = value...
+    #   
+    note_text = ''
+    #for k,v in wave.info:
+    
 
-
-    whead['type'] = dict((v,k) for k,v in TYPE_TABLE.iteritems())[type(numpy.dtype(wave.dtype))]
+    # calculate sizes and checksums etc
 
     pp.pprint (whead)
-    
 
     f.write (BinHeader5.pack_dict(bhead))
     f.write (WaveHeader5.pack_dict(whead))
