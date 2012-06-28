@@ -567,6 +567,112 @@ def wave_read (filename):
         if not hasattr(filename, 'read'):
             f.close()
 
+def wave_init_header5():
+    '''
+    Returns a clean set of BinHeader5 and WaveHeader5
+    in preparation of writing a version 5 IBW file.
+    '''
+
+    bhead = {
+        'version': 5,        # Version number for backwards compatibility.
+        'checksum': 0,       # Checksum
+        'wfmSize': 0,        # The size of the WaveHeader5 data structure plus the wave data.
+        'formulaSize': 0,    # The size of the dependency formula, if any.
+        'noteSize': 0,       # The size of the note text.
+        'dataEUnitsSize': 0, # The size of optional extended data units.
+        'dimEUnitsSize': [0, 0, 0, 0],  # The size of optional extended dimension units.
+        'dimLabelsSize': [0, 0, 0, 0],  # The size of optional dimension labels.
+        'sIndicesSize': 0,   # The size of string indicies if this is a text wave.
+        'optionsSize1': 0, 
+        'optionsSize2': 0,
+        }
+    
+    whead = {
+        'next': 0,              # link to next wave in linked list.
+        'creationDate': 0,      # DateTime of creation.
+        'modDate': 0,           # DateTime of last modification.
+        'npnts': 0,             # Total number of points (multiply dimensions up to first zero).
+        'type': 0,              # See types (e.g. NT_FP64) above. Zero for text waves.
+        'bname': ['\0' for i in range(0, MAX_WAVE_NAME5+1)],       # Name of wave plus trailing null.
+
+        # Dimensioning info. [0] == rows, [1] == cols etc
+        'nDim': [0 for i in range(0, MAXDIMS)],   # Number of items in a dimension -- 0 means no data.
+        'sfA':  [0 for i in range(0, MAXDIMS)],   # Index value for element e of dimension d = sfA[d]*e + sfB[d].
+        'sfB':  [0 for i in range(0, MAXDIMS)],   # Index value for element e of dimension d = sfA[d]*e + sfB[d].
+
+        # SI units
+        'dataUnits': ['\0' for i in range(0, MAX_UNIT_CHARS+1)],  # Natural data units go here
+        'dimUnits': ['\0' for i in range(0, (MAX_UNIT_CHARS+1) * MAXDIMS)],
+                    # Natural dimension units go here - null if none.
+        'fsValid':  0,          # TRUE if full scale values have meaning.
+        'topFullScale': 0,      # The max and max full scale value for wave.
+        'botFullScale': 0,      # The max and max full scale value for wave.
+        'wData': 0,             # The start of the array of data.  Must be 64 bit aligned.
+
+        # reserved/unused/Igor only flags
+        'dLock': 0, 'whpad1': ['\0' for i in range(0,6)], 'whVersion': 1, 'whpad2': 0, 'dFolder': 0,
+
+        'whpad3': 0,     'dataEUnits': 0,
+        'dimEUnits': [0 for i in range(0, MAXDIMS)], 'dimLabels': [0 for i in range(0, MAXDIMS)],
+        'waveNoteH': 0, 'whUnused': [0 for i in range(0, 16)],
+
+        'aModified': 0, 'wModified': 0, 'swModified': 0, 'useBits': '0',  'kindBits': '0', 'formula': 0,
+        'depID': 0,     'whpad4': 0,    'srcFldr': 0,    'fileName': 0, 'sIndices': 0,
+        }
+
+    return bhead, whead
+
+
+def wave_write (filename, wave):
+    '''
+    Writes a wave to a Version 5 file.
+    '''
+
+    if hasattr(filename, 'write'):
+        f = filename
+        fpath = '' # unknown path
+    else:
+        f = open(filename, 'wb')
+        fpath = filename
+     
+    # initialize a set of blank headers
+    bhead, whead = wave_init_header5()
+
+    # treat the dimensions first
+    if len(wave.shape) > MAXDIMS:
+        raise FormatError("%d is too many dimensions (IBW suppors max. %d)"
+                          % (len(wave.shape), MAXDIMS))
+    for i in range(0, len(wave.shape)):
+        whead['nDim'][i] = wave.shape[i]
+        whead['sfA'][i] = wave.axDelta(i)
+        whead['sfB'][i] = wave.axOffset(i)
+
+    whead['bname'] = wave.info['name'][:MAX_WAVE_NAME5]+((MAX_WAVE_NAME5+1-len(wave.info['name']))*'\0')
+    whead['npnts'] = len(wave.flat)
+    whead['fsValid'] = False
+    whead['topTullScale'] = numpy.amax(wave)
+    whead['botFullScale'] = numpy.amin(wave)
+
+    pp.pprint (dict((v,k) for k,v in TYPE_TABLE.iteritems()))
+
+    print wave.dtype
+    print numpy.dtype(wave.dtype)
+    print type(wave.dtype)
+    print type(numpy.dtype(wave.dtype))
+    print numpy.dtype(type(wave.dtype))
+
+
+    whead['type'] = dict((v,k) for k,v in TYPE_TABLE.iteritems())[type(numpy.dtype(wave.dtype))]
+
+    pp.pprint (whead)
+    
+
+    f.write (BinHeader5.pack_dict(bhead))
+    f.write (WaveHeader5.pack_dict(whead))
+    
+    f.close()
+    
+
 
 def wave_find (filename='', pack_tree={}):
     '''
@@ -765,11 +871,21 @@ def main_pack_list (options):
     print "Pack Tree:"
     pprint.pprint (pack_tree)
 
+def main_test_rw(infile, outfile):
+    wav = wave_read (infile)
+    wave_write (outfile, wav)
+    return
+
 
 if __name__ == '__main__':
     import optparse
     import sys
     import pprint
+
+    main_test_rw ("/home/florin/local/analysis/uru2si2/2012-may-1cubed/kz-map.uxp-dir/kz-map/kz-1k/inorm/URS_HO_App2_007g.ibw",
+                  "/home/florin/local/analysis/uru2si2/tmp.ToBeDeleted/igor-write.ibw")
+    
+    sys.exit(0)
 
     # preparing the logging system
     ch = logging.StreamHandler()
