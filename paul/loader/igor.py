@@ -208,8 +208,8 @@ WaveHeader5 = Structure(
         # SI units
         Field('c', 'dataUnits', default=0, help='Natural data units go here - null if none.', count=MAX_UNIT_CHARS+1),
         Field('c', 'dimUnits', default=0, help='Natural dimension units go here - null if none.', count=(MAXDIMS, MAX_UNIT_CHARS+1)),
-        Field('h', 'fsValid', help='TRUE if full scale values have meaning.'),
-        Field('h', 'whpad3', default=0, help='Reserved. Write zero. Ignore on read.'),
+        Field('H', 'fsValid', help='TRUE if full scale values have meaning.'),
+        Field('H', 'whpad3', default=0, help='Reserved. Write zero. Ignore on read.'),
         Field('d', 'topFullScale', help='The max and max full scale value for wave'), # sic, probably "max and min"
         Field('d', 'botFullScale', help='The max and max full scale value for wave.'), # sic, probably "max and min"
         Field('P', 'dataEUnits', default=0, help='Used in memory only. Write zero. Ignore on read.'),
@@ -623,9 +623,10 @@ def wave_init_header5():
     return bhead, whead
 
 
-def wave_write (filename, wave):
+def wave_write (filename, wave, autoname=True):
     '''
-    Writes a wave to a Version 5 file.
+    Writes a wave to a Version 5 file. If 'autoname' is True,
+    then the wave name will be set to the basename of the file name.
     '''
 
     if hasattr(filename, 'write'):
@@ -647,11 +648,16 @@ def wave_write (filename, wave):
         whead['sfA'][i] = wave.axDelta(i)
         whead['sfB'][i] = wave.axOffset(i)
 
-    whead['bname'] = wave.info['name'][:MAX_WAVE_NAME5]+((MAX_WAVE_NAME5+1-len(wave.info['name']))*'\0')
     whead['npnts'] = len(wave.flat)
-    whead['fsValid'] = False
-    whead['topTullScale'] = numpy.amax(wave)
-    whead['botFullScale'] = numpy.amin(wave)
+
+    # set the wave name (auto-name the wave if a path is specified)
+    wname = wave.info['name']
+    if autoname and len(fpath):
+        wname = os.path.basename(fpath)
+        dot_pos = wname.rfind (".")
+        if  dot_pos  > 0:
+            wname = wname[:dot_pos]
+    whead['bname'] = wave.info['name'][:MAX_WAVE_NAME5]+((MAX_WAVE_NAME5+1-len(wave.info['name']))*'\0')
 
     # Find the data type by going through the TYPE_TABLE dict.
     # Indexing the reverse dictionary just won't do it... (need to understand why later... :-) )
@@ -664,58 +670,34 @@ def wave_write (filename, wave):
             wtype_id = k
     whead['type'] = wtype_id
 
-    # generate the note text: save wave.info in a codified node text, as follows:
-    #
-    # [key1.subkey1]
-    # item = value
-    # item = value
-    #
-    # [key2]
-    # item = value...
-    #   
+    # encode the wave.info as note text
     note_text = ''
     #for k,v in wave.info:
-    
 
     # calculate sizes and checksums etc
-    data_fill = len(wave.data) % 8  # the data block has to be aligned for 64 bits
-    bhead['wfmSize'] = WaveHeader5.size + len(wave.data) + data_fill
-    bhead['checksum'] = checksum (BinHeader5.pack_dict(bhead) + WaveHeader5.pack_dict(whead),
-                                  byte_order(0),
-                                  bhead['checksum'],
-                                  BinHeader5.size+WaveHeader5.size)
-    print "sum: ", bhead['checksum']
 
-    bhead['checksum'] = checksum (BinHeader5.pack_dict(bhead) + WaveHeader5.pack_dict(whead),
-                                  byte_order(0),
-                                  bhead['checksum'],
-                                  BinHeader5.size+WaveHeader5.size)
-    print "sum: ", bhead['checksum']
+    # size of the WaveHeader5 structure without wData, plus the size of the 
+    # (separate) wave data. Version 5 files have no padding at the end of data.
+    bhead['wfmSize'] = WaveHeader5.size + len(wave.data) - 4
 
-    bhead['checksum'] = checksum (BinHeader5.pack_dict(bhead) + WaveHeader5.pack_dict(whead),
-                                  byte_order(0),
-                                  bhead['checksum'],
-                                  BinHeader5.size+WaveHeader5.size)
-    print "sum: ", bhead['checksum']
-
-    bhead['checksum'] = checksum (BinHeader5.pack_dict(bhead) + WaveHeader5.pack_dict(whead),
-                                  byte_order(0),
-                                  bhead['checksum'],
-                                  BinHeader5.size+WaveHeader5.size)
-    print "sum: ", bhead['checksum']
-
-    bhead['checksum'] = checksum (BinHeader5.pack_dict(bhead) + WaveHeader5.pack_dict(whead),
-                                  byte_order(0),
-                                  bhead['checksum'],
-                                  BinHeader5.size+WaveHeader5.size)
-    print "sum: ", bhead['checksum']
+    # Checksum is the (negative of the) sum over BinHeader5 and WaveHeader5 structures,
+    # not including wData. Thus, the sum over the first 384 bytes needs to be zero.
+    chk = checksum (buffer(BinHeader5.pack_dict(bhead)+WaveHeader5.pack_dict(whead)),
+                    byte_order(0), 0, BinHeader5.size+WaveHeader5.size - 4)
+    bhead['checksum'] = -chk
 
 
+    print "size: ", BinHeader5.size + WaveHeader5.size - 4
+    print "chksum: ", checksum (buffer(BinHeader5.pack_dict(bhead)+WaveHeader5.pack_dict(whead)),
+                                byte_order(0), 0, BinHeader5.size+WaveHeader5.size - 4)
+
+    pp.pprint (bhead)
     pp.pprint (whead)
-
-    f.write (BinHeader5.pack_dict(bhead))
-    f.write (WaveHeader5.pack_dict(whead))
     
+    f.write (BinHeader5.pack_dict(bhead))
+    f.write (buffer(WaveHeader5.pack_dict(whead),
+                    WaveHeader5.size - 4)) # don't write the wData field
+    f.write (wave.data)
     f.close()
     
 
