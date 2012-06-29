@@ -42,7 +42,7 @@ log = logging.getLogger (__name__)
 from paul.base.struct_helper import *
 from paul.base.wave import Wave
 from paul.base.errors import *
-import os
+import os, re
 import pprint as pp
 
 __version__ = '0.1'
@@ -332,14 +332,40 @@ def load(filename):
     return wave_read(filename)
 
 
-def wave_note_parse (notestr):
+def wave_note_parse (notestr, block=True):
     '''
     Parses the "notes" string of a wave for useful information.
     Here's the rules:
 
     Returns an "info" map.
     '''
-    pass
+    nmap = { "strays": []}
+    cur_map = nmap
+    cur_map_name = ""
+    sec = re.compile ("\[[^].]\]")
+    for n in notestr.split('\r'):
+        line = n.strip()
+
+        # block ends
+        if block == True and len(line) == 0:
+            if cur_map is not nmap:
+                nmap[cur_map_name] = cur_map
+                cur_map = nmap
+            continue
+
+        # new block
+        if line[0] == "[" and line[-1] == "]":
+            cur_map = {}
+            cur_map_name = line[1:-1]
+            continue
+
+        # key = val - stuff
+        nv = line.split ("=")
+        if len(nv) < 2:
+            nmap['strays'].append(n.strip())
+        else:
+            nmap[nv[0].strip()] = nv[1].strip().split()
+    return nmap
 
 def wave_note_write (infomap):
     '''
@@ -349,7 +375,7 @@ def wave_note_write (infomap):
     Returns a string representation of the Wave.info.
     '''
     sep = '\n'
-    notestr = sep
+    notestr = ''
 
     ## first, write the regular blocks section
     for (k,v) in infomap.iteritems():
@@ -388,7 +414,7 @@ def wave_note_write (infomap):
     ## second, add the stray-lines section
     if "strays" in infomap:
         for l in infomap["strays"]:
-            nodestr += "%s%s" % (l, sep)
+            notestr += "%s%s" % (l, sep)
             
     return notestr
 
@@ -603,14 +629,7 @@ def wave_read (filename):
         data.info['version'] = bin_info['version']
         data.info['path'] = filepath
         
-
-        for n in bin_info['note'].split('\r'):
-            nv = n.split ("=")
-            if len(nv) < 2:
-                continue
-            data.info[nv[0].strip()] = nv[1].strip().split()
-
-        #print data.info
+        data.info.update (wave_note_parse(bin_info['note']))
 
         # have all the data, now set explicit scaling information
         log.debug ("setting scale on %d dimensions" % len(data.shape))
