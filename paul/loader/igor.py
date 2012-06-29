@@ -332,7 +332,7 @@ def load(filename):
     return wave_read(filename)
 
 
-def wave_note_parse (notestr, block=True):
+def wave_note_parse (notestr):
     '''
     Parses the "notes" string of a wave for useful information.
     Here's the rules:
@@ -347,10 +347,10 @@ def wave_note_parse (notestr, block=True):
         line = n.strip()
 
         # block ends
-        if block == True and len(line) == 0:
-            if cur_map is not nmap:
-                nmap[cur_map_name] = cur_map
-                cur_map = nmap
+        if cur_map is not nmap and len(line) == 0:
+            nmap[cur_map_name] = cur_map
+            cur_map = nmap
+                
             continue
 
         # new block
@@ -364,7 +364,9 @@ def wave_note_parse (notestr, block=True):
         if len(nv) < 2:
             nmap['strays'].append(n.strip())
         else:
-            nmap[nv[0].strip()] = nv[1].strip().split()
+            # normal key=val entry of the current block (which-ever it is...)
+            cur_map[nv[0].strip()] = nv[1].strip().split()
+
     return nmap
 
 def wave_note_write (infomap):
@@ -377,38 +379,45 @@ def wave_note_write (infomap):
     sep = '\n'
     notestr = ''
 
-    ## first, write the regular blocks section
-    for (k,v) in infomap.iteritems():
 
+    ## first, write non-block sections (just regular key-value sections)
+    for (k,v) in infomap.iteritems():
         # there are some sections to be ignored -- they're for internal use only
         if k in ["debug", "strays", "axes"]:
             continue
         
+        # if it's a dictionary, ignore
+        if isinstance (v, dict):
+            continue
+
+        # if it's a list, go through the items
+        if hasattr(v, "__iter__"):
+            for i in v:
+                notestr += "%s = " % k
+
+                # if the list item is a dictionary itself, add a [sub.subsection]
+                if isinstance (v, dict):
+                    notestr += "[%s.%s]%s" % (k, v, sep)
+                    notestr += wave_note_write (v)
+                # otherwise just append the items, separated by spaces
+                else:
+                    notestr += "%s " % (i)
+                notestr += sep
+        else:
+            # if it's a single item, write it.
+            notestr += "%s = %s%s" % (k, v, sep)
+    notestr += sep
+
+    ## second, write the regular blocks section
+    for (k,v) in infomap.iteritems():
+        # there are some sections to be ignored -- they're for internal use only
+        if k in ["debug", "strays", "axes"]:
+            continue
+
         # if it's a dictionary, add a [subsection]
         if isinstance (v, dict):
             notestr += "[%s]%s" % (k, sep)
             notestr += wave_note_write (v)
-
-        # it's either a list or a single item
-        else:
-            
-            # if it's a list, go through the items
-            if hasattr(v, "__iter__"):
-                for i in v:
-                    notestr += "%s = " % k
-
-                    # if the list item is a dictionary itself, add a [sub.subsection]
-                    if isinstance (v, dict):
-                        notestr += "[%s.%s]%s" % (k, v, sep)
-                        notestr += wave_note_write (v)
-                    # otherwise just append the items, separated by spaces
-                    else:
-                        notestr += "%s " % (i)
-                    notestr += sep
-                        
-            # if it's a single item, write it.
-            else:
-                notestr += "%s = %s%s" % (k, v, sep)
     notestr += sep
 
     ## second, add the stray-lines section
@@ -986,6 +995,7 @@ def main_test_rw(infile, outfile):
     wav = wave_read (infile)
     wave_write (outfile, wav)
 
+    #pp.pprint (wav.info)
     print
     print "reading %s..." % outfile
     wav2 = wave_read (outfile)
