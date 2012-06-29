@@ -332,6 +332,66 @@ def load(filename):
     return wave_read(filename)
 
 
+def wave_note_parse (notestr):
+    '''
+    Parses the "notes" string of a wave for useful information.
+    Here's the rules:
+
+    Returns an "info" map.
+    '''
+    pass
+
+def wave_note_write (infomap):
+    '''
+    Wries the infomap into a string representation that can be
+    saved as an Igor wave note. This is to retain our
+    own Wave.info when saving to IBW files.
+    Returns a string representation of the Wave.info.
+    '''
+    sep = '\n'
+    notestr = sep
+
+    ## first, write the regular blocks section
+    for (k,v) in infomap.iteritems():
+
+        # there are some sections to be ignored -- they're for internal use only
+        if k in ["debug", "strays", "axes"]:
+            continue
+        
+        # if it's a dictionary, add a [subsection]
+        if isinstance (v, dict):
+            notestr += "[%s]%s" % (k, sep)
+            notestr += wave_note_write (v)
+
+        # it's either a list or a single item
+        else:
+            
+            # if it's a list, go through the items
+            if hasattr(v, "__iter__"):
+                for i in v:
+                    notestr += "%s = " % k
+
+                    # if the list item is a dictionary itself, add a [sub.subsection]
+                    if isinstance (v, dict):
+                        notestr += "[%s.%s]%s" % (k, v, sep)
+                        notestr += wave_note_write (v)
+                    # otherwise just append the items, separated by spaces
+                    else:
+                        notestr += "%s " % (i)
+                    notestr += sep
+                        
+            # if it's a single item, write it.
+            else:
+                notestr += "%s = %s%s" % (k, v, sep)
+    notestr += sep
+
+    ## second, add the stray-lines section
+    if "strays" in infomap:
+        for l in infomap["strays"]:
+            nodestr += "%s%s" % (l, sep)
+            
+    return notestr
+
 def wave_read_header(filename):
     '''
     Reads the wave header information. This is useful for quick access to a wave's
@@ -678,7 +738,8 @@ def wave_write (filename, wave, autoname=True):
         whead['type'] = wtype_id
 
         # encode the wave.info as note text
-        note_text = 'foo'
+        note_text = wave_note_write (wave.info)
+        print note_text
         bhead['noteSize'] = len(note_text)+1
 
         # calculate sizes and checksums etc
