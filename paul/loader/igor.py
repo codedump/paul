@@ -281,7 +281,7 @@ def byte_order(needToReorderBytes):
         return '<'  # little-endian
     return '>'  # big-endian    
 
-def version_structs(version, byte_order):
+def wave_get_reading_structs(version, byte_order):
     if version == 1:
         bin = BinHeader1
         wave = WaveHeader2
@@ -314,6 +314,7 @@ def checksum(buffer, byte_order, oldcksum, numbytes):
         oldcksum %= 2**32
         if oldcksum > 2**31:
             oldcksum -= 2**31
+    assert (oldcksum >= -2**31 and oldcksum < 2**31)
     return oldcksum & 0xffff
 
 
@@ -352,7 +353,7 @@ def wave_read_header(filename):
         if needToReorderBytes:
             BinHeaderCommon.set_byte_order(byteOrder)
             version = BinHeaderCommon.unpack_dict_from(b)['version']
-        bin_struct, wave_struct, checkSumSize = version_structs(version, byteOrder)
+        bin_struct, wave_struct, checkSumSize = wave_get_reading_structs(version, byteOrder)
 
         b = buffer(b + f.read(bin_struct.size + wave_struct.size - BinHeaderCommon.size))
         c = checksum(b, byteOrder, 0, checkSumSize)
@@ -561,6 +562,10 @@ def wave_read (filename):
                        % (mydim, igordim, wave_info["sfA"][igordim], wave_info["sfB"][igordim]))
             data.setScale (mydim, wave_info["sfA"][igordim], wave_info["sfB"][igordim])
 
+            
+        # store the read headers for debug information
+        data.info['debug'] = [bin_info, wave_info ]
+
         return data
 
     finally:
@@ -633,72 +638,70 @@ def wave_write (filename, wave, autoname=True):
         f = filename
         fpath = '' # unknown path
     else:
-        f = open(filename, 'wb')
+        f = open(filename, 'wb+')
         fpath = filename
-     
-    # initialize a set of blank headers
-    bhead, whead = wave_init_header5()
 
-    # treat the dimensions first
-    if len(wave.shape) > MAXDIMS:
-        raise FormatError("%d is too many dimensions (IBW suppors max. %d)"
-                          % (len(wave.shape), MAXDIMS))
-    for i in range(0, len(wave.shape)):
-        whead['nDim'][i] = wave.shape[i]
-        whead['sfA'][i] = wave.axDelta(i)
-        whead['sfB'][i] = wave.axOffset(i)
+    try:
+        # initialize a set of blank headers
+        bhead, whead = wave_init_header5()
 
-    whead['npnts'] = len(wave.flat)
+        # treat the dimensions first
+        if len(wave.shape) > MAXDIMS:
+            raise FormatError("%d is too many dimensions (IBW suppors max. %d)"
+                              % (len(wave.shape), MAXDIMS))
+        for i in range(0, len(wave.shape)):
+            whead['nDim'][i] = wave.shape[i]
+            whead['sfA'][i] = wave.axDelta(i)
+            whead['sfB'][i] = wave.axOffset(i)
 
-    # set the wave name (auto-name the wave if a path is specified)
-    wname = wave.info['name']
-    if autoname and len(fpath):
-        wname = os.path.basename(fpath)
-        dot_pos = wname.rfind (".")
-        if  dot_pos  > 0:
-            wname = wname[:dot_pos]
-    whead['bname'] = wave.info['name'][:MAX_WAVE_NAME5]+((MAX_WAVE_NAME5+1-len(wave.info['name']))*'\0')
+            whead['npnts'] = len(wave.flat)
 
-    # Find the data type by going through the TYPE_TABLE dict.
-    # Indexing the reverse dictionary just won't do it... (need to understand why later... :-) )
-    wtype_ = None
-    wtype_id = 0
-    rev_types = dict((v,k) for k,v in TYPE_TABLE.iteritems())
-    for k,v in TYPE_TABLE.iteritems():
-        if wave.dtype == v:
-            wtype = v
-            wtype_id = k
-    whead['type'] = wtype_id
+        # set the wave name (auto-name the wave if a path is specified)
+        wname = wave.info['name']
+        if autoname and len(fpath):
+            wname = os.path.basename(fpath)
+            dot_pos = wname.rfind (".")
+            if  dot_pos  > 0:
+                wname = wname[:dot_pos]
+            log.debug ("renaming wave to '%s'" % wname)
+        whead['bname'] = wname[:MAX_WAVE_NAME5]+((MAX_WAVE_NAME5+1-len(wname))*'\0')
 
-    # encode the wave.info as note text
-    note_text = ''
-    #for k,v in wave.info:
+        # Find the data type by going through the TYPE_TABLE dict.
+        # Indexing the reverse dictionary just won't do it... (need to understand why later... :-) )
+        wtype    = None
+        wtype_id = 0
+        rev_types = dict((v,k) for k,v in TYPE_TABLE.iteritems())
+        for k,v in TYPE_TABLE.iteritems():
+            if wave.dtype == v:
+                wtype = v
+                wtype_id = k
+        whead['type'] = wtype_id
 
-    # calculate sizes and checksums etc
+        # encode the wave.info as note text
+        note_text = 'foo'
+        bhead['noteSize'] = len(note_text)+1
 
-    # size of the WaveHeader5 structure without wData, plus the size of the 
-    # (separate) wave data. Version 5 files have no padding at the end of data.
-    bhead['wfmSize'] = WaveHeader5.size + len(wave.data) - 4
+        # calculate sizes and checksums etc
 
-    # Checksum is the (negative of the) sum over BinHeader5 and WaveHeader5 structures,
-    # not including wData. Thus, the sum over the first 384 bytes needs to be zero.
-    chk = checksum (buffer(BinHeader5.pack_dict(bhead)+WaveHeader5.pack_dict(whead)),
-                    byte_order(0), 0, BinHeader5.size+WaveHeader5.size - 4)
-    bhead['checksum'] = -chk
+        # size of the WaveHeader5 structure without wData, plus the size of the 
+        # (separate) wave data. Version 5 files have no padding at the end of data.
+        bhead['wfmSize'] = WaveHeader5.size + len(wave.data) - 4
 
+        # Checksum is the (negative of the) sum over BinHeader5 and WaveHeader5 structures,
+        # not including wData. Thus, the sum over the first 384 bytes needs to be zero.
+        chk = checksum (buffer(BinHeader5.pack_dict(bhead)+WaveHeader5.pack_dict(whead)),
+                        byte_order(0), 0, BinHeader5.size+WaveHeader5.size - 4)
+        bhead['checksum'] = -chk
 
-    print "size: ", BinHeader5.size + WaveHeader5.size - 4
-    print "chksum: ", checksum (buffer(BinHeader5.pack_dict(bhead)+WaveHeader5.pack_dict(whead)),
-                                byte_order(0), 0, BinHeader5.size+WaveHeader5.size - 4)
-
-    pp.pprint (bhead)
-    pp.pprint (whead)
     
-    f.write (BinHeader5.pack_dict(bhead))
-    f.write (buffer(WaveHeader5.pack_dict(whead),
-                    WaveHeader5.size - 4)) # don't write the wData field
-    f.write (wave.data)
-    f.close()
+        f.write (BinHeader5.pack_dict(bhead))
+        f.write (buffer(WaveHeader5.pack_dict(whead), 0,
+                        WaveHeader5.size - 4)) # don't write the wData field
+        f.write (buffer(wave.data))
+        f.write (buffer(note_text+"\0"))
+
+    finally:
+        f.close()
     
 
 
@@ -902,6 +905,11 @@ def main_pack_list (options):
 def main_test_rw(infile, outfile):
     wav = wave_read (infile)
     wave_write (outfile, wav)
+
+    print
+    print "reading %s..." % outfile
+    wav2 = wave_read (outfile)
+
     return
 
 
