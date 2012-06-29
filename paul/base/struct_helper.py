@@ -157,7 +157,7 @@ class Structure (struct.Struct):
                     dict[f.name] = f.default
                 else:
                     raise ValueError('%s field not set for %s'
-                                     % f.name, self.__class__.__name__)
+                                     % (f.name, self.__class__.__name__))
         return dict
 
     def pack_dict(self, dict):
