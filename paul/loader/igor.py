@@ -332,80 +332,117 @@ def load(filename):
     return wave_read(filename)
 
 
-def wave_note_parse (notestr):
+def wave_note_parse (notestr, strict_blocks=False, sep='\r'):
     '''
     Parses the "notes" string of a wave for useful information.
     Here's the rules:
+      . Information is generally organized in a "Key=Value" format
+      . Subsequent "Key=Value" lines are organized in blocks,
+        blocks, preceded by a "[name]" tag
+      . The ordering of lines within a block is not guaranteed
+        (representation is a dict() object)
+      . A "Val" can be either a single entry (string?), or a list
+        list of entries, in the original note separated by white spaces.
+        For example:
+           "Temperature = 12" will be translated to {'Temperature': '12'},
+        but
+           "Temperature = 12 K"  to {'Temperatue': ['12', 'K'] }
+      . Non-Key-Value lines are called "stray lines" and don't belong
+        to any block. They are retained as they are, keeping their order,
+        in the "strays" block.
+      . "Key=Val" pairs prior to the first "[name]" tag belong to the
+        default block (or root block).
+      . Blocks typically end on empty-lines, stray-lines or lines
+        with a single dot on them. If strict_blocks is False, then
+        blocks don't end on empty lines.
 
     Returns an "info" map.
     '''
-    nmap = { "strays": []}
+    nmap = { "strays": [] }
     cur_map = nmap
     cur_map_name = ""
     sec = re.compile ("\[[^].]\]")
-    for n in notestr.split('\r'):
+
+    for n in notestr.split(sep):
         line = n.strip()
 
-        # block ends
-        if cur_map is not nmap and len(line) == 0:
+        # What to do on empty lines?
+        if len(line) == 0:
+            if cur_map is not nmap and (strict_blocks == True):
+                nmap[cur_map_name] = cur_map
+                cur_map = nmap
+            continue
+
+        # End block on single-dot lines?
+        if cur_map is not nmap and line == ".":
             nmap[cur_map_name] = cur_map
             cur_map = nmap
-                
             continue
 
         # new block
         if line[0] == "[" and line[-1] == "]":
+            if cur_map is not nmap:
+                nmap[cur_map_name] = cur_map
             cur_map = {}
             cur_map_name = line[1:-1]
             continue
 
         # key = val - stuff
         nv = line.split ("=")
+
+        # how to handle stray lines
         if len(nv) < 2:
             nmap['strays'].append(n.strip())
-        else:
-            # normal key=val entry of the current block (which-ever it is...)
-            cur_map[nv[0].strip()] = nv[1].strip().split()
+            if cur_map is not nmap:               # end block on stray line
+                nmap[cur_map_name] = cur_map
+                cur_map = nmap
+            continue
+
+        # normal key=val entry of the current block (which-ever it is...)
+        cur_map[nv[0].strip()] = nv[1].strip().split()
+
+    # save the last section, if not already saved
+    if cur_map is not nmap:
+        nmap[cur_map_name] = cur_map
 
     return nmap
 
-def wave_note_write (infomap):
+def wave_note_write (infomap, block_prefix='', sep='\r'):
     '''
     Wries the infomap into a string representation that can be
     saved as an Igor wave note. This is to retain our
     own Wave.info when saving to IBW files.
     Returns a string representation of the Wave.info.
+    It only works for almost flat blocks (i.e. where 'infomap'
+    is a dictionary that contains at most one level of sub-dictionaries).
+    The 'val' part of the dictionary items, however, may contain lists.
+    If this is the case, the indivitual list items will be joined using SPACE
+    as a separator.
+    (It's supposed to be a dirty hack to write/parse IBW notes. Everything
+    beyond this doesn't make sense, it should probably be done in
+    our own format...)
     '''
     sep = '\n'
     notestr = ''
 
 
-    ## first, write non-block sections (just regular key-value sections)
+    ## first, write root-block entries
     for (k,v) in infomap.iteritems():
         # there are some sections to be ignored -- they're for internal use only
         if k in ["debug", "strays", "axes"]:
             continue
         
-        # if it's a dictionary, ignore
+        # if item is a dictionary, ignore
         if isinstance (v, dict):
             continue
 
-        # if it's a list, go through the items
+        # if item is an iterable (list, tuple... but NOT string), go through the sub-items
         if hasattr(v, "__iter__"):
-            for i in v:
-                notestr += "%s = " % k
-
-                # if the list item is a dictionary itself, add a [sub.subsection]
-                if isinstance (v, dict):
-                    notestr += "[%s.%s]%s" % (k, v, sep)
-                    notestr += wave_note_write (v)
-                # otherwise just append the items, separated by spaces
-                else:
-                    notestr += "%s " % (i)
-                notestr += sep
+            val = " ".join(v)
         else:
-            # if it's a single item, write it.
-            notestr += "%s = %s%s" % (k, v, sep)
+            val = v
+        notestr += "%s = %s%s" % (k, val, sep)
+
     notestr += sep
 
     ## second, write the regular blocks section
@@ -416,7 +453,11 @@ def wave_note_write (infomap):
 
         # if it's a dictionary, add a [subsection]
         if isinstance (v, dict):
-            notestr += "[%s]%s" % (k, sep)
+            if len(block_prefix) > 0:
+                blk = block_prefix+k
+            else:
+                blk = k
+            notestr += "[%s]%s" % (blk, sep)
             notestr += wave_note_write (v)
     notestr += sep
 
@@ -637,8 +678,9 @@ def wave_read (filename):
         data.info['name'] = ''.join(wave_info.setdefault('bname', '(bastard wave)'))
         data.info['version'] = bin_info['version']
         data.info['path'] = filepath
-        
-        data.info.update (wave_note_parse(bin_info['note']))
+
+        nmap = wave_note_parse(bin_info['note'])
+        data.info.update (nmap)
 
         # have all the data, now set explicit scaling information
         log.debug ("setting scale on %d dimensions" % len(data.shape))
@@ -733,6 +775,17 @@ def wave_write (filename, wave, autoname=True):
         # initialize a set of blank headers
         bhead, whead = wave_init_header5()
 
+        #pp.pprint (bhead)
+        #pp.pprint (whead)
+        #bhead = BinHeader5.unpack_dict_from (buffer('\0'*BinHeader5.size))
+        #whead = WaveHeader5.unpack_dict_from (buffer('\0'*WaveHeader5.size))
+        #pp.pprint (bhead)
+        #pp.pprint (whead)
+        
+
+        bhead["version"] = 5
+        whead["whVersion"] = 1
+
         # treat the dimensions first
         if len(wave.shape) > MAXDIMS:
             raise FormatError("%d is too many dimensions (IBW suppors max. %d)"
@@ -741,7 +794,6 @@ def wave_write (filename, wave, autoname=True):
             whead['nDim'][i] = wave.shape[i]
             whead['sfA'][i] = wave.axDelta(i)
             whead['sfB'][i] = wave.axOffset(i)
-
             whead['npnts'] = len(wave.flat)
 
         # set the wave name (auto-name the wave if a path is specified)
@@ -767,7 +819,6 @@ def wave_write (filename, wave, autoname=True):
 
         # encode the wave.info as note text
         note_text = wave_note_write (wave.info)
-        print note_text
         bhead['noteSize'] = len(note_text)+1
 
         # calculate sizes and checksums etc
