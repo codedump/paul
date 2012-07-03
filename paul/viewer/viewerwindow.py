@@ -167,6 +167,7 @@ class PlotscriptToolbar(QtGui.QToolBar):
         log.debug ("User-selected plotscripts is '%s'" % path)
         return path
 
+
     def locBrowse (self, path_hint='default'):
         '''
         Pops up a 'Browse file' dialog box and returns the selected file name.
@@ -182,7 +183,7 @@ class PlotscriptToolbar(QtGui.QToolBar):
         
         if self.combo.findText(script_file) < 0:
             self.combo.insertItem (self.id_user, script_file, self.locByCombo)
-                
+
         return script_file
 
     
@@ -203,9 +204,11 @@ class PlotscriptToolbar(QtGui.QToolBar):
             os.close(tmp_fd)
             log.debug ("Loading temporary plotscript %s" % tmp_path)
             self.tmp_files.append (tmp_path)
-            self.combo.insertItem (self.id_user, tmp_path, self.locByCombo)
-            self.emitPath(tmp_path)
+            #self.combo.insertItem (self.id_user, tmp_path, self.locByCombo)
+            #self.emitPath (tmp_path)
+            self.setPath(tmp_path)
         subprocess.Popen([editor, self.file_cur])
+
 
     #@QtCore.pyqtSlot()
     #def onKill (self):
@@ -226,7 +229,6 @@ class PlotscriptToolbar(QtGui.QToolBar):
         has to be called using 'key' as a parameter
         (see psModel() for more information).
         '''
-
         pscr_path = ''
         locator = self.combo.itemData(key).toPyObject()
         if locator is not None:
@@ -235,6 +237,20 @@ class PlotscriptToolbar(QtGui.QToolBar):
         log.debug ("Plot script path is '%s' (locator: %s, combo index: %d)" 
                    % (pscr_path, locator, key))
         self.emitPath(pscr_path)
+
+
+    @QtCore.pyqtSlot('QString')
+    def setPath(self, path):
+        '''
+        Called when a given path is to be visualized as the current
+        plot script path. This involves adding the specified path to
+        the combo list, and selecting the corresponding item in the list.
+        '''
+        i = self.combo.findText(path)
+        if i < 0:
+            self.combo.insertItem (self.id_user, path, self.locByCombo)
+            i = self.id_user
+        self.combo.setCurrentIndex (i)
 
 
     def emitPath (self, path):
@@ -270,6 +286,9 @@ class ViewerWindow(QtGui.QMainWindow):
 
     class Plotter:
         pass
+
+
+    plotScriptChanged = QtCore.pyqtSignal ('QString')
             
 
     def __init__(self, parent=None, name=None, width=5, height=4, dpi=100,
@@ -363,6 +382,7 @@ class ViewerWindow(QtGui.QMainWindow):
         plot decorations afterwards.
         '''
         if wavlist is None or not len(wavlist):
+            log.info ("Nothing to plot.")
             self.plot.waves = None
             self.setWindowTitle ("Paul Viewer")
             if hasattr(self.plot.canvas, 'axes'):
@@ -374,13 +394,16 @@ class ViewerWindow(QtGui.QMainWindow):
         self.plot.waves = wavlist
 
         if self.pscrCall ('populate', self.plot.canvas, self.plot.waves):
+            log.debug ("Plot populated.")
             self.plot.canvas.draw()
         elif self.pscrHasMethod ('decorate'):
             self.plot.canvas.reset()
             self.plot.canvas.plot(self.plot.waves, redraw=False)
             self.pscrCall ('decorate', self.plot.canvas, self.plot.waves)
+            log.debug ("Plot decorated.")
             self.plot.canvas.draw()
         else:
+            log.debug ("Bare plot, no plot script.")
             self.plot.canvas.plot(self.plot.waves, redraw=True)
 
 
@@ -511,11 +534,23 @@ class ViewerWindow(QtGui.QMainWindow):
                 self.pscrUnload()
                 self.pscrLoad(str(script_file))
                 self.pscrCall ('init', self.plot.canvas, self, self.pscr.vars)
+                self.plotScriptChanged.emit(script_file)
             except:
                 self.pscrUnload()
                 raise
 
         self.replot()  # trigger a replot, this will run the populate/decorate functions
+
+
+    def setPlotScript (self, path):
+        '''
+        Sets the specified script as a plotscript.
+        This is just a convenience wrapper to be used from the CLI-side of things.
+        Normally, the plot script is selected by the user, but using this
+        function, 'path' is injected at the appropriate position in the
+        code path, close to the plotscript-selecting toolbar.
+        '''
+        self.pscr.toolbar.setPath (path)
 
 
     def pscrLoad (self, sfn):

@@ -15,8 +15,10 @@ ch.setFormatter(fmt)
 log.debug ("Starting...")
 
 from paul.viewer.viewerwindow import ViewerWindow
+from paul.base.wave import Wave
+import paul.loader.igor as igor
 from PyQt4 import QtGui
-import sys
+import sys, os
 import numpy
 
 canvas = None
@@ -49,7 +51,13 @@ def plot (args, win=None):
     if isinstance(wavs[0], numpy.ndarray):
         win.plotWaves (wavs)
     elif isinstance(wavs[0], str):
-        win.plotFiles(wavs)
+        ext = wavs[0][wavs[0].rfind("."):]
+        if ext.lower() == ".pp":
+            w = Wave([1, 1])
+            win.plotWaves (w)
+            win.setPlotScript(os.path.abspath(wavs[0]))
+        else:
+            win.plotFiles (wavs)
     else:
         log.error ("Don't know what to do with %s." % wavs)
 

@@ -220,7 +220,6 @@ class SingleSlicer (AxisSlicer):
         self.sliced.emit (self.slice_wave)
 
 
-
 class WaterfallSlicer (AxisSlicer):
     '''
     This class generates and displays a waterfall diagram, i.e. a series
