@@ -215,8 +215,8 @@ class SingleSlicer (AxisSlicer):
         self.slice_wave = self.master_wave.swapaxes(0,self.slice_axis)[xfrom:xto].swapaxes(self.slice_axis,0).sum(self.slice_axis)
         self.slice_label.setText(" ax%d: %5.2f : %5.2f"
                                  % (self.slice_axis,
-                                    self.slice_wave.i2f(self.slice_axis, xfrom),
-                                    self.slice_wave.i2f(self.slice_axis, xto)))
+                                    self.slice_wave.i2x(self.slice_axis, xfrom),
+                                    self.slice_wave.i2x(self.slice_axis, xto)))
         self.sliced.emit (self.slice_wave)
 
 

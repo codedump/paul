@@ -393,13 +393,13 @@ class ViewerWindow(QtGui.QMainWindow):
         # we pass all responsibility for plotting to the plotscript.
         self.plot.waves = wavlist
 
-        if self.pscrCall ('populate', self.plot.canvas, self.plot.waves):
+        if self.pscrCall ('populate', can=self.plot.canvas, wav=self.plot.waves):
             log.debug ("Plot populated.")
             self.plot.canvas.draw()
         elif self.pscrHasMethod ('decorate'):
             self.plot.canvas.reset()
             self.plot.canvas.plot(self.plot.waves, redraw=False)
-            self.pscrCall ('decorate', self.plot.canvas, self.plot.waves)
+            self.pscrCall ('decorate', can=self.plot.canvas, wav=self.plot.waves)
             log.debug ("Plot decorated.")
             self.plot.canvas.draw()
         else:
@@ -456,7 +456,7 @@ class ViewerWindow(QtGui.QMainWindow):
         '''
         return (hasattr(self.pscr, 'obj') and self.pscr.obj is not None and hasattr(self.pscr.obj, method))
 
-    def pscrCall (self, method, *args):
+    def pscrCall (self, method, *args, **kwargs):
         '''
         Runs the specified method in the plotscript. This is just a wrapper
         that implements all due diligence, like checking if the method
@@ -469,7 +469,7 @@ class ViewerWindow(QtGui.QMainWindow):
                 proc = getattr(self.pscr.obj, method)
                 log.debug ("Calling: '%s' in plotscript '%s'" % (method, self.pscr.cur_file))
                 try:
-                    proc(*args)
+                    proc(*args, **kwargs)
                 except:
                     log.error("Failed: '%s' in plotscript '%s'" % (method, self.pscr.cur_file))
                     raise
@@ -524,16 +524,16 @@ class ViewerWindow(QtGui.QMainWindow):
         ## different behavior on reload: don't call init/exit, call only reload
         ## after the new script has been loaded.
         if is_reload:
-            self.pscrCall ('unload', self.plot.canvas, self, self.pscr.vars)
+            self.pscrCall ('unload', can=self.plot.canvas, win=self, vars=self.pscr.vars)
             self.pscrUnload (kill_vars=False)
             self.pscrLoad (str(script_file))
-            self.pscrCall ('reload', self.plot.canvas, self, self.pscr.vars)
+            self.pscrCall ('reload', can=self.plot.canvas, win=self, vars=self.pscr.vars)
         else:
             try:
                 self.pscrCall ('exit', self.plot.canvas, self)
                 self.pscrUnload()
                 self.pscrLoad(str(script_file))
-                self.pscrCall ('init', self.plot.canvas, self, self.pscr.vars)
+                self.pscrCall ('init', can=self.plot.canvas, win=self, vars=self.pscr.vars)
                 self.plotScriptChanged.emit(script_file)
             except:
                 self.pscrUnload()

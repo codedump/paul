@@ -34,8 +34,8 @@ class MatplotlibWidget(FigureCanvas):
 
 
     def sizeHint(self):
-        w = self.fig.get_figwidth()
-        h = self.fig.get_figheight()
+        w = self.fig.get_figwidth()*self.fig.get_dpi()
+        h = self.fig.get_figheight()*self.fig.get_dpi()
         return QtCore.QSize(w, h)
 
     @QtCore.pyqtSlot()

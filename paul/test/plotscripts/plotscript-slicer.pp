@@ -62,7 +62,7 @@ def addWaterfall():
     GUI.slices[-1].viewer.show()
 
 
-def init(canvas, mainwin, var):
+def init(can, win, vars):
     '''
     Initialize the plotscript: this is a more complicated one. We are
     creating a fully function Qt GUI for this one, which will get
@@ -76,8 +76,8 @@ def init(canvas, mainwin, var):
     # some variables
     GUI.slices = []
     GUI.waves = []
-    GUI.mainwin = mainwin
-    PLOT.canvas = canvas
+    GUI.mainwin = win
+    PLOT.canvas = can
     PLOT.waves = []
 
     # main window layout, resulting in:
@@ -96,7 +96,7 @@ def init(canvas, mainwin, var):
     GUI.toolbar.addAction ("+W", addWaterfall)
 
 
-def exit(canvas, mainwin):
+def exit(can, win):
     log.debug ("EXIT")
     global GUI
     GUI.mainwin.removeToolBar (GUI.toolbar)
