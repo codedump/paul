@@ -9,18 +9,32 @@ class AxisInfo:
     delta = 1  # axis increment (negative if offset = max, positive otherwise)
     units = '' # axis units string
     
-    # returns the axis value corresponding to the
-    # specified index value
     def i2x(self, index):
+        '''
+        Returns the axis value corresponding to the
+        specified index value.
+        '''
         return self.offset+self.delta*index
 
-    # Returns the *fractional* index corresponding to the axis value.
     def _x2i(self, val):
+        '''
+        Returns the *fractional* index corresponding to the axis value.
+        '''
         return (val-self.offset)/self.delta
 
-    # returns the index corresponding to the axis value
+    
     def x2i(self, val):
+        '''
+        Returns the index corresponding to the axis value
+        '''
         return int(math.floor(self._x2i(val)))
+
+    def ppi(self, interval):
+        '''
+        Returns the (fractional) number of points
+        spanned by *interval* on axis.
+        '''
+        return self._x2i(0) - self._x2i(-abs(interval))
 
 
 #

@@ -39,16 +39,14 @@ class PlotscriptToolbar(QtGui.QToolBar):
                                        # wave, and is set by the parent widget.
 
         self.combo = QtGui.QComboBox()
-        self.combo.setSizePolicy (QtGui.QSizePolicy.Expanding,
-                                  QtGui.QSizePolicy.Minimum)
-        self.btn_edit = QtGui.QPushButton("&Edit")
-        self.btn_edit.setSizePolicy (QtGui.QSizePolicy.Minimum,
-                                                  QtGui.QSizePolicy.Minimum)
-        self.btn_edit.clicked.connect (self.onEdit)
+        self.combo.setSizePolicy (QtGui.QSizePolicy.Expanding, QtGui.QSizePolicy.Minimum)
+        self.combo.setMaxVisibleItems (30)
+        self.combo.setEditable (True)
+        self.combo.setMaximumWidth(300)
         for w in [ self.combo ]:
             self.addWidget (w)
         self.addAction ("Edit", self.onEdit)
-        #self.addAction ("Kill", self.onKill)
+        self.addAction ("Reload", self.onForceReload)
 
         self.combo.addItem ('(none)',         None)
         self.combo.addItem ('Other...',       self.locBrowse)
@@ -209,6 +207,18 @@ class PlotscriptToolbar(QtGui.QToolBar):
             self.setPath(tmp_path)
         subprocess.Popen([editor, self.file_cur])
 
+    @QtCore.pyqtSlot()
+    def onForceReload (self):
+        '''
+        Triggers an unload/reload cycle, by selecting a
+        null script (path '') and then the old script
+        again. Useful when the old script had syntax errors
+        that prevented it from being loaded.
+        '''
+        old_path = self.file_cur
+        self.emitPath('')
+        self.emitPath(old_path)
+
 
     #@QtCore.pyqtSlot()
     #def onKill (self):
@@ -304,8 +314,13 @@ class ViewerWindow(QtGui.QMainWindow):
         self.pscr.vars = self.Plotscript.Vars()
         self.plot = self.Plotter()
 
+        # QFileSystemWatcher will send duplicate fileChanged() signals.
+        # We do the trick with a QTimer to filter our the bogus signals.
+        self.watcher_timer = QtCore.QTimer()
         self.watcher = QtCore.QFileSystemWatcher()
-        self.watcher.fileChanged.connect (self.fileChanged)
+        self.watcher.fileChanged.connect (self.triggerFileChanged)
+        self.watcher_timer.setSingleShot(True)
+        self.watcher_timer.timeout.connect (self.fileChanged)
         
         self.initMainFrame()
         self.initPlotter()
@@ -349,6 +364,7 @@ class ViewerWindow(QtGui.QMainWindow):
         self.plot.canvas = MatplotlibWidget()
         self.plot.canvas.reset()
         self.plot.tools = NavigationToolbar(self.plot.canvas, self.main_frame)
+        self.plot.tools.setWindowTitle ("Navigation toolbar")
         self.addToolBar (self.plot.tools)
         for w in [ self.plot.canvas ]:
             self.vbox.addWidget (w)
@@ -358,6 +374,7 @@ class ViewerWindow(QtGui.QMainWindow):
 
         self.pscr.cur_file = ''
         self.pscr.toolbar = PlotscriptToolbar(self, pscr_ext=self.pscr.file_ext)
+        self.pscr.toolbar.setWindowTitle ("Plotscript toolbar")
         self.addToolBarBreak()
         self.addToolBar (self.pscr.toolbar)
         self.pscr.toolbar.fileSelected.connect (self.loadPlotScript)
@@ -545,11 +562,13 @@ class ViewerWindow(QtGui.QMainWindow):
     def setPlotScript (self, path):
         '''
         Sets the specified script as a plotscript.
-        This is just a convenience wrapper to be used from the CLI-side of things.
+        This is just a convenience wrapper to be used from the CLI-side
+        of things.
         Normally, the plot script is selected by the user, but using this
         function, 'path' is injected at the appropriate position in the
         code path, close to the plotscript-selecting toolbar.
         '''
+        log.debug ("Setting plotscript '%s'" % str(path))
         self.pscr.toolbar.setPath (path)
 
 
@@ -567,10 +586,32 @@ class ViewerWindow(QtGui.QMainWindow):
                 self.pscr.cur_file = sfn
                 self.watcher.addPath(sfn)
 
+    @QtCore.pyqtSlot('QString')
+    def triggerFileChanged(self, filename):
+        '''
+        Called when a file on the file system has changed.
+        Save the file name and trigger a timer signal to
+        process it. We do the trick with the timer to avoid
+        multiple calls.
+        '''
+        log.debug ("File changed on disk: %s" % filename)
+        if str(filename) == str(self.pscr.cur_file):
+            self.watcher_reload_pscr = True
+            self.watcher_timer.start(100)
+        else:
+            log.error ("Unknown file changed: %s" % filename)
+
 
     @QtCore.pyqtSlot('QString')
-    def fileChanged (self, filename):
+    @QtCore.pyqtSlot()
+    def fileChanged (self, filename=''):
         '''
         Called by the file system watcher when the script file has changed.
         '''
-        self.loadPlotScript (filename)
+        if len(str(filename)) == 0 and self.watcher_reload_pscr == True:
+            self.watcher_reload_pscr = False
+            filename = self.pscr.cur_file
+            log.debug ("Reloading plotscript file: '%s'" % filename)
+            self.loadPlotScript (filename)
+        else:
+            log.error ("Not supposed to be here...")

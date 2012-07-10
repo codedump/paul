@@ -41,6 +41,8 @@ def ncomp (iwave, axis=0, step=1, intg=-1, norm=False):
         for s in owave.swapaxes(0,axis):    # scaling and normalizing
             s /= s.sum()
 
+    owave.axInfo(axis).delta *= step
+
     return owave
 
 
