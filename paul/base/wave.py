@@ -100,8 +100,8 @@ class AxisInfo:
 class Wave(ndarray):
     def __new__ (subtype, shape, dtype=None, buffer=None, offset=0, strides=[], order='C'):
         obj = ndarray.__new__ (subtype, shape, dtype, buffer, offset, strides, order)
-        for i in range(0,len(shape)):
-            obj.info.setdefault('axes', ())+(AxisInfo(),)
+        for i in range(len(shape)):
+            obj.info['axes'] = obj.info.setdefault('axes', ()) + (AxisInfo(),)
         obj.info['name']='wave%x' % id(obj)
         return obj
 
@@ -157,7 +157,8 @@ class Wave(ndarray):
         if isinstance(self, Wave):
             axi = self.info['axes']
         elif isinstance(self, ndarray):
-            axi = tuple([ AxisInfo() for i in (0, self.ndim) ])
+            axi = tuple([ AxisInfo() for i in range(self.ndim) ])
+            log.debug ("%s is not a Wave, using AxisInfo defaults." % self)
         else:
             raise NotImplementedError ("Intrinsic axis information only available for Wave or ndarrays")
 
@@ -168,7 +169,7 @@ class Wave(ndarray):
 
     def axInfo(self, aindex=-1): # legacy
         log.debug ("Deprecated.")
-        return self.axInfo(aindex)
+        return self.ax(aindex)
 
 
     def axMin(self, aindex):
@@ -211,7 +212,7 @@ class Wave(ndarray):
 
     def axEndpoint (self, ai):   # legacy
         log.debug ("Deprecated.")
-        return self.axEnd(self, ai)
+        return self.axEnd(ai)
 
 
     def axLim(self):

@@ -650,9 +650,10 @@ def wave_read (filename):
     filepath = ''
     if hasattr(filename, 'read'):
         f = filename  # filename is actually a stream object
+        filepath = ''
     else:
         f = open(filename, 'rb')
-        filename = filepath
+        filepath = filename
     try:
         
         wave_info, bin_info = wave_read_header (f)
@@ -683,18 +684,17 @@ def wave_read (filename):
         data.info.update (nmap)
 
         # have all the data, now set explicit scaling information
-        log.debug ("setting scale on %d dimensions" % len(data.shape))
-    
-        # set the intrinsic scaling information of the wave.
         for mydim in range(0,len(data.shape)):
             igordim = mydim
-            log.debug ("Setting scaling info for dimension %d here (%d with Igor): %f/%f"
-                       % (mydim, igordim, wave_info["sfA"][igordim], wave_info["sfB"][igordim]))
+            #log.debug ("Setting scaling info for dimension %d here (%d with Igor): %f/%f"
+            #           % (mydim, igordim, wave_info["sfA"][igordim], wave_info["sfB"][igordim]))
             data.setScale (mydim, wave_info["sfA"][igordim], wave_info["sfB"][igordim])
 
             
         # store the read headers for debug information
         data.info['debug'] = [bin_info, wave_info ]
+
+        log.debug ("Loaded %s from path: %s" % (data.info['name'], data.info['path']))
 
         return data
 

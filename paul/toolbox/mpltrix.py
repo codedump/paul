@@ -39,8 +39,8 @@ def plot_water (fig_ax, wlist, offs=(0, 0), xlim=(0,0), ylim=(0,0)):
     if len(wlist) == 0:
         return
 
-    x = np.arange(start=wlist[0].axOffset(0),
-                  stop=wlist[0].axEndpoint(0),
+    x = np.arange(start=wlist[0].axOff(0),
+                  stop=wlist[0].axEnd(0),
                   step=wlist[0].axDelta(0))
 
     if xlim == (0, 0):
