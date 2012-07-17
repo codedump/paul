@@ -14,7 +14,7 @@ Module with tools for analysis of Angle Resolved Photoelectron
 Spectroscopy (ARPES) data.
 '''
 
-def e(mrel=1.0, Ebind=0.0, kpos=0.0, klim=1.0, pts=10):
+def e(mrel=1.0, ebind=0.0, kpos=0.0, klim=1.0, pts=100, out=None):
     '''
     Returns the parabolic dispersion of an electron bound at
     energy *Ebind*, with relative mass *mrel* (1.0 being
@@ -38,25 +38,37 @@ def e(mrel=1.0, Ebind=0.0, kpos=0.0, klim=1.0, pts=10):
     a 1D wave, then the 2nd dimension will have only 1 entry.
     '''
 
-    # Make sure 'pts' and 'klim' have sane values.
-    # We will work with full 2D pts / klim layout.
+    # Make sure 'pts' and 'klim' have sane values. We will work with full 2D pts / klim layout.
+
+    dim = 2
+
+    # if input is 1D, add a 2nd dimension
     if not hasattr(pts, "__iter__"):
         pts = (pts, 1)
-
+        dim = 1
     if len(pts) == 1:
         pts = (pts[0], 1)
+        dim = 1
 
     if not hasattr(klim, "__iter__"):
-        klim = ( (min(-klim, klim), max(-klim, klim)),
-                 (min(-klim, klim), max(-klim, klim)) )
+        if dim == 2:
+            klim = ( (min(-klim, klim), max(-klim, klim)),
+                     (min(-klim, klim), max(-klim, klim)) )
+        else:
+            klim = ( (min(-klim, klim), max(-klim, klim)),
+                     (0.0, 0.0))
+
     else:
         new_klim = []
-        for l in klim:
-            if not hasattr(l, "__iter__") or len(l) == 1:
-                new_klim.append ( (min(-l, l),
-                                   max(-l, l)) )
-            else:
-                new_klim.append (tuple(l))
+        if dim == 2:
+            for l in klim:
+                if not hasattr(l, "__iter__") or len(l) == 1:
+                    new_klim.append ( (min(-l, l),
+                                       max(-l, l)) )
+                else:
+                    new_klim.append (tuple(l))
+        elif dim == 1:
+            new_klim = [klim, (0.0, 0.0)]
         klim = tuple(new_klim)
 
     # these are the X and Y axes arrays (1D)
@@ -65,20 +77,52 @@ def e(mrel=1.0, Ebind=0.0, kpos=0.0, klim=1.0, pts=10):
     kx = axx[:,np.newaxis]
     ky = axy[np.newaxis,:]
 
-    #log.debug ("axx: %s, axy: %s, klim=%s, pts=%s" % (axx, axy, klim, pts))
+    #print ("axx: %s, axy: %s\nklim=%s, pts=%s" % (axx, axy, klim, pts))
 
     me   = 9.10938215e-31        # free electron mass [kg]
     hbar = 1.054571628e-34       # in    [kg m^2 / s]
     eV   = 1.60217646e-19        # conversion factor J -> eV [kg m^2 / s^2]
 
-    out = Ebind + 1.0/eV * (( (kx**2+ky**2) - (kpos**2))*1.0e20) * (hbar**2.0) / (2.0*mrel*me)
+    out = ebind + 1.0/eV * (( (kx**2+ky**2) - (kpos**2))*1.0e20) * (hbar**2.0) / (2.0*mrel*me)
 
-    wav = out.view(w.Wave)
+    if type(out) is w.Wave:
+        wav = out
+    else:
+        wav = out.view(w.Wave)
 
     for i in range(len(wav.shape)):
        wav.setLimits (i, klim[i][0], klim[i][1])
 
     return wav
+
+
+def hybridize(wlist, V=0.0):
+    '''
+    Hybridizes bands from *wlist* using the coupling matrix *V*.
+    *V* is a NxN matrix, where N = len(wlist).
+    Returns the hybridized bands *h1* and *h2*, corresponding to:
+
+       h1/h2 = 1/2 * (w1 + w2 +/- sqrt((w2-w1)**2 + 4*abs(v)))
+
+    '''
+    if len(wlist) != 2:
+        return
+
+    # if only one value is specified, construct a coupling matrix out of it
+    if type(V) == float:
+        V = np.matrix([[V for i in wlist] for j in wlist])
+
+    V2  = V + V.T - 2*np.diag(np.diag(V))      # make sure matrix is symmetric
+    V2 -= np.diag(np.diag(V))                  # remove diagonal elements
+
+    # now, V2 is a traceless, symmetric matrix containing coupling
+    # factors for the bands in 'wlist'.
+    
+
+    return 0.5 * (wlist[0] + wlist[1] + np.sqrt((wlist[1]-wlist[0])**2 + 4*abs(V2[0,1]))), 0.5 * (wlist[0] + wlist[1] - np.sqrt((wlist[1]-wlist[0])**2 + 4*abs(V2[0,1])))
+
+    return 0.5 * (wlist[0] + wlist[1] + np.sqrt((wlist[1]-wlist[0])**2 + 4*abs(V2[0,1]))), 0.5 * (wlist[0] + wlist[1] - np.sqrt((wlist[1]-wlist[0])**2 + 4*abs(V2[0,1])))
+
 
 
 if __name__ == "__main__":
@@ -92,8 +136,10 @@ if __name__ == "__main__":
     log.addHandler (ch)
     log.setLevel (logging.DEBUG)
 
-    foo = e(pts=(5, 4), mrel=-2)
+    #foo = e(pts=(5, 4), mrel=-2)
+    foo = e()
     pprint (foo)
+    print foo.info['axes']
 
     #e(pts=5, klim=1.0)
     #e(pts=5, llim=(-1.0, 0.5))
