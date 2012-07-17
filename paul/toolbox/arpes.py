@@ -1,12 +1,13 @@
 #!/usr/bin/python
 
+import logging
+log = logging.getLogger (__name__)
+
 import numpy as np
 import scipy as sp
 from pprint import pprint
 import paul.base.wave as w
-import logging
 
-log = logging.getLogger (__name__)
 
 '''
 Module with tools for analysis of Angle Resolved Photoelectron
@@ -32,7 +33,7 @@ def e(mrel=1.0, Ebind=0.0, kpos=0.0, klim=1.0, pts=10):
       5) if *klim* is a number, then ((-*klim*, *klim*), (-*klim*, *klim*)) is assumed
       6) if *klim* is ((nr), (nr)), then ((-nr, nr), (-nr, nr)) is assumed
 
-    A Wave object is returned with proper intrinsic scaling. The object is 
+    A Wave object is returned with proper intrinsic scaling. The object is
     always 2D, regardless of the user input. But if the user input requested
     a 1D wave, then the 2nd dimension will have only 1 entry.
     '''
@@ -70,18 +71,19 @@ def e(mrel=1.0, Ebind=0.0, kpos=0.0, klim=1.0, pts=10):
     hbar = 1.054571628e-34       # in    [kg m^2 / s]
     eV   = 1.60217646e-19        # conversion factor J -> eV [kg m^2 / s^2]
 
-    wav = w.Wave (shape=pts)
-    out = np.zeros(pts)
-
     out = Ebind + 1.0/eV * (( (kx**2+ky**2) - (kpos**2))*1.0e20) * (hbar**2.0) / (2.0*mrel*me)
 
-    #for i in range(len(wav.shape)):
-    #    wav.setLimits (i, klim[i][0], klim[i][1])
+    wav = out.view(w.Wave)
 
-    return out
+    for i in range(len(wav.shape)):
+       wav.setLimits (i, klim[i][0], klim[i][1])
+
+    return wav
 
 
 if __name__ == "__main__":
+
+    log = logging.getLogger ("paul")
 
     fmt = logging.Formatter('%(levelname)s: %(funcName)s: %(message)s')
     ch  = logging.StreamHandler()
@@ -90,7 +92,8 @@ if __name__ == "__main__":
     log.addHandler (ch)
     log.setLevel (logging.DEBUG)
 
-    pprint (e(pts=(5, 4), mrel=-2))
+    foo = e(pts=(5, 4), mrel=-2)
+    pprint (foo)
 
     #e(pts=5, klim=1.0)
     #e(pts=5, llim=(-1.0, 0.5))
