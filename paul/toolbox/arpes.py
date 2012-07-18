@@ -110,10 +110,14 @@ def hybridize(wlist, V=0.0, count=1):
     '''
     # if only one value is specified, construct a coupling matrix out of it
     if type(V) == float:
-        V = np.matrix([[V for i in wlist] for j in wlist])
+        V = np.matrix([[V for i in wlist] for j in wlist]) / 2
+
+    V -= np.diag(np.diag(V))
 
     V2  = V + V.T - 2*np.diag(np.diag(V))      # make sure matrix is symmetric
     V2 -= np.diag(np.diag(V))                  # remove diagonal elements
+
+    pprint (V2)
 
     ''' This is what we'll be operating on'''
     hlist = list(wlist)
