@@ -96,18 +96,18 @@ def e(mrel=1.0, ebind=0.0, kpos=0.0, klim=1.0, pts=100, out=None):
     return wav
 
 
-def hybridize(wlist, V=0.0):
+def hybridize(wlist, V=0.0, count=1):
     '''
     Hybridizes bands from *wlist* using the coupling matrix *V*.
     *V* is a NxN matrix, where N = len(wlist).
-    Returns the hybridized bands *h1* and *h2*, corresponding to:
+    Returns a list hybridized bands, corresponding to:
 
-       h1/h2 = 1/2 * (w1 + w2 +/- sqrt((w2-w1)**2 + 4*abs(v)))
+       hi/hj = 1/2 * (wlist[i] + wlist[j] +/- sqrt((wlist[i]-wlist[j])**2 + 4*abs(v)))
 
+    If *count* is specified, then the procedure will be repeated *count*
+    times (default is 1). This is intended for multi-band hybridization,
+    where one pass may not be enough.
     '''
-    if len(wlist) != 2:
-        return
-
     # if only one value is specified, construct a coupling matrix out of it
     if type(V) == float:
         V = np.matrix([[V for i in wlist] for j in wlist])
@@ -115,13 +115,53 @@ def hybridize(wlist, V=0.0):
     V2  = V + V.T - 2*np.diag(np.diag(V))      # make sure matrix is symmetric
     V2 -= np.diag(np.diag(V))                  # remove diagonal elements
 
-    # now, V2 is a traceless, symmetric matrix containing coupling
-    # factors for the bands in 'wlist'.
+    ''' This is what we'll be operating on'''
+    hlist = list(wlist)
     
+    '''
+    Hybridizing bands more than once brings some normalization problems:
+    the interaction potential V will be applied to the complete band.
+    The formula has most drastic consequences for the crossover-points,
+    but it actually affects the _whole_ band. Now, if we repeatedly
+    hybridize two bands, then they will get pushed appart, even if they
+    don't cross anymore.
+    
+    To avoid this, we need to normalize the interaction potential by the
+    number of times that we're going to hybridize. (Mind the sqrt() -- this
+    is because the potential needs to be halvened under the sqrt().)
+    '''
+    norm = 1.0/np.sqrt(count)
 
-    return 0.5 * (wlist[0] + wlist[1] + np.sqrt((wlist[1]-wlist[0])**2 + 4*abs(V2[0,1]))), 0.5 * (wlist[0] + wlist[1] - np.sqrt((wlist[1]-wlist[0])**2 + 4*abs(V2[0,1])))
+    '''
+    Next problem arises when hybridizing more than 2 bands: multi-band
+    hybridization is performet in a each-with-every-other kind of loop.
+    So, we need to keep the interaction potential even smaller.
+    The (missing) factor 1/2 accounts for the fact that our algorithm,
+    for symmetry reasons, would hybridize a i->j and j->i.
+    There is no sqrt() here, because this normalization factor is
+    '''
+    norm *= 1.0/(len(wlist)*(len(wlist)-1)/2.0)
 
-    return 0.5 * (wlist[0] + wlist[1] + np.sqrt((wlist[1]-wlist[0])**2 + 4*abs(V2[0,1]))), 0.5 * (wlist[0] + wlist[1] - np.sqrt((wlist[1]-wlist[0])**2 + 4*abs(V2[0,1])))
+    
+    V2 *= norm  # The actual normalization
+
+    print "norm: ", 1/norm
+
+    '''
+    Now, V2 is a traceless, symmetric matrix containing coupling
+    factors for the bands in 'hlist', correctly normalized. Let's go!
+    '''
+    for t in range(count):
+        for i in range(len(hlist)):
+            for j in range(len(hlist)):
+                if i == j:
+                    continue
+                h1 = 0.5 * (hlist[i] + hlist[j]) + np.sqrt( (0.5*(hlist[j]-hlist[i]))**2 + V2[i,j]**2 )
+                h2 = 0.5 * (hlist[i] + hlist[j]) - np.sqrt( (0.5*(hlist[j]-hlist[i]))**2 + V2[i,j]**2 )
+                hlist[i] = h1
+                hlist[j] = h2
+
+    return hlist
 
 
 

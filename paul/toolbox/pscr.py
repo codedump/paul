@@ -6,7 +6,7 @@ import os
 Useful plotscript helpers.
 '''
 
-def here(base=__file__,path):
+def here(path,base=__file__):
     '''
     Returns a path relative to this script.
     '''

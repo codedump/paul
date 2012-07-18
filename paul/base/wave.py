@@ -55,6 +55,11 @@ class AxisInfo:
        . (Optionally, keep the Wave.ax*() members for backwards
           compatibility, as wrappers to the corresponding AxisInfo
           members.)
+       . On slicing operations, i.e. for ndarray views, we need to
+         (could?) reset the .delta parameter. This could work
+         on simple slicing (i.e. when selecting every N-th slice),
+         but will break on more advanced slicing (i.e. on boolean
+         indexing).
            
     '''
     
@@ -98,22 +103,42 @@ class AxisInfo:
 #   . notes dictionary
 #
 class Wave(ndarray):
-    def __new__ (subtype, shape, dtype=None, buffer=None, offset=0, strides=[], order='C'):
-        obj = ndarray.__new__ (subtype, shape, dtype, buffer, offset, strides, order)
-        for i in range(len(shape)):
-            obj.info['axes'] = obj.info.setdefault('axes', ()) + (AxisInfo(),)
-        obj.info['name']='wave%x' % id(obj)
+    def __new__ (subtype, *args, **kwargs):
+        obj = ndarray.__new__ (subtype, *args, **kwargs)
+        log.debug ('new with class %s' % subtype)
         return obj
 
     def __array_finalize__ (self, obj):
-        if obj is None:
-            # this means that object was created explicitly:  foo=Wave()
-            pass
+        '''
+        When subclassing an numpy.ndarray, 3 scenarios may occur
+        (see also http://docs.scipy.org/doc/numpy/user/basics.subclassing.html):
 
-        # otherwise, if this is a view casting (ndarray.view()) or
-        # from a template type (ndarray[x:y:z]), we need to set 'info'
-        # and 'ax' to sane default values.
-        self.info = getattr (obj, 'info', {})
+           1) Explicit construction: foo = Wave(...)
+           2) View casting:          foo = bar.view(Wave)   (where 'bar' is another ndarray
+                                                             or a subtype, possibly a Wave)
+           3) New from template:     foo = bar[x:y:z]       (where 'bar' is a Wave)
+
+        Depending on the scenario, initialization of self.info[] is different.
+        '''
+        self.info = {}
+
+        if type(obj) is Wave:    # view casting or new from a Wave template            
+            for key, val in obj.info.iteritems():
+                self.info[key] = val
+        
+            ## insert AxisInfo altering code here (e.g. to adjust
+            ## the delfa/offset to the new view parameters)
+            # ...
+
+        else:                    # explicit construction, or new from non-Wave template.
+            # Need to set sane defaults for self.info[]
+            for i in range(len(self.shape)):
+                self.info['axes'] = self.info.setdefault('axes', ()) + (AxisInfo(),)
+            self.info['name']='wave%x' % id(obj)
+            if obj is None: pass         # this would be explicit construction...
+            else:           pass         # ...and new from 'ndarray' or another subtype of it
+
+
 
     # overwrites the ndarray.reshape() in order to resize the axes vector 
     def reshape(self, sizes):
