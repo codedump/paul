@@ -117,8 +117,6 @@ def hybridize(wlist, V=0.0, count=1):
     V2  = V + V.T - 2*np.diag(np.diag(V))      # make sure matrix is symmetric
     V2 -= np.diag(np.diag(V))                  # remove diagonal elements
 
-    pprint (V2)
-
     ''' This is what we'll be operating on'''
     hlist = list(wlist)
     

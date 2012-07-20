@@ -84,9 +84,23 @@ class AxisInfo:
     
     def x2i(self, val):
         '''
-        Returns the index corresponding to the axis value
+        Returns the (floor) index corresponding to the axis value.
         '''
         return int(math.floor(self._x2i(val)))
+
+
+    def fx2i(self, val):
+        '''
+        Returns the floor index corresponding to the axis value.
+        '''
+        return int(math.floor(self._x2i(val)))
+
+
+    def rx2i(self, val):
+        '''
+        Returns the index corresponding to the rounded axis value.
+        '''
+        return int(math.round(self._x2i(val)))
 
 
     def ppi(self, interval):
