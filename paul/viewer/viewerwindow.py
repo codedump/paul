@@ -410,13 +410,13 @@ class ViewerWindow(QtGui.QMainWindow):
         # we pass all responsibility for plotting to the plotscript.
         self.plot.waves = wavlist
 
-        if self.pscrCall ('populate', can=self.plot.canvas, wav=self.plot.waves):
+        if self.pscrCall ('populate', can=self.plot.canvas, wav=self.plot.waves, fig=self.plot.canvas.fig):
             log.debug ("Plot populated.")
             self.plot.canvas.draw()
         elif self.pscrHasMethod ('decorate'):
             self.plot.canvas.reset()
             self.plot.canvas.plot(self.plot.waves, redraw=False)
-            self.pscrCall ('decorate', can=self.plot.canvas, wav=self.plot.waves)
+            self.pscrCall ('decorate', can=self.plot.canvas, wav=self.plot.waves, fig=self.plot.canvas.fig)
             log.debug ("Plot decorated.")
             self.plot.canvas.draw()
         else:
@@ -541,10 +541,10 @@ class ViewerWindow(QtGui.QMainWindow):
         ## different behavior on reload: don't call init/exit, call only reload
         ## after the new script has been loaded.
         if is_reload:
-            self.pscrCall ('unload', can=self.plot.canvas, win=self, vars=self.pscr.vars)
+            self.pscrCall ('unload', can=self.plot.canvas, win=self, fig=self.plot.canvas.fig, vars=self.pscr.vars)
             self.pscrUnload (kill_vars=False)
             self.pscrLoad (str(script_file))
-            self.pscrCall ('reload', can=self.plot.canvas, win=self, vars=self.pscr.vars)
+            self.pscrCall ('reload', can=self.plot.canvas, win=self, fig=self.plot.canvas.fig, vars=self.pscr.vars)
         else:
             try:
                 self.pscrCall ('exit', self.plot.canvas, self)

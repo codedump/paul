@@ -1,6 +1,8 @@
 #!/usr/bin/python
 
 from paul.base.wave import Wave
+import numpy as np
+import copy
 
 #
 # Array Tricks:
@@ -22,11 +24,15 @@ def ncomp (iwave, axis=0, step=1, intg=-1, norm=False):
     If 'norm' is True, then the slices will be divided by
     their maximum intensity point.
     '''
+
+    # create a new wave, same as input wave, but with a reduced
+    # size in dimention 'axis'. retain axis info, alter it
+    # to match the new dimension.
     new_shape = list(iwave.shape)
     new_shape[axis] = iwave.shape[axis] / step
-
-    owave = Wave(shape=new_shape, dtype=iwave.dtype)
-    owave = 0
+    owave = np.zeros(new_shape).view(Wave)
+    owave.info = copy.deepcopy(iwave.info)
+    owave.ax(axis).delta *= step
         
     # ignore the points that don't align well with 'step'
     max_i = new_shape[axis] * step
@@ -40,8 +46,6 @@ def ncomp (iwave, axis=0, step=1, intg=-1, norm=False):
     if norm:
         for s in owave.swapaxes(0,axis):    # scaling and normalizing
             s /= s.sum()
-
-    owave.ax(axis).delta *= step
 
     return owave
 

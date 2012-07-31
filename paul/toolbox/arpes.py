@@ -147,8 +147,6 @@ def hybridize(wlist, V=0.0, count=1):
     
     V2 *= norm  # The actual normalization
 
-    print "norm: ", 1/norm
-
     '''
     Now, V2 is a traceless, symmetric matrix containing coupling
     factors for the bands in 'hlist', correctly normalized. Let's go!

@@ -2,7 +2,7 @@ import logging
 log = logging.getLogger (__name__)
 
 from numpy import ndarray, floor, array
-import math
+import math, copy
 
 class AxisInfo:
     '''
@@ -100,7 +100,7 @@ class AxisInfo:
         '''
         Returns the index corresponding to the rounded axis value.
         '''
-        return int(math.round(self._x2i(val)))
+        return int(round(self._x2i(val)))
 
 
     def ppi(self, interval):
@@ -136,9 +136,9 @@ class Wave(ndarray):
         '''
         self.info = {}
 
-        if type(obj) is Wave:    # view casting or new from a Wave template            
-            for key, val in obj.info.iteritems():
-                self.info[key] = val
+        if type(obj) is Wave:    # view casting or new from a Wave template
+            # deep-copy the obj.info field:
+            self.info = copy.deepcopy(obj.info)
         
             ## insert AxisInfo altering code here (e.g. to adjust
             ## the delfa/offset to the new view parameters)
@@ -154,11 +154,28 @@ class Wave(ndarray):
 
 
 
-    # overwrites the ndarray.reshape() in order to resize the axes vector 
     def reshape(self, sizes):
-        self.info['axes'].resize (len(sizes))
-        ndarray.reshape (self, sizes)
-    
+        ''' 
+        Overwrites the ndarray.reshape() in order to resize the axes vector.
+        '''
+        obj = ndarray.reshape (self, sizes)
+        obj.info['axes'].resize (len(sizes))
+        return obj
+
+    def swapaxes (self, ax0, ax1):
+        '''
+        Overwrites the ndarray.swapaxes() in order to also swap
+        AxisInfo objects.
+        '''
+        obj = ndarray.swapaxes(self, ax0, ax1)
+        axes = list(obj.info['axes'])
+        foo = axes[ax0]
+        bar = axes[ax1]
+        axes[ax0] = bar
+        axes[ax1] = foo
+        obj.info['axes'] = tuple(axes)
+        return obj
+   
 
     def setScale (self, aindex, delta, offset):
         '''
@@ -211,39 +228,39 @@ class Wave(ndarray):
         return self.ax(aindex)
 
 
-    def axMin(self, aindex):
+    def axMin(self, aindex=0):
         '''
         Returns the minimum axis value.
         '''
         return min(self.axOff(aindex), self.axEnd(aindex))
 
 
-    def axMax(self, aindex):
+    def axMax(self, aindex=0):
         '''
         Returns the minimum axis value.
         '''
         return max(self.axOff(aindex), self.axEnd(aindex))
 
 
-    def axOff (self, aindex):
+    def axOff (self, aindex=0):
         '''
         Returns the axis offset.
         '''
         return self.ax(aindex).offset
 
-    def axOffset (self, ai):  # legacy
+    def axOffset (self, ai=0):  # legacy
         log.debug ("Deprecated.")
         return self.axOff(ai)
 
 
-    def axDelta (self, aindex):
+    def axDelta (self, aindex=0):
         '''
         Returns the axis increment.
         '''
         return self.ax(aindex).delta
 
 
-    def axEnd (self, aindex):
+    def axEnd (self, aindex=0):
         '''
         Returns the axis endpoint (offset + dim*delta), opposite of offset.
         '''
