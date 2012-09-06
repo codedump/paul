@@ -43,7 +43,7 @@ from paul.base.struct_helper import *
 from paul.base.wave import Wave
 from paul.base.errors import *
 import os, re
-import pprint as pp
+from pprint import pprint
 
 __version__ = '0.1'
 
@@ -304,7 +304,21 @@ def wave_get_reading_structs(version, byte_order):
     wave.set_byte_order(byte_order)
     return (bin, wave, checkSumSize)
 
-def checksum(buffer, byte_order, oldcksum, numbytes):
+
+def checksum_16(buffer, byte_order, oldcksum, numbytes):
+    x = numpy.ndarray(
+        (numbytes/2,), # 2 bytes to a short -- ignore trailing odd byte
+        dtype=numpy.dtype(byte_order+'h'),
+        buffer=buffer)
+    oldcksum += x.sum()
+    if oldcksum > 2**15:  # fake the C implementation's int rollover
+        oldcksum %= 2**16
+        if oldcksum > 2**15:
+            oldcksum -= 2**15
+    assert (oldcksum >= -2**15 and oldcksum < 2**15)
+    return oldcksum & 0xffff
+
+def checksum_32(buffer, byte_order, oldcksum, numbytes):
     x = numpy.ndarray(
         (numbytes/2,), # 2 bytes to a short -- ignore trailing odd byte
         dtype=numpy.dtype(byte_order+'h'),
@@ -316,6 +330,8 @@ def checksum(buffer, byte_order, oldcksum, numbytes):
             oldcksum -= 2**31
     assert (oldcksum >= -2**31 and oldcksum < 2**31)
     return oldcksum & 0xffff
+
+checksum = checksum_32
 
 
 def load(filename):
@@ -578,8 +594,9 @@ def wave_read_info(f, wave_info, bin_info):
         #   * Optional wave note data
         pad_b = buffer(f.read(16))  # skip the padding
         log.debug("pad: %s, size: %d" % (pad_b, len(pad_b)))
-        assert max(pad_b) == 0, pad_b
+        #assert max(pad_b) == 0, pad_b
         bin_info['note'] = str(f.read(bin_info['noteSize'])).strip()
+
     elif version == 3:
         # Post-data info:
         #   * 16 bytes of padding
@@ -684,12 +701,10 @@ def wave_read (filename):
         data.info.update (nmap)
 
         # have all the data, now set explicit scaling information
-        for mydim in range(0,len(data.shape)):
-            igordim = mydim
-            #log.debug ("Setting scaling info for dimension %d here (%d with Igor): %f/%f"
-            #           % (mydim, igordim, wave_info["sfA"][igordim], wave_info["sfB"][igordim]))
-            data.setScale (mydim, wave_info["sfA"][igordim], wave_info["sfB"][igordim])
-
+        if 'sfA' in wave_info and 'sfB' in wave_info:
+            for mydim in range(0,len(data.shape)):
+                igordim = mydim
+                data.setScale (mydim, wave_info["sfA"][igordim], wave_info["sfB"][igordim])
             
         # store the read headers for debug information
         data.info['debug'] = [bin_info, wave_info ]
@@ -831,8 +846,15 @@ def wave_write (filename, wave, autoname=True):
         # not including wData. Thus, the sum over the first 384 bytes needs to be zero.
         chk = checksum (buffer(BinHeader5.pack_dict(bhead)+WaveHeader5.pack_dict(whead)),
                         byte_order(0), 0, BinHeader5.size+WaveHeader5.size - 4)
+
+        if chk > 2**15:  # fake the C implementation's int rollover
+            chk %= 2**16
+            if chk > 2**15:
+                chk -= 2**15
+                chk = chk & 0xffff
         bhead['checksum'] = -chk
 
+        #pprint (bhead)
     
         f.write (BinHeader5.pack_dict(bhead))
         f.write (buffer(WaveHeader5.pack_dict(whead), 0,
@@ -1059,10 +1081,10 @@ if __name__ == '__main__':
     import sys
     import pprint
 
-    main_test_rw ("/home/florin/local/analysis/uru2si2/2012-may-1cubed/kz-map.uxp-dir/kz-map/kz-1k/inorm/URS_HO_App2_007g.ibw",
-                  "/home/florin/local/analysis/uru2si2/tmp.ToBeDeleted/igor-write.ibw")
-    
-    sys.exit(0)
+#    main_test_rw ("/home/florin/local/analysis/uru2si2/2012-may-1cubed/kz-map.uxp-dir/kz-map/kz-1k/inorm/URS_HO_App2_007g.ibw",
+#                  "/home/florin/local/analysis/uru2si2/tmp.ToBeDeleted/igor-write.ibw")
+#    
+#    sys.exit(0)
 
     # preparing the logging system
     ch = logging.StreamHandler()

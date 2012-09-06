@@ -29,7 +29,7 @@ def setColor(i):
     if not hasattr(PLOT, 'waves') or len(PLOT.waves) == 0:
         return
 
-    data = PLOT.waves[0]
+    data = PLOT.waves
     if not len(PLOT.canvas.axes.images) > 0:
         return
     img = PLOT.canvas.axes.images[0]
@@ -39,8 +39,13 @@ def setColor(i):
     dmin = data.min()
     dmax = data.max()
 
+    #log.debug ("min/max: %f, %f" % (dmin, dmax))
+
     col_min = GUI.col_min.value() * (dmax-dmin) + dmin
     col_max = GUI.col_max.value() * (dmax-dmin) + dmin
+
+    #log.debug ("absolute colors: %f, %f" % (col_min, col_max))
+
     img.set_clim (col_min, col_max)
     PLOT.canvas.draw()
 
@@ -62,7 +67,7 @@ def addWaterfall():
     GUI.slices[-1].viewer.show()
 
 
-def init(can, win, vars):
+def init(*args, **kwargs):
     '''
     Initialize the plotscript: this is a more complicated one. We are
     creating a fully function Qt GUI for this one, which will get
@@ -71,6 +76,9 @@ def init(can, win, vars):
     as a Dock to the Viewer...)
     '''
     log.debug ("INIT")
+    can = kwargs['can']
+    win = kwargs['win']
+    vars = kwargs['vars']
     global GUI, PLOT
 
     # some variables
@@ -96,7 +104,7 @@ def init(can, win, vars):
     GUI.toolbar.addAction ("+W", addWaterfall)
 
 
-def exit(can, win):
+def exit(*args, **kwargs):
     log.debug ("EXIT")
     global GUI
     GUI.mainwin.removeToolBar (GUI.toolbar)
@@ -111,10 +119,12 @@ def exit(can, win):
     return
 
 
-def decorate(can, wav):
+def decorate(*args, **kwargs):
     '''
     Called when a newly plotted 2D image (or 1D graph) is to be decorated.
     '''
+    can = kwargs['can']
+    wav = kwargs['wav']
     global GUI, PLOT
     if not hasattr(can, 'axes'):
         log.debug ("No axes.")

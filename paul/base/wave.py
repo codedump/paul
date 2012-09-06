@@ -119,7 +119,7 @@ class AxisInfo:
 class Wave(ndarray):
     def __new__ (subtype, *args, **kwargs):
         obj = ndarray.__new__ (subtype, *args, **kwargs)
-        log.debug ('new with class %s' % subtype)
+        #log.debug ('new with class %s' % subtype)
         return obj
 
     def __array_finalize__ (self, obj):

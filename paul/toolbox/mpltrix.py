@@ -42,11 +42,7 @@ def plotwater (fig_ax, wlist, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0)):
     if isinstance(wlist, Wave):
         return imwater(fig_ax, wlist, axis, offs, xlim, ylim, autoscale=True)
 
-    x = np.arange(start=wlist[0].axOff(),
-                  stop=wlist[0].axEnd(),
-                  step=wlist[0].axDelta())
-
-    log.error ("FIXME! Need to consider an indivitual X-range for _every_ input wave!")
+    xlist = [np.arange(start=w.axOff(), stop=w.axEnd(), step=w.axDelta()) for w in wlist]
     
     if xlim == (0, 0):
         xlim = (min([w.axMin(0) for w in wlist]) - (offs[0]*len(wlist))*(offs[0]<0),
@@ -55,7 +51,7 @@ def plotwater (fig_ax, wlist, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0)):
         ylim = (min([w.min() for w in wlist]) + (offs[1]*len(wlist)) * (offs[1]<0),
                 max([w.max() for w in wlist]) + (offs[1]*len(wlist)) * (offs[1]>0))
 
-    lines = LineCollection([zip(x, w) for w in wlist], offsets=offs)
+    lines = LineCollection([zip(x, w) for x, w in zip(xlist,wlist)], offsets=offs)
 
     if xlim is not None:
         fig_ax.set_xlim (xlim)
