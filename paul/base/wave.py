@@ -110,6 +110,9 @@ class AxisInfo:
         '''
         return self._x2i(0) - self._x2i(-abs(interval))
 
+    def __str__(self):
+        return "delta=%f, offset=%f, units='%s'" % (self.delta, self.offset, self.units)
+
 
 #
 # ndarray with some supplementary information:
@@ -174,6 +177,25 @@ class Wave(ndarray):
         axes[ax0] = bar
         axes[ax1] = foo
         obj.info['axes'] = tuple(axes)
+        return obj
+
+    def sum (self, axis=None, dtype=None, out=None):
+        '''
+        Overwrites the ndarray.sum() function.
+        Integrates over axes in 'axes'. The overloaded function takes
+        care to remove the corresponding axes from the axinfo vector.
+        '''
+        obj = ndarray.sum (self, axis, dtype, out)
+        if hasattr(axis, "__iter__"):
+            ax = list(obj.info['axes'])
+            for i in axis:
+                del ax[i]
+            obj.info['axes'] = tuple(ax)
+        elif axis is not None:
+            ax = list(obj.info['axes'])
+            del ax[axis]
+            obj.info['axes'] = tuple(ax)
+
         return obj
    
 
