@@ -197,7 +197,25 @@ class Wave(ndarray):
             obj.info['axes'] = tuple(ax)
 
         return obj
-   
+
+
+    def mean (self, axis=None, dtype=None, out=None):
+        '''
+        Overwrites the ndarray.mean() function.
+        Integrates over axes in 'axes'. The overloaded function takes
+        care to remove the corresponding axes from the axinfo vector.
+        '''
+        obj = ndarray.mean (self, axis, dtype, out)
+        if hasattr(axis, "__iter__"):
+            ax = list(obj.info['axes'])
+            for i in axis:
+                del ax[i]
+            obj.info['axes'] = tuple(ax)
+        elif axis is not None:
+            ax = list(obj.info['axes'])
+            del ax[axis]
+            obj.info['axes'] = tuple(ax)
+        return obj
 
     def setScale (self, aindex, delta, offset):
         '''
@@ -329,7 +347,7 @@ class Wave(ndarray):
         to the specified point index 'pindex'.
         '''
         return self.ax(aindex).i2x(pindex)
-
+    fx = i2x
 
     def x2i(self, aindex, pt):
         '''
@@ -337,6 +355,27 @@ class Wave(ndarray):
         to the specified point 'pt' on the axis.
         '''
         return self.ax(aindex).x2i(pt)
+    fi = x2i
+
+
+    def ri2x(self, aindex, pindex):
+        '''
+        For the specified axis 'aindex', returns the *rounded axis value*, i.e. the
+        axis value corresponding
+        to the specified point index 'pindex'.
+        '''
+        return self.ax(aindex).ri2x(pindex)
+    rx = ri2x
+
+
+    def rx2i(self, aindex, pt):
+        '''
+        For the specified axis 'aindex', returns the *rounden index*,
+        i.e. the index corresponding
+        to the specified point 'pt' on the axis.
+        '''
+        return self.ax(aindex).rx2i(pt)
+    ri = rx2i
 
 
     def __call__(self, *vals):

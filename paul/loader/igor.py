@@ -709,7 +709,7 @@ def wave_read (filename):
         # store the read headers for debug information
         data.info['debug'] = [bin_info, wave_info ]
 
-        log.debug ("Loaded %s from path: %s" % (data.info['name'], data.info['path']))
+        #log.debug ("Loaded %s from path: %s" % (data.info['name'], data.info['path']))
 
         return data
 
