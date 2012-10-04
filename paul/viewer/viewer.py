@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import logging
+import IPython.lib.guisupport as gui
 
 log = logging.getLogger ('paul')
 log.setLevel (logging.DEBUG)
@@ -62,17 +63,19 @@ def plot (args, win=None):
         log.error ("Don't know what to do with %s." % wavs)
 
 
-def run (argv=[]):
+def run (args=[]):
     '''
     Starts a viewer instance.
     '''
     global main_win
     global canvs
 
-    app = QtGui.QApplication (argv)
+    #app = QtGui.QApplication (argv)
+    app = gui.get_app_qt4 (args)
     main_win = ViewerWindow()
-    if len(argv) > 1:
-        plot (argv[1:], win=main_win)
+    print args
+    if len(args) > 1:
+        plot (args[1:], win=main_win)
     main_win.show()
     canvas = main_win.plot.canvas
 

@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import logging
+import IPython.lib.guisupport as gui
 
 log = logging.getLogger ('paul')
 log.setLevel (logging.DEBUG)
@@ -21,7 +22,8 @@ import sys
 canvas = None
 
 def run():
-    app = QtGui.QApplication (sys.argv)
+    #app = QtGui.QApplication (sys.argv)
+    app = gui.get_app_qt4 (sys.argv)
     start_path = "~"
     if (len(sys.argv) > 1 and len(sys.argv[1]) > 0):
         start_path = sys.argv[1]
