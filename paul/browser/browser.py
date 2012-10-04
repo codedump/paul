@@ -20,16 +20,25 @@ from PyQt4 import QtGui
 import sys
 
 canvas = None
+win = None
 
 def run():
     #app = QtGui.QApplication (sys.argv)
+
+    global win
+
     app = gui.get_app_qt4 (sys.argv)
     start_path = "~"
     if (len(sys.argv) > 1 and len(sys.argv[1]) > 0):
         start_path = sys.argv[1]
     main_win = BrowserWindow(start_path)
     main_win.show()
-    sys.exit(app.exec_())
+    if not gui.is_event_loop_running_qt4():
+        log.debug ("Starting main event loop")
+        app.exec_()
+    else:
+        log.debug ("Event loop is already running")
+    win = main_win
 
 if __name__ == "__main__":
     run()
