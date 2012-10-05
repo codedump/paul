@@ -19,26 +19,26 @@ from paul.browser.browserwindow import BrowserWindow
 from PyQt4 import QtGui
 import sys
 
-canvas = None
-win = None
+def create(path='~', args=[]):
+    app = gui.get_app_qt4 (args)
 
-def run():
-    #app = QtGui.QApplication (sys.argv)
+    # find the first non-option argument
+    if (len(args) > 1):
+        for a in args[1:]:
+            if a[0] != '-':
+                path = a
+                break
 
-    global win
+    log.debug ("Start path is '%s'" % path)
 
-    app = gui.get_app_qt4 (sys.argv)
-    start_path = "~"
-    if (len(sys.argv) > 1 and len(sys.argv[1]) > 0):
-        start_path = sys.argv[1]
-    main_win = BrowserWindow(start_path)
+    main_win = BrowserWindow(path)
     main_win.show()
     if not gui.is_event_loop_running_qt4():
         log.debug ("Starting main event loop")
         app.exec_()
     else:
         log.debug ("Event loop is already running")
-    win = main_win
+    return main_win
 
 if __name__ == "__main__":
-    run()
+    create(args=sys.argv)

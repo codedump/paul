@@ -12,11 +12,13 @@ class TreeWindow (QtGui.QMainWindow):
     # Signal emited when user selected one or more files for plotting.
     wavesSelected = QtCore.pyqtSignal('QStringList')
 
-    current_path = ''
-
     def __init__ (self, start_path='~'):
         QtGui.QMainWindow.__init__(self)
         self.setWindowTitle ("Paul Browser")
+
+        # some variables
+        self.current_path = ''
+        self.selected_paths = []
 
         # create UI elements
         self.initMainFrame()
@@ -73,6 +75,7 @@ class TreeWindow (QtGui.QMainWindow):
         # the file system browser tree
         self.filetree = QtGui.QTreeView()
         self.vbox.addWidget (self.filetree)
+        self.filetree.setSelectionMode (QtGui.QAbstractItemView.ExtendedSelection)
         self.filetree.activated.connect(self.itemActivated)
         self.filetree.setModel (self.filesys)
         self.filetree.selectionModel().selectionChanged.connect(self.itemSelected)
@@ -87,17 +90,19 @@ class TreeWindow (QtGui.QMainWindow):
         (i.e. no entry will be changed in the path history dropdown).
         '''
 
-        new_path = os.path.abspath(str(path))
+        new_path = os.path.abspath(os.path.expandvars(os.path.expanduser(str(path))))
         if (os.path.abspath(new_path) == self.current_path):
             # this usually happens when we call setCurrentIndex() manually,
             # see below...
             return
 
-        self.current_path = new_path
         #self.statusBar().showMessage (self.current_path)
-        index = self.filesys.index (self.current_path)
+        index = self.filesys.index (new_path)
         self.filetree.setRootIndex (index)
         self.filetree.scrollTo (index)
+        self.current_path = str(self.filesys.filePath(index))
+
+        print "Current:", self.current_path
 
         if silent != 0:
             return
@@ -168,21 +173,38 @@ class TreeWindow (QtGui.QMainWindow):
         Called when user selects (marks or unmarks) an item in the wave list.
         The general idea is to load and plot the first selected wave (if
         it's 2D), or all selected waves (if they are 1D).
+        
+        CAUTION: Basically, the current selection is stored as a dictionary,
+                 with the file base name (i.e. the part of the path after the
+                 last '/') as the dictionary key. This means that
+                 two waves with similar names in different directories will
+                 misbehave!
         '''
-        if (sel.isEmpty()):
-            return
 
-        ind = sel.indexes()[0]
-        finfo = self.filesys.fileInfo(ind)
-        fpath = self.filesys.filePath(ind)
+        # add *sel* to selected_paths
+        for i in sel.indexes():
+            finfo = self.filesys.fileInfo(i)
+            fpath = self.filesys.filePath(i)
+            fpath_file = os.path.basename (str(fpath))
+            fpath_full = os.path.abspath (str(fpath))
+            if fpath not in self.selected_paths:
+                if finfo.isFile():
+                    log.debug ("Selected file: %s" % str(fpath))
+                    self.selected_paths.append (fpath_full)
+                elif finfo.isDir():
+                    log.debug ("Selected dir: %s" % str(fpath))
+                else:
+                    log.debug ("...what to do with %s?" % str(fpath))
 
-        if finfo.isFile():
-            log.debug ("Selected file: %s" % str(fpath))
-            self.wavesSelected.emit([str(fpath)])
-        elif finfo.isDir():
-            log.debug ("Selected dir: %s" % str(fpath))
-        else:
-            log.debug ("...what to do with %s?" % str(fpath))
+        # remove *unsel* from selected_paths
+        for i in unsel.indexes():
+            fpath = self.filesys.filePath(i)
+            fpath_file = os.path.basename (str(fpath))
+            fpath_full = os.path.abspath (str(fpath))
+            if fpath_full in self.selected_paths:
+                del self.selected_paths[self.selected_paths.index(fpath_full)]
+
+        self.wavesSelected.emit(self.selected_paths)
 
         # if the column 0 (the one with the names) is too narrow,
         # expand it to fit the names.

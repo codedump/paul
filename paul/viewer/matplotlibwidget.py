@@ -24,7 +24,7 @@ class MatplotlibWidget(FigureCanvas):
 
 	self.parent = parent
 
-        self.fig = Figure(figsize=(width, height), dpi=dpi, 
+        self.fig = Figure(figsize=(width, height), dpi=dpi,
                           facecolor=bgcolor, edgecolor=bgcolor)
         FigureCanvas.__init__(self, self.fig)
         self.setParent(parent)
@@ -93,8 +93,13 @@ class MatplotlibWidget(FigureCanvas):
         it calls plot1d() or plot2d(), depending on the dimensionality
         of the data.
         '''
+
+        if hasattr(data, '__iter__'):
+            data_list = data
+            data = data_list[0]
+
         if not hasattr(data, 'ndim'):
-            log.error ("Don't know how to plot data: %s" % data)
+            log.error ("Don't know how to plot data type: %s" % data)
             return
 
         if data.ndim == 1:
@@ -104,4 +109,4 @@ class MatplotlibWidget(FigureCanvas):
         else:
             log.error ("Don't know what to do with %d-dimensional data."
                        % (data.ndim))
-        
+
