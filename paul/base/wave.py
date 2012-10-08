@@ -504,10 +504,11 @@ class Wave(ndarray):
 
                 data_slice = data_old._copy_fi_lim (*tuple(new_s))
                 data_slices.append (data_slice)
-                data_new = np.concatenate(data_slices, axis=i)
-                data_old = data_new.view(Wave)
 
-        return data_old.view(Wave)
+            data_new = np.concatenate(data_slices, axis=i)
+            data_old = data_new.view(Wave)
+
+        return data_old
 
 
     def test(self,obj):
@@ -606,15 +607,15 @@ if __name__ == "__main__":
 
     pprint (a)
 
-#    s = (slice(0,5,1),slice(0,5,1))
-    s = (slice(0,5,None),slice(0,5,None))
+    s = (slice(0,5,0.6),slice(0,5,0.5))
+#    s = (slice(0,5,None),slice(0,5,None))
 
-    foo1 = a[s]
+#    foo1 = a[s]
     foo2 = a._copy_fi_lim(*s)
     foo3 = a._copy_fi_full(*s)
 
-    print "Regular:    "
-    pprint (foo1)
+#    print "Regular:    "
+#    pprint (foo1)
 
     print "Fractional: "
     pprint (foo2)
