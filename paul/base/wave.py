@@ -1,7 +1,10 @@
+#!/usr/bin/python
+
 import logging
 log = logging.getLogger (__name__)
 
-from numpy import ndarray, floor, array
+from numpy import ndarray, floor, array, arange
+import numpy as np
 import math, copy
 
 class AxisInfo:
@@ -122,7 +125,6 @@ class AxisInfo:
 class Wave(ndarray):
     def __new__ (subtype, *args, **kwargs):
         obj = ndarray.__new__ (subtype, *args, **kwargs)
-        #log.debug ('new with class %s' % subtype)
         return obj
 
     def __array_finalize__ (self, obj):
@@ -377,54 +379,188 @@ class Wave(ndarray):
         return self.ax(aindex).rx2i(pt)
     ri = rx2i
 
-
-    def __call__(self, *vals):
-        ''' 
-         () operator for Wave instaces.
-         Takes a variable number of arguments (n-tuple) representing a fractional
-         3D-coordinate within the space spanned by the (min,max) values of the axes.
-         Returns the wave value as the specified position, linearly
-         interpolating if necessary.
+    def __getitem__(self, obj):
         '''
-        
-        if len(vals) != len(self.shape):
-            raise IndexError (("expected %d dimensions, got %d"
-                               % (len(self.shape), len(vals))))
-        
-        # desired position index (fractional index)
-        ii = ndarray([len(self.shape)])
-        i1 = ndarray([len(self.shape)], dtype=int)
-        i2 = ndarray([len(self.shape)], dtype=int)
-        for v, ai in zip(vals, range(len(self.shape))):
-            ax = self.ax(ai)
-            ii[ai] = (ax._x2i(v))
-            i1[ai] = floor(ii[ai])
-            i2[ai] = i1[ai]+1
-        
-        # axis values (i.e. positions in axis units, not indices!)
-        xx = ax.i2x(ii)
-        x1 = ax.i2x(i1)
-        x2 = ax.i2x(i2)
+        Reimplementation of __getitem__ to handle some more comfortable indexing
+        (e.g. using axis coordinates). This implementation is usually fast, in most
+        cases, as we only "borrow" this method for some initialization work
+        and do the rest on a ndarray-casted view of *self* (which calls the
+        fast C implementation of the method :-) )
+        The only case where this is not the case is when we need to do
+        interpolation work, but even there we try to keep things short.
+        '''
+#        print "item index: ", obj
+        return self.view(ndarray)[obj]
 
-        # Need to calculate approximation for the n-dim derivative.
-        # We do this by modifying one coordinate at a time,
-        # from low-index (i1) to high-index (i1), and calculating
-        # the y value for that corner.
 
-        y1 = self[tuple(i1)]   # corner 0: the lower-index of each dimension
-        y2 = []   
-        for i in range(len(vals)):
-            icorner = i1.copy()
-            icorner[i] = i2[i]
-            y2.append(self[tuple(icorner)])
+    def copy_fi (self, *obj, **kwargs):
+        '''
+        Fractional index slicing: returns a copy of *self*, sliced as specified
+        by *obj*. Differently from __getitem__, this function also works with
+        floating point slicing parameters.
+        *interpolate* can be
+              - True:   full linear interpolation for each data point
+              - False:  no interpolation at all, function falls back to
+                        the integer-index based __getitem__
+              - 'lim':  Interpolate only on the axes limits, i.e. not on
+                        on the delta value. Use the closest rounded value for
+                        delta.
+              - 'auto': Will default to 'lim' if the *step* of the dimensions
+                        is None, or True if the step is explicitly specified.
+                       
+        '''
 
-        # dx and dy are vectors => calculate all dimensions in one shot
-        dy = y2 - y1
-        dx = x2 - x1
-        ynew0 = y1                   # 0th order: lower corner
-        ynew1 = (xx-x1) * dy/dx      # 1st order: linear correction
 
-        return ynew0+ynew1.sum()
+
+        interpolate=kwargs.setdefault('interpolate', 'auto')
+
+        if interpolate == False:
+            return self.__getitem__ (*obj)
+        if interpolate == 'lim':
+            return self._copy_fi_lim(*obj)
+        return self._copy_fi_full(*obj)
+
+
+
+    def _copy_fi_lim (self, *obj, **kwargs):
+        '''
+        Fractional index slicing: returns a copy of *self*, sliced as specified
+        by *obj*. Differently from __getitem__, this function also works with
+        floating point slicing parameters.
+        '''
+
+        data_old = self
+
+        for i in range(len(obj)):
+            # the original slice object for this dimension
+            s = obj[i]
+
+            index_template = [slice(0,dim_max,None) for dim_max in data_old.shape]
+
+            # constructing slicing tuples for the i-th dimension.
+            # we'll get into trouble at the upper boundaries of a dimension,
+            # trying to access array[0:dim-1] will fail, because we'd have
+            # to access array[dim] to be able to interpolate the value.
+            # in order to catch this case, probably the most elegant sollution
+            # is to duplicate the last element, in case the boundary needs to be
+            # accessed.
+            #
+            # no, raising an error will _not_ do it, as we want the interpolated
+            # version to be able to do everything the non-interpolated version does,
+            # and the non-interpolated version *can* access array[dim-1]!
+            #
+            # slice templates: start stop  step
+            s0_template =     [None, None, None]
+            s1_template =     [None, None, None]
+            if s.start is not None:
+                s0_template[0] = int(math.floor(float(s.start)))
+                s1_template[0] = int(math.floor(float(s.start))+1)
+            if s.stop is not None:
+                s0_template[1] = int(math.floor(float(s.stop)))
+                s1_template[1] = int(math.floor(float(s.stop))+1)
+            if s.step is not None:
+                s0_template[2] = int(round(float(s.step)))
+                s1_template[2] = int(round(float(s.step)))
+
+            # floor index
+            s0    = index_template[:]
+            s0[i] = slice(s0_template[0], s0_template[1], s0_template[2])
+
+            # ceiling index
+            s1    = index_template[:]
+            s1[i] = slice(s1_template[0], s1_template[1], s1_template[2])
+
+            delta = s.start - math.floor(float(s.start))
+            data0 = data_old.view(ndarray)[s0]
+            data1 = data_old.view(ndarray)[s1]
+
+            if data1.shape[i] != data0.shape[i]:
+                data1 = np.resize (data1, data0.shape)
+            
+            data_new = (data0 + (data1-data0)*delta)
+            data_old = data_new
+            
+        return data_old.view(Wave)
+
+
+    def _copy_fi_full (self, *obj, **kwargs):
+        '''
+        Fractional index slicing: returns a copy of *self*, sliced as specified
+        by *obj*. Differently from __getitem__, this function also works with
+        floating point slicing parameters, uses full interpolation.
+        '''
+        data_old = self
+
+        for i in range(len(obj)):
+            # the original slice object for this dimension
+            s = obj[i]
+
+            # full interpolation: need to construct a whole new array, slice
+            # by slice, at interpolated N*step positions
+            data_slices = []
+            for pos in arange (start=s.start, stop=s.stop, step=s.step):
+                new_s    = [slice(0,dim_max,None) for dim_max in data_old.shape]
+                new_s[i] = slice(pos, pos+1.0, None)
+
+                data_slice = data_old._copy_fi_lim (*tuple(new_s))
+                data_slices.append (data_slice)
+                data_new = np.concatenate(data_slices, axis=i)
+                data_old = data_new.view(Wave)
+
+        return data_old.view(Wave)
+
+
+    def test(self,obj):
+        print obj
+
+
+#    def __call__(self, *vals):
+#        ''' 
+#         () operator for Wave instaces.
+#         Takes a variable number of arguments (n-tuple) representing a fractional
+#         3D-coordinate within the space spanned by the (min,max) values of the axes.
+#         Returns the wave value as the specified position, linearly
+#         interpolating if necessary.
+#        '''
+#        
+#        if len(vals) != len(self.shape):
+#            raise IndexError (("expected %d dimensions, got %d"
+#                               % (len(self.shape), len(vals))))
+#        
+#        # desired position index (fractional index)
+#        ii = ndarray([len(self.shape)])
+#        i1 = ndarray([len(self.shape)], dtype=int)
+#        i2 = ndarray([len(self.shape)], dtype=int)
+#        for v, ai in zip(vals, range(len(self.shape))):
+#            ax = self.ax(ai)
+#            ii[ai] = (ax._x2i(v))
+#            i1[ai] = floor(ii[ai])
+#            i2[ai] = i1[ai]+1
+#        
+#        # axis values (i.e. positions in axis units, not indices!)
+#        xx = ax.i2x(ii)
+#        x1 = ax.i2x(i1)
+#        x2 = ax.i2x(i2)
+#
+#        # Need to calculate approximation for the n-dim derivative.
+#        # We do this by modifying one coordinate at a time,
+#        # from low-index (i1) to high-index (i1), and calculating
+#        # the y value for that corner.
+#
+#        y1 = self[tuple(i1)]   # corner 0: the lower-index of each dimension
+#        y2 = []   
+#        for i in range(len(vals)):
+#            icorner = i1.copy()
+#            icorner[i] = i2[i]
+#            y2.append(self[tuple(icorner)])
+#
+#        # dx and dy are vectors => calculate all dimensions in one shot
+#        dy = y2 - y1
+#        dx = x2 - x1
+#        ynew0 = y1                   # 0th order: lower corner
+#        ynew1 = (xx-x1) * dy/dx      # 1st order: linear correction
+#
+#        return ynew0+ynew1.sum()
 
     # 
     # inverse of __call__: sets the values of the wave by evaluating
@@ -434,3 +570,54 @@ class Wave(ndarray):
     #def set(obj):
     #    #for 
     #    return self
+
+
+def WCast(nda):
+    '''
+    Returns a Wave() view of the numpy.ndarray object *nda*.
+    '''
+    if isinstance(nda, Wave):
+        return nda
+    return nda.view(Wave)
+
+def WCopy(nda):
+    '''
+    Returns a Wave()-type copy object of the numpy.ndarray object *nda*.
+    '''
+    if isinstance(nda, Wave):
+        return nda
+    return nda.copy(Wave)
+
+
+
+if __name__ == "__main__":
+
+    from pprint import pprint
+
+    log = logging.getLogger ('paul')
+    log.setLevel (logging.DEBUG)
+    ch = logging.StreamHandler()
+    ch.setLevel (logging.DEBUG)
+    log.addHandler (ch)
+    fmt = logging.Formatter('%(asctime)s %(levelname)s: %(name)s: %(module)s.%(funcName)s: %(message)s')
+    ch.setFormatter(fmt)
+
+    a = array([[i+j*10 for i in range(5)] for j in range(5)]).view(Wave)
+
+    pprint (a)
+
+#    s = (slice(0,5,1),slice(0,5,1))
+    s = (slice(0,5,None),slice(0,5,None))
+
+    foo1 = a[s]
+    foo2 = a._copy_fi_lim(*s)
+    foo3 = a._copy_fi_full(*s)
+
+    print "Regular:    "
+    pprint (foo1)
+
+    print "Fractional: "
+    pprint (foo2)
+
+    print "Interpolated: "
+    pprint (foo3)
