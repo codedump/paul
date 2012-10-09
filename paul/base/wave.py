@@ -431,7 +431,7 @@ class Wave(ndarray):
 
         data_old = self
 
-        for i in range(len(obj))[::-1]:
+        for i in range(len(obj)):
             # the original slice object for this dimension
             if isinstance(obj[i], slice):
                 s = obj[i]
@@ -461,8 +461,8 @@ class Wave(ndarray):
                           int(math.floor(s_stop))+1,
                           int(round(s_step)))
 
-            print
-            print s0
+            #print
+            #print s0
 
             delta = s_start - math.floor(s_start)
             data0 = data_old.view(ndarray)[s0]
@@ -475,8 +475,8 @@ class Wave(ndarray):
             data_new = (data0 + (data1-data0)*delta)
             data_old = data_new
 
-            print "intermediate"
-            pprint (data_old)
+            #print "intermediate"
+            #pprint (data_old)
             
         return data_old.view(Wave)
 
@@ -496,16 +496,30 @@ class Wave(ndarray):
             else:
                 s = slice(obj[i])
 
+            s_start = s.start
+            s_stop  = s.stop
+            s_step  = s.step
+
+            if s_start is None:
+                s_start = 0
+            if s_stop is None:
+                s_stop = data_old.shape[-1]
+            if s_step is None:
+                s_step = 1
+
             # full interpolation: need to construct a whole new array, slice
             # by slice, at interpolated N*step positions
             data_slices = []
-            for pos in arange (start=s.start, stop=s.stop, step=s.step):
+            for pos in arange (start=s_start, stop=s_stop, step=s_step):
                 new_s    = [slice(0,dim_max,None) for dim_max in data_old.shape]
                 new_s[i] = slice(pos, pos+1.0, None)
+                print new_s,
                 data_slice = data_old._copy_fi_lim (*tuple(new_s))
+                print data_slice
                 data_slices.append (data_slice)
             data_new = np.concatenate(data_slices, axis=i)
             data_old = data_new.view(Wave)
+            print "intermediate: ", data_old
 
         return data_old
 
@@ -606,17 +620,31 @@ if __name__ == "__main__":
     wa = a.view(Wave).copy()
     
 
+    print
+    print "original"
     pprint (a)
+    print
+    print
 
 #    s = (slice(0,5,0.6),slice(0,5,0.5))
     s = (slice(0,2,None),slice(1,3,None))
 
-    S = (slice(None),slice(2,4))
+    S = (slice(0,1),slice(None))
+    print "..........   STANDARD  ..........."
+    print "--0--"
     pprint ((a[S[0]])[S[1]])
-    print "--"
+    print "--1--"
+    pprint (a[S])
+    print "..........    LIMITS   ..........."
+    print "--2--"
     pprint ((wa._copy_fi_lim(S[0]))._copy_fi_lim(S[1]))
-    print "--"
+    print "--3--"
     pprint (wa._copy_fi_lim(*S))
+    print "........... INTERPOLATE .........."
+    print "--4--"
+    pprint ((wa._copy_fi_full(S[0]))._copy_fi_full(S[1]))
+    print "--5--"
+    pprint (wa._copy_fi_full(*S))
     import sys
     sys.exit(0)
 
