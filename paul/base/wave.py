@@ -422,7 +422,7 @@ class Wave(ndarray):
 
 
 
-    def _copy_fi_lim (self, *obj, **kwargs):
+    def _copy_fi_lim (self, *obj):
         '''
         Fractional index slicing: returns a copy of *self*, sliced as specified
         by *obj*. Differently from __getitem__, this function also works with
@@ -431,51 +431,39 @@ class Wave(ndarray):
 
         data_old = self
 
-        for i in range(len(obj)):
+        for i in range(len(obj))[::-1]:
             # the original slice object for this dimension
-            s = obj[i]
+            if isinstance(obj[i], slice):
+                s = obj[i]
+            else:
+                s = slice(obj[i])
 
-            index_template = [slice(0,dim_max,None) for dim_max in data_old.shape]
+            s_start = s.start
+            s_stop  = s.stop
+            s_step  = s.step
 
-            # constructing slicing tuples for the i-th dimension.
-            # we'll get into trouble at the upper boundaries of a dimension,
-            # trying to access array[0:dim-1] will fail, because we'd have
-            # to access array[dim] to be able to interpolate the value.
-            # in order to catch this case, probably the most elegant sollution
-            # is to duplicate the last element, in case the boundary needs to be
-            # accessed.
-            #
-            # no, raising an error will _not_ do it, as we want the interpolated
-            # version to be able to do everything the non-interpolated version does,
-            # and the non-interpolated version *can* access array[dim-1]!
-            #
-            # slice templates: start stop  step
-            s0_template =     [None, None, None]
-            s1_template =     [None, None, None]
-            if s.start is not None:
-                s0_template[0] = int(math.floor(float(s.start)))
-                s1_template[0] = int(math.floor(float(s.start))+1)
-            if s.stop is not None:
-                s0_template[1] = int(math.floor(float(s.stop)))
-                s1_template[1] = int(math.floor(float(s.stop))+1)
-            if s.step is not None:
-                s0_template[2] = int(round(float(s.step)))
-                s1_template[2] = int(round(float(s.step)))
+            if s_start is None:
+                s_start = 0
+            if s_stop is None:
+                s_stop = data_old.shape[-1]
+            if s_step is None:
+                s_step = 1
 
             # floor index
-            s0    = index_template[:]
-            s0[i] = slice(s0_template[0], s0_template[1], s0_template[2])
+            s0    = [slice(None)] * data_old.ndim
+            s0[i] = slice(int(math.floor(s_start)), int(math.floor(s_stop)), int(round(s_step)))
 
             # ceiling index
-            s1    = index_template[:]
-            s1[i] = slice(s1_template[0], s1_template[1], s1_template[2])
+            s1    = [slice(None)] * data_old.ndim
+            s1[i] = slice(int(math.floor(s_start))+1, int(math.floor(s_stop))+1, int(round(s_step)))
 
-            delta = s.start - math.floor(float(s.start))
+            delta = s_start - math.floor(s_start)
             data0 = data_old.view(ndarray)[s0]
             data1 = data_old.view(ndarray)[s1]
 
             if data1.shape[i] != data0.shape[i]:
                 data1 = np.resize (data1, data0.shape)
+                data1[0] = data0[0]
             
             data_new = (data0 + (data1-data0)*delta)
             data_old = data_new
@@ -483,7 +471,7 @@ class Wave(ndarray):
         return data_old.view(Wave)
 
 
-    def _copy_fi_full (self, *obj, **kwargs):
+    def _copy_fi_full (self, *obj):
         '''
         Fractional index slicing: returns a copy of *self*, sliced as specified
         by *obj*. Differently from __getitem__, this function also works with
@@ -493,7 +481,10 @@ class Wave(ndarray):
 
         for i in range(len(obj)):
             # the original slice object for this dimension
-            s = obj[i]
+            if isinstance(obj[i], slice):
+                s = obj[i]
+            else:
+                s = slice(obj[i])
 
             # full interpolation: need to construct a whole new array, slice
             # by slice, at interpolated N*step positions
@@ -501,10 +492,8 @@ class Wave(ndarray):
             for pos in arange (start=s.start, stop=s.stop, step=s.step):
                 new_s    = [slice(0,dim_max,None) for dim_max in data_old.shape]
                 new_s[i] = slice(pos, pos+1.0, None)
-
                 data_slice = data_old._copy_fi_lim (*tuple(new_s))
                 data_slices.append (data_slice)
-
             data_new = np.concatenate(data_slices, axis=i)
             data_old = data_new.view(Wave)
 
@@ -603,22 +592,46 @@ if __name__ == "__main__":
     fmt = logging.Formatter('%(asctime)s %(levelname)s: %(name)s: %(module)s.%(funcName)s: %(message)s')
     ch.setFormatter(fmt)
 
-    a = array([[i+j*10 for i in range(5)] for j in range(5)]).view(Wave)
+    a = array([[i+j*10 for i in range(5)] for j in range(5)])
+    wa = a.view(Wave).copy()
+    
 
     pprint (a)
 
-    s = (slice(0,5,0.6),slice(0,5,0.5))
-#    s = (slice(0,5,None),slice(0,5,None))
+#    s = (slice(0,5,0.6),slice(0,5,0.5))
+    s = (slice(0,2,None),slice(1,3,None))
 
-#    foo1 = a[s]
-    foo2 = a._copy_fi_lim(*s)
-    foo3 = a._copy_fi_full(*s)
+    S = (slice(None),slice(2,4))
+    pprint ((a[S[0]])[S[1]])
+    pprint ((wa._copy_fi_lim(S[0]))._copy_fi_lim(S[1]))
+    pprint (wa._copy_fi_lim(*S))
+    import sys
+    sys.exit(0)
 
-#    print "Regular:    "
-#    pprint (foo1)
+    foo0 = a[s[0]][slice(None),s[1]]
+    foo1 = a[s]
+    foo2 = wa._copy_fi_lim(s[0])._copy_fi_lim(None,s[1])
+    foo3 = wa._copy_fi_lim(*s)
+    foo4 = wa._copy_fi_full(s[0])._copy_fi_full(None,s[1])
+    #foo5 = wa._copy_fi_full(*s)
 
-    print "Fractional: "
+    print
+    
+    print "Regular 0:    "
+    pprint (foo0)
+    print "Regular 1:    "
+    pprint (foo1)
+
+    print
+
+    print "Fractional 2: "
     pprint (foo2)
-
-    print "Interpolated: "
+    print "Fractional 3: "
     pprint (foo3)
+
+    print
+
+    print "Interpolated 4: "
+    pprint (foo4)
+    print "Interpolated 5: "
+    pprint (foo5)
