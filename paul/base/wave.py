@@ -451,11 +451,15 @@ class Wave(ndarray):
 
             # floor index
             s0    = [slice(None)] * data_old.ndim
-            s0[i] = slice(int(math.floor(s_start)), int(math.floor(s_stop)), int(round(s_step)))
+            s0[i] = slice(int(math.floor(s_start)),
+                          int(math.floor(s_stop)),
+                          int(round(s_step)))
 
             # ceiling index
             s1    = [slice(None)] * data_old.ndim
-            s1[i] = slice(int(math.floor(s_start))+1, int(math.floor(s_stop))+1, int(round(s_step)))
+            s1[i] = slice(int(math.floor(s_start))+1,
+                          int(math.floor(s_stop))+1,
+                          int(round(s_step)))
 
             delta = s_start - math.floor(s_start)
             data0 = data_old.view(ndarray)[s0]
