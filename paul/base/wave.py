@@ -461,6 +461,9 @@ class Wave(ndarray):
                           int(math.floor(s_stop))+1,
                           int(round(s_step)))
 
+            print
+            print s0
+
             delta = s_start - math.floor(s_start)
             data0 = data_old.view(ndarray)[s0]
             data1 = data_old.view(ndarray)[s1]
@@ -471,6 +474,9 @@ class Wave(ndarray):
             
             data_new = (data0 + (data1-data0)*delta)
             data_old = data_new
+
+            print "intermediate"
+            pprint (data_old)
             
         return data_old.view(Wave)
 
@@ -607,7 +613,9 @@ if __name__ == "__main__":
 
     S = (slice(None),slice(2,4))
     pprint ((a[S[0]])[S[1]])
+    print "--"
     pprint ((wa._copy_fi_lim(S[0]))._copy_fi_lim(S[1]))
+    print "--"
     pprint (wa._copy_fi_lim(*S))
     import sys
     sys.exit(0)
