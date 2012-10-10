@@ -420,24 +420,36 @@ class Wave(ndarray):
             return self._copy_fi_lim(*obj)
         return self._copy_fi_full(*obj)
 
-
-
-    def _copy_fi_lim (self, *obj):
+    @staticmethod
+    def _get_br_index (data, axis, index):
         '''
-        Fractional index slicing: returns a copy of *self*, sliced as specified
-        by *obj*. Differently from __getitem__, this function also works with
-        floating point slicing parameters.
+        Calculates the bracketing indices for the fractional position *index*
+        on *axis*.
+        Bracketing indices are the indices needed to interpolate the data value
+        for *index*, i.e. usually floor(index) and floor(index)+1.
+        Returns: *i0*, *i1*, *delta*, *keepdim*
+        Where    *i0*      is the lower bracket,
+                 *i1*      the upper bracket, and
+                 *delta*   is *index*-*i0*
+                 *keepdim* is a Boolean, specifying whether the index is 
+                           is a sequence or a slice() (i.e. whether the
+                           result returned when using the index will retain
+                           the dimensionality of the array)
+        *index* can be a number, a sequence of numbers or a slice() object.
+        *i0* and *i1* will have the same type as *index*, *delta* is always a float.
         '''
 
-        data_old = self
+        max_dim = data.ndim
+        if max_dim == axis:  # this is to account for the "newaxis" case
+            max_dim += 1
+        s0 = [slice(None)] * max_dim
+        s1 = [slice(None)] * max_dim
 
-        for i in range(len(obj)):
-            # the original slice object for this dimension
-            if isinstance(obj[i], slice):
-                s = obj[i]
-            else:
-                s = slice(obj[i])
+        if isinstance(index, slice):
+            # index is a slicing object, which basically means that we'll be selecting
+            # a list of items; dimension therefore remains.
 
+            s = index
             s_start = s.start
             s_stop  = s.stop
             s_step  = s.step
@@ -445,38 +457,82 @@ class Wave(ndarray):
             if s_start is None:
                 s_start = 0
             if s_stop is None:
-                s_stop = data_old.shape[-1]
+                s_stop = data.shape[-1]
             if s_step is None:
                 s_step = 1
 
             # floor index
-            s0    = [slice(None)] * data_old.ndim
-            s0[i] = slice(int(math.floor(s_start)),
-                          int(math.floor(s_stop)),
-                          int(round(s_step)))
+            s0[axis] = slice(int(math.floor(s_start)),
+                             int(math.floor(s_stop)),
+                             int(round(s_step)))
 
             # ceiling index
-            s1    = [slice(None)] * data_old.ndim
-            s1[i] = slice(int(math.floor(s_start))+1,
-                          int(math.floor(s_stop))+1,
-                          int(round(s_step)))
-
-            #print
-            #print s0
+            s1[axis] = slice(int(math.floor(s_start))+1,
+                             int(math.floor(s_stop))+1,
+                             int(round(s_step)))
 
             delta = s_start - math.floor(s_start)
+                
+            keep = True  # dimension is retained, increase counter
+                
+        elif hasattr(index, "__iter__"):
+            raise IndexError ("float array indexing needs full interpolation")
+        elif index is None or index == np.newaxis:
+            s0[axis] = None
+            s1[axis] = None
+            delta = 0
+            keep  = True
+        else:
+            # index is something that can be cast to a float(), usually a number.
+            s = float(index)
+            s0[axis] = math.floor(s)
+            s1[axis] = math.floor(s)+1
+            delta = s - s0[axis]
+            keep = False
+        
+        return s0, s1, delta, keep
+
+    def _copy_fi_lim (self, *obj):
+        '''
+        Fractional index slicing: returns a copy of *self*, sliced as specified
+        by *obj*. Differently from __getitem__, this function also works with
+        floating point slicing parameters.
+        The list of arguments * *obj* is taken to be a number of indices.
+        Missing indices will be complemented with slice(None), which 
+        means "everything for the respective dimension".
+        Each index corresponds to one dimension, and can be:
+          - a slice() object
+          - a number
+          - a sequence
+        '''
+
+        #if is
+
+        data_old = self
+        idim = 0  # this is the dimension counter. depending on the type of indexing,
+                  # dimensions may be killed (i.e. when the index is a number).
+                  # if dimension is retained, then the counter is increased by 1
+
+        for index,idim in zip(obj,range(len(obj))):
+            s0, s1, delta, idiff = self._get_br_index(data_old, idim, index)
+            idim -= (idiff != True)
+
+            print index, s0, s1
+
             data0 = data_old.view(ndarray)[s0]
             data1 = data_old.view(ndarray)[s1]
 
-            if data1.shape[i] != data0.shape[i]:
+            print "index %s (%d), data shape %s / %s /%s" % (index, idim, data_old.shape, data0.shape, data1.shape)
+
+            if data1.shape[idim] != data0.shape[idim]:
                 data1 = np.resize (data1, data0.shape)
-                data1[0] = data0[0]
+                if data0.shape[0] > 0:
+                    data1[0] = data0[0]
             
             data_new = (data0 + (data1-data0)*delta)
             data_old = data_new
 
-            #print "intermediate"
-            #pprint (data_old)
+            print "intermediate", data_old
             
         return data_old.view(Wave)
 
@@ -489,37 +545,54 @@ class Wave(ndarray):
         '''
         data_old = self
 
-        for i in range(len(obj)):
+        for index,idim in zip(obj,range(len(obj))):
             # the original slice object for this dimension
-            if isinstance(obj[i], slice):
-                s = obj[i]
+            keep_dim    = False
+            ax_range    = []
+
+            # for this dimension, calculate the 
+            if isinstance(index, slice):
+                s_start = index.start
+                s_stop  = index.stop
+                s_step  = index.step
+                if s_start is None:
+                    s_start = 0
+                if s_stop is None:
+                    s_stop = self.shape[-1]
+                if s_step is None:
+                    s_step = 1
+                ax_range = arange (start=s_start, stop=s_stop, step=s_step)
+                keep_dim = True
+            elif hasattr(index, "__iter__"):
+                ax_range = index
+                keep_dim = True
             else:
-                s = slice(obj[i])
+                # simple indexing: one number only
+                keep_dim = False
 
-            s_start = s.start
-            s_stop  = s.stop
-            s_step  = s.step
+            # this is a hack to account for changing dimension numbers when
+            # killing dimensions
+            idim -= (keep_dim != True) 
+            max_dim = data_old.ndim
+            if max_dim == idim: 
+                max_dim += 1 # this is to account for the "newaxis" thing
+            new_s = [slice(None)] * max_dim
 
-            if s_start is None:
-                s_start = 0
-            if s_stop is None:
-                s_stop = data_old.shape[-1]
-            if s_step is None:
-                s_step = 1
 
-            # full interpolation: need to construct a whole new array, slice
-            # by slice, at interpolated N*step positions
-            data_slices = []
-            for pos in arange (start=s_start, stop=s_stop, step=s_step):
-                new_s    = [slice(0,dim_max,None) for dim_max in data_old.shape]
-                new_s[i] = slice(pos, pos+1.0, None)
-                print new_s,
-                data_slice = data_old._copy_fi_lim (*tuple(new_s))
-                print data_slice
-                data_slices.append (data_slice)
-            data_new = np.concatenate(data_slices, axis=i)
+            if keep_dim:
+                data_slices = []
+                for pos in ax_range:
+                    new_s[idim] = slice(pos, pos+1.0, None)
+                    data_slice = data_old._copy_fi_lim (*tuple(new_s))
+                    data_slices.append (data_slice)
+                data_new = np.concatenate(data_slices, axis=idim)
+            else:
+                new_s[idim] = index
+                data_new = data_old._copy_fi_lim (*tuple(new_s))
+                
+
             data_old = data_new.view(Wave)
-            print "intermediate: ", data_old
+            idim += int(keep_dim)
 
         return data_old
 
@@ -629,49 +702,26 @@ if __name__ == "__main__":
 #    s = (slice(0,5,0.6),slice(0,5,0.5))
     s = (slice(0,2,None),slice(1,3,None))
 
-    S = (slice(0,1),slice(None))
+    S = (1,slice(None))
+
+    #print a[(2,4)]
+    #print a[((2,4),)]
+    #print a[(1,3),][slice(None)]
+
+    S0 = S[0]
+    S1 = S[1]
     print "..........   STANDARD  ..........."
     print "--0--"
-    pprint ((a[S[0]])[S[1]])
+    pprint (a[S0][S1])
     print "--1--"
     pprint (a[S])
     print "..........    LIMITS   ..........."
     print "--2--"
-    pprint ((wa._copy_fi_lim(S[0]))._copy_fi_lim(S[1]))
+    pprint (wa._copy_fi_lim(S0)._copy_fi_lim(S1))
     print "--3--"
     pprint (wa._copy_fi_lim(*S))
     print "........... INTERPOLATE .........."
     print "--4--"
-    pprint ((wa._copy_fi_full(S[0]))._copy_fi_full(S[1]))
+    pprint (wa._copy_fi_full(S0)._copy_fi_full(S1))
     print "--5--"
     pprint (wa._copy_fi_full(*S))
-    import sys
-    sys.exit(0)
-
-    foo0 = a[s[0]][slice(None),s[1]]
-    foo1 = a[s]
-    foo2 = wa._copy_fi_lim(s[0])._copy_fi_lim(None,s[1])
-    foo3 = wa._copy_fi_lim(*s)
-    foo4 = wa._copy_fi_full(s[0])._copy_fi_full(None,s[1])
-    #foo5 = wa._copy_fi_full(*s)
-
-    print
-    
-    print "Regular 0:    "
-    pprint (foo0)
-    print "Regular 1:    "
-    pprint (foo1)
-
-    print
-
-    print "Fractional 2: "
-    pprint (foo2)
-    print "Fractional 3: "
-    pprint (foo3)
-
-    print
-
-    print "Interpolated 4: "
-    pprint (foo4)
-    print "Interpolated 5: "
-    pprint (foo5)
