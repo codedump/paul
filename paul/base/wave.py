@@ -922,6 +922,9 @@ if __name__ == "__main__":
     fail_sum += not _test_index_consistency ((2,3,4))
     fail_sum += not _test_index_consistency ((0,2,0))
 
+    fail_sum += not _test_index_consistency ((2,3,4,None))
+    fail_sum += not _test_index_consistency ((0,2,None,0))
+
     fail_sum += not _test_index_consistency ((2,slice(None),4))
     fail_sum += not _test_index_consistency ((0,slice(None),0))
 
