@@ -512,19 +512,27 @@ class Wave(ndarray):
         idim = 0  # this is the dimension counter. depending on the type of indexing,
                   # dimensions may be killed (i.e. when the index is a number).
                   # if dimension is retained, then the counter is increased by 1
+        keep_dim = False
 
-        for index,idim in zip(obj,range(len(obj))):
-            s0, s1, delta, idiff = self._get_br_index(data_old, idim, index)
-            idim -= (idiff != True)
+        for index in obj:
+            s0, s1, delta, keep_dim = self._get_br_index(data_old, idim, index)
 
-            print index, s0, s1
+            #print "s0=%s    idim: %d, keep: %d\ns1=%s    data shape: %s" % (s0, idim, keep_dim, s1, data_old.shape)
 
             data0 = data_old.view(ndarray)[s0]
-            data1 = data_old.view(ndarray)[s1]
+            if not keep_dim and (s1[idim] >= data_old.shape[idim]):
+                # when indexing the upper-most element with a number index,
+                # data1 will give an out-of-bound index. we prevent this by 
+                # duplicating data0 (above the upper-most element there's no
+                # interpolation anyway).
+                data1 = data0
+            else:
+                data1 = data_old.view(ndarray)[s1]
 
-            print "index %s (%d), data shape %s / %s /%s" % (index, idim, data_old.shape, data0.shape, data1.shape)
+            #print "index[%d]=%s, shapes: data0=%s  data1=%s" % (idim, index, data0.shape, data1.shape)
 
-            if data1.shape[idim] != data0.shape[idim]:
+            cur_dim = idim - int(not keep_dim)
+            if data1.shape[cur_dim] != data0.shape[cur_dim]:
                 data1 = np.resize (data1, data0.shape)
                 if data0.shape[0] > 0:
                     data1[0] = data0[0]
@@ -532,7 +540,9 @@ class Wave(ndarray):
             data_new = (data0 + (data1-data0)*delta)
             data_old = data_new
 
-            print "intermediate", data_old
+            idim += keep_dim
+
+            #print "intermediate", data_old
             
         return data_old.view(Wave)
 
@@ -544,8 +554,9 @@ class Wave(ndarray):
         floating point slicing parameters, uses full interpolation.
         '''
         data_old = self
+        idim = 0
 
-        for index,idim in zip(obj,range(len(obj))):
+        for index in obj:
             # the original slice object for this dimension
             keep_dim    = False
             ax_range    = []
@@ -572,12 +583,10 @@ class Wave(ndarray):
 
             # this is a hack to account for changing dimension numbers when
             # killing dimensions
-            idim -= (keep_dim != True) 
             max_dim = data_old.ndim
             if max_dim == idim: 
                 max_dim += 1 # this is to account for the "newaxis" thing
             new_s = [slice(None)] * max_dim
-
 
             if keep_dim:
                 data_slices = []
@@ -601,62 +610,130 @@ class Wave(ndarray):
         print obj
 
 
-#    def __call__(self, *vals):
-#        ''' 
-#         () operator for Wave instaces.
-#         Takes a variable number of arguments (n-tuple) representing a fractional
-#         3D-coordinate within the space spanned by the (min,max) values of the axes.
-#         Returns the wave value as the specified position, linearly
-#         interpolating if necessary.
-#        '''
-#        
-#        if len(vals) != len(self.shape):
-#            raise IndexError (("expected %d dimensions, got %d"
-#                               % (len(self.shape), len(vals))))
-#        
-#        # desired position index (fractional index)
-#        ii = ndarray([len(self.shape)])
-#        i1 = ndarray([len(self.shape)], dtype=int)
-#        i2 = ndarray([len(self.shape)], dtype=int)
-#        for v, ai in zip(vals, range(len(self.shape))):
-#            ax = self.ax(ai)
-#            ii[ai] = (ax._x2i(v))
-#            i1[ai] = floor(ii[ai])
-#            i2[ai] = i1[ai]+1
-#        
-#        # axis values (i.e. positions in axis units, not indices!)
-#        xx = ax.i2x(ii)
-#        x1 = ax.i2x(i1)
-#        x2 = ax.i2x(i2)
-#
-#        # Need to calculate approximation for the n-dim derivative.
-#        # We do this by modifying one coordinate at a time,
-#        # from low-index (i1) to high-index (i1), and calculating
-#        # the y value for that corner.
-#
-#        y1 = self[tuple(i1)]   # corner 0: the lower-index of each dimension
-#        y2 = []   
-#        for i in range(len(vals)):
-#            icorner = i1.copy()
-#            icorner[i] = i2[i]
-#            y2.append(self[tuple(icorner)])
-#
-#        # dx and dy are vectors => calculate all dimensions in one shot
-#        dy = y2 - y1
-#        dx = x2 - x1
-#        ynew0 = y1                   # 0th order: lower corner
-#        ynew1 = (xx-x1) * dy/dx      # 1st order: linear correction
-#
-#        return ynew0+ynew1.sum()
+    def __call__(self, *vals):
+        ''' 
+        Takes a variable number of arguments (n-tuple) representing a fractional
+        3D-coordinate within the space spanned by the (min,max) values of the axes.
+        Returns the wave value as the specified position, linearly
+        interpolating if necessary, depending on the value of the *i* parameter.
 
-    # 
-    # inverse of __call__: sets the values of the wave by evaluating
-    # the specified object (function?) in all dimensions at the points
-    # specified by self's axis specifications.
-    # 
-    #def set(obj):
-    #    #for 
-    #    return self
+        Each indexing element in *vals* can be:
+          a) a slice() object
+          b) None or numpy.newaxys
+          c) a float()-castable element
+          d) a list with float()-castable elements
+          e) a tuple with up to 3 float()-castable elements
+
+        In consequence, this __call__ implementation supports full
+        slicing and "fancy" indexing, similar to the []-operator, with
+        the following syntactic differences (following from points (d) and (e)
+        above):
+          . There is no on-the-fly conversion from "a:b:c" -> slice(a,b,c),
+            which means that slicing have to be either constructed directly
+            using slice(a,b,c).
+            Alternatively, up to 3 values of float numbers in a tuple (a,b,c)
+            will be interpreted as the user's intension to construct a slicing
+            object and translated to slice(a,b,c).
+            This means that [a:b:c,m:n] would translate to ((a,b,c),(m,n)),
+            for example.
+          . Consequently, list-indexing cannot be conducted using tuples
+            anymore. For instance, if you want to select items 3 and 8,
+            you would have to write self([3,8]). Otherwise self((3,8))
+            would be translated to self(slice(3,8)).
+
+        Interpolation for floating-point axis index *pos*, for example,
+        works by reading values at floor(pos) and floor(pos)+1. Therefore, at
+        the upper boundaries of dimensions problems are ocurring. For the
+        sake of consistency with the [] notation, these problems are solved
+        by duplicating the elements with the highest index in every dimension
+        while calculating the interpolation.
+
+        By the very nature of interpolation (all numbers change!), the returned
+        array is always a new object (think copy() :-) ), and never a view()
+        of *self*, when interpolation is turned on. The algorithm is fairly
+        fast for large datasets, as ndarray's C-implemented []-operator is used
+        wherever possible.
+        The endpoint interpolation (*i*='lim') is fairly fast: it's basically the
+        time needed for two similar calls to [] and a 3 resulting arithmetic
+        operations. Note that endpoint interpolation is only implemented for
+        slice() or float indexing, not for list lindexing (doesn't make sense).
+        Use full interpolation for list indexing, or none at all :-)
+
+        Using full interpolation (*i* = True)is more expensive, and depends a lot
+        on the step-size of the slicing object. Still, heavy use of the C-implemented
+        []-operator is made wherever possible.
+
+        With interpolation switched off (*i*=False), the axis coordinates
+        are translated to the closest integer indices and then passed over
+        to the []-operator, so execution time is essentially the same
+        as for regular indexing.
+
+        Note that only full interpolation will return arrays precicesly matching
+        the specified indices, independently on how the data looks like; everything
+        else will depend on how coarse your data axes are :-)
+
+        If you need to cherry-pick single values, have a look at the _get_fx()
+        function. It will calculate exactly one single data point, interpolated
+        at a random position in your data set. It will be faster for that single
+        point, but veeeery slow if you call it repeatedly in a loop for 
+        more points :-)
+        '''
+
+        i = True
+
+        if i==True:
+            data = self._copy_fi_full(*vals)
+        elif i==False:
+            pass
+        elif i=='lim':
+            data = self._copy_fi_lim(*vals)
+
+        return data
+        
+
+    def _get_fx (self, *vals):
+        '''
+        Returns the interpolated data value at axes coordinate *vals*.
+        '''
+        
+        if len(vals) != len(self.shape):
+            raise IndexError (("expected %d dimensions, got %d"
+                               % (len(self.shape), len(vals))))
+        
+        # desired position index (fractional index)
+        ii = ndarray([len(self.shape)])
+        i1 = ndarray([len(self.shape)], dtype=int)
+        i2 = ndarray([len(self.shape)], dtype=int)
+        for v, ai in zip(vals, range(len(self.shape))):
+            ax = self.ax(ai)
+            ii[ai] = (ax._x2i(v))
+            i1[ai] = floor(ii[ai])
+            i2[ai] = i1[ai]+1
+        
+        # axis values (i.e. positions in axis units, not indices!)
+        xx = ax.i2x(ii)
+        x1 = ax.i2x(i1)
+        x2 = ax.i2x(i2)
+
+        # Need to calculate approximation for the n-dim derivative.
+        # We do this by modifying one coordinate at a time,
+        # from low-index (i1) to high-index (i1), and calculating
+        # the y value for that corner.
+
+        y1 = self[tuple(i1)]   # corner 0: the lower-index of each dimension
+        y2 = []   
+        for i in range(len(vals)):
+            icorner = i1.copy()
+            icorner[i] = i2[i]
+            y2.append(self[tuple(icorner)])
+
+        # dx and dy are vectors => calculate all dimensions in one shot
+        dy = y2 - y1
+        dx = x2 - x1
+        ynew0 = y1                   # 0th order: lower corner
+        ynew1 = (xx-x1) * dy/dx      # 1st order: linear correction
+
+        return ynew0+ynew1.sum()
 
 
 def WCast(nda):
@@ -675,11 +752,122 @@ def WCopy(nda):
         return nda
     return nda.copy(Wave)
 
+#
+# some testing functions defined below
+#
+
+def _print_ok (test, ok="OK", fail="FAILED", verbose=True):
+    '''
+    Prints a red FAILED or a green OK, depending on whether *ok* is True or false.
+    '''
+    ok_string = ["%c[31m%s%c[0m" % (0x1b, fail, 0x1b), "%c[32m%s%c[0m" % (0x1b, ok, 0x1b)]    
+    if verbose:
+        print "%s" % ok_string[int(test)],
+    return test, ok_string[int(test)]
+
+def _cmp_arrays (aa, bb, out=True):
+    '''
+    Compares *aa* and *bb* element-wise, returns True if they correspond
+    and prints an OK or FAILED on stdout if *out* is True.
+    '''
+
+    test1 = array([a==b for a, b in zip(aa.flatten(), bb.flatten())]).all()
+    if not test1:
+        print "Elements test failed: "
+        print ([int(a==b) for a, b in zip(aa.flatten(), bb.flatten())])
+        print "arrays were:"
+        pprint (aa)
+        print "and"
+        pprint (bb)
+
+    test2 = (aa.shape == bb.shape)
+    if not test2:
+        print "Shape test failed: %s differs from %s" % (aa.shape, bb.shape)
+
+    return _print_ok(test1==True and test2==True)
+
+
+def _test_index_consistency (index, verbose=False):
+    '''
+    Tests the consistency of the Wave frational index with the regular
+    indexing mechanism for *index*. Prints OK or FAILED for each test,
+    returns True if all tests are true
+    '''
+
+    if verbose:
+        print "Testing consistency of fractional indexing with standard indexing..."
+
+    ok_sum = 0
+
+    a = array([[[i+j*10+k*100 for i in range(5)] for j in range(5)] for k in range(5)])
+    wa = a.view(Wave).copy()
+
+    if verbose:
+        print "Test array:"
+        pprint (a)
+        print
+
+    print "  Index:", index
+
+    S = index
+    S0 = index[0]
+    S1 = index[1]
+
+    foo = []
+    if verbose:
+        print "  Standard indexing:",
+    foo.append (a[S0][S1])
+    if verbose:
+        print
+        print "--0--"
+        pprint (foo[0])
+    foo.append(a[S])
+    if verbose:
+        print "--1--"
+        pprint (foo[1])
+        print
+
+    print "  Limits interpolation:",
+    foo.append(wa._copy_fi_lim(S0)._copy_fi_lim(S1))
+    if verbose:
+        print
+        print "--2--"
+        pprint (foo[2])
+    foo.append(wa._copy_fi_lim(*S))
+    if verbose:
+        print "--3--"
+        pprint (foo[3])
+    ok_sum += _cmp_arrays (foo[0], foo[2])[0]
+    ok_sum += _cmp_arrays (foo[1], foo[3])[0]
+    print
+
+    print "  Full interpolation:  ",
+    foo.append(wa._copy_fi_full(S0)._copy_fi_full(S1))
+    if verbose:
+        print
+        print "--4--"
+        pprint (foo[4])
+    foo.append(wa._copy_fi_full(*S))
+    if verbose:
+        print "--5--"
+        pprint (foo[5])
+    ok_sum += _cmp_arrays (foo[0], foo[4])[0]
+    ok_sum += _cmp_arrays (foo[1], foo[5])[0]
+    print
+
+    print WCast(a)(2.5, 2.5, 2.5), a[2,2,2]
+
+    print "  Result: ",
+    _print_ok(ok_sum == 4, ok="Consistent", fail="INCONSISTENT")
+    print
+
+    return ok_sum == 4
 
 
 if __name__ == "__main__":
 
     from pprint import pprint
+    import sys
 
     log = logging.getLogger ('paul')
     log.setLevel (logging.DEBUG)
@@ -689,39 +877,75 @@ if __name__ == "__main__":
     fmt = logging.Formatter('%(asctime)s %(levelname)s: %(name)s: %(module)s.%(funcName)s: %(message)s')
     ch.setFormatter(fmt)
 
-    a = array([[i+j*10 for i in range(5)] for j in range(5)])
-    wa = a.view(Wave).copy()
+    fail_sum = 0
+
+    print "\nTesting element selection"
+
+    fail_sum += not _test_index_consistency ((slice(0,3),slice(None)))
+    fail_sum += not _test_index_consistency ((slice(None),slice(0,3)))
+
+    fail_sum += not _test_index_consistency ((slice(0,3),slice(None),1))
+    fail_sum += not _test_index_consistency ((slice(0,3),1,slice(None)))
+    fail_sum += not _test_index_consistency ((1,slice(0,3),slice(None)))
+
+    print "\nTesting dimension boundaries"
+
+    fail_sum += not _test_index_consistency ((slice(0,5),slice(0,5),0))
+    fail_sum += not _test_index_consistency ((slice(0,5),0,slice(0,5)))
+    fail_sum += not _test_index_consistency ((0,slice(0,5),slice(0,5)))
+
+    fail_sum += not _test_index_consistency ((slice(0,5),slice(0,5),4))
+    fail_sum += not _test_index_consistency ((slice(0,5),4,slice(0,5)))
+    fail_sum += not _test_index_consistency ((4,slice(0,5),slice(0,5)))
+
+    fail_sum += not _test_index_consistency ((slice(0,5),slice(0,5),slice(4,5)))
+    fail_sum += not _test_index_consistency ((slice(0,5),slice(4,5),slice(0,5)))
+    fail_sum += not _test_index_consistency ((slice(4,5),slice(0,5),slice(0,5)))
+
+
+    print "\nTesting dimension increasing"
+
+    fail_sum += not _test_index_consistency ((slice(None),slice(None),slice(None),None))
+    fail_sum += not _test_index_consistency ((slice(None),slice(None),slice(None),None))
+
+    fail_sum += not _test_index_consistency ((slice(None),slice(None),None,slice(None)))
+    fail_sum += not _test_index_consistency ((slice(None),slice(None),None,slice(None)))
+
+    fail_sum += not _test_index_consistency ((slice(None),None,slice(None),slice(None)))
+    fail_sum += not _test_index_consistency ((slice(None),None,slice(None),slice(None)))
+
+    fail_sum += not _test_index_consistency ((None,slice(None),slice(None),slice(None)))
+    fail_sum += not _test_index_consistency ((None,slice(None),slice(None),slice(None)))
+
+    print "\nTesting dimension consistency"
+
+    fail_sum += not _test_index_consistency ((2,3,4))
+    fail_sum += not _test_index_consistency ((0,2,0))
+
+    fail_sum += not _test_index_consistency ((2,slice(None),4))
+    fail_sum += not _test_index_consistency ((0,slice(None),0))
+
+    fail_sum += not _test_index_consistency ((2,3,slice(None)))
+    fail_sum += not _test_index_consistency ((4,0,slice(None)))
+
+    fail_sum += not _test_index_consistency ((slice(None),2,3))
+    fail_sum += not _test_index_consistency ((slice(None),4,0))
+
+
+    print "\nTesting reduced dimension indexing"
+
+    fail_sum += not _test_index_consistency ((2,4))
+    fail_sum += not _test_index_consistency ((0,0))
+
+    fail_sum += not _test_index_consistency ((slice(None),4))
+    fail_sum += not _test_index_consistency ((slice(None),0))
+
+    fail_sum += not _test_index_consistency ((2,slice(None)))
+    fail_sum += not _test_index_consistency ((4,slice(None)))
+
+    fail_sum += not _test_index_consistency ((slice(None),2))
+    fail_sum += not _test_index_consistency ((slice(None),0))
+
     
 
-    print
-    print "original"
-    pprint (a)
-    print
-    print
-
-#    s = (slice(0,5,0.6),slice(0,5,0.5))
-    s = (slice(0,2,None),slice(1,3,None))
-
-    S = (1,slice(None))
-
-    #print a[(2,4)]
-    #print a[((2,4),)]
-    #print a[(1,3),][slice(None)]
-
-    S0 = S[0]
-    S1 = S[1]
-    print "..........   STANDARD  ..........."
-    print "--0--"
-    pprint (a[S0][S1])
-    print "--1--"
-    pprint (a[S])
-    print "..........    LIMITS   ..........."
-    print "--2--"
-    pprint (wa._copy_fi_lim(S0)._copy_fi_lim(S1))
-    print "--3--"
-    pprint (wa._copy_fi_lim(*S))
-    print "........... INTERPOLATE .........."
-    print "--4--"
-    pprint (wa._copy_fi_full(S0)._copy_fi_full(S1))
-    print "--5--"
-    pprint (wa._copy_fi_full(*S))
+    print "\nResult: %s (%d failed)\n\n" % (_print_ok (fail_sum==0, verbose=False)[1], fail_sum)
