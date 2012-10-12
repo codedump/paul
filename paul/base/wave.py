@@ -421,10 +421,14 @@ class Wave(ndarray):
         return self._copy_fi_full(*obj)
 
     @staticmethod
-    def _get_br_index (data, axis, index):
+    def _get_br_index (data, axis, index, full_index):
         '''
         Calculates the bracketing indices for the fractional position *index*
-        on *axis*.
+        on *axis*. *index* here is only the index component of the dimension specified
+        by *axis*. *full_index* represents the complete index
+        (i.e. *full_index*[*axis*] = *index*). Note that the dimension of *full_index*
+        and of *data.shape* need _not_ necessarily match, as *full_index* may
+        contain *newaxis* elements.
         Bracketing indices are the indices needed to interpolate the data value
         for *index*, i.e. usually floor(index) and floor(index)+1.
         Returns: *i0*, *i1*, *delta*, *keepdim*
@@ -439,11 +443,17 @@ class Wave(ndarray):
         *i0* and *i1* will have the same type as *index*, *delta* is always a float.
         '''
 
-        max_dim = data.ndim
-        if max_dim == axis:  # this is to account for the "newaxis" case
-            max_dim += 1
+        #if hasattr(full_index, "__iter__"):
+        #    max_dim = max(data.ndim,len(full_index),axis+1)
+        #else:
+        max_dim = max(data.ndim,axis+1)
+
         s0 = [slice(None)] * max_dim
         s1 = [slice(None)] * max_dim
+
+        #print index
+        #print s0
+        #print s1
 
         if isinstance(index, slice):
             # index is a slicing object, which basically means that we'll be selecting
@@ -490,7 +500,7 @@ class Wave(ndarray):
             delta = s - s0[axis]
             keep = False
         
-        return s0, s1, delta, keep
+        return tuple(s0), tuple(s1), delta, keep
 
     def _copy_fi_lim (self, *obj):
         '''
@@ -515,9 +525,9 @@ class Wave(ndarray):
         keep_dim = False
 
         for index in obj:
-            s0, s1, delta, keep_dim = self._get_br_index(data_old, idim, index)
+            s0, s1, delta, keep_dim = self._get_br_index(data_old, idim, index, obj)
 
-            #print "s0=%s    idim: %d, keep: %d\ns1=%s    data shape: %s" % (s0, idim, keep_dim, s1, data_old.shape)
+            #print "s0=%s    idim: %d, keep: %d\ns1=%s    data shape: %s, data: %s" % (s0, idim, keep_dim, s1, data_old.shape, data_old)
 
             data0 = data_old.view(ndarray)[s0]
             if not keep_dim and (s1[idim] >= data_old.shape[idim]):
@@ -532,7 +542,7 @@ class Wave(ndarray):
             #print "index[%d]=%s, shapes: data0=%s  data1=%s" % (idim, index, data0.shape, data1.shape)
 
             cur_dim = idim - int(not keep_dim)
-            if data1.shape[cur_dim] != data0.shape[cur_dim]:
+            if (isinstance(data1, ndarray) and isinstance(data0, ndarray)) and (data1.shape[cur_dim] != data0.shape[cur_dim]):
                 data1 = np.resize (data1, data0.shape)
                 if data0.shape[0] > 0:
                     data1[0] = data0[0]
@@ -555,6 +565,7 @@ class Wave(ndarray):
         '''
         data_old = self
         idim = 0
+        iconsumed = 0 # number of consumed indices
 
         for index in obj:
             # the original slice object for this dimension
@@ -577,6 +588,10 @@ class Wave(ndarray):
             elif hasattr(index, "__iter__"):
                 ax_range = index
                 keep_dim = True
+            elif index is None or index is np.newaxis:
+                keep_dim = None # strictly speaking, we're not killing
+                                # this dimension. this case is a funny
+                                # one that will have
             else:
                 # simple indexing: one number only
                 keep_dim = False
@@ -588,20 +603,58 @@ class Wave(ndarray):
                 max_dim += 1 # this is to account for the "newaxis" thing
             new_s = [slice(None)] * max_dim
 
-            if keep_dim:
+
+            if keep_dim == True:
                 data_slices = []
+                print "idim %d, axis range %s" % (idim, ax_range)
                 for pos in ax_range:
                     new_s[idim] = slice(pos, pos+1.0, None)
                     data_slice = data_old._copy_fi_lim (*tuple(new_s))
                     data_slices.append (data_slice)
                 data_new = np.concatenate(data_slices, axis=idim)
-            else:
-                new_s[idim] = index
-                data_new = data_old._copy_fi_lim (*tuple(new_s))
-                
+                print "slices:"
+                pprint (data_slices)
 
+            else:
+                #
+                # Don't touch this, or you'll regret it.
+                #
+                if keep_dim is None:
+                    new_s = [slice(None)] * max((len(obj)-iconsumed),max_dim)
+                    keep_dim = True
+
+                new_s[idim] = index
+
+                if isinstance(data_old, Wave):
+                    data_new = data_old._copy_fi_lim (*tuple(new_s))
+                    #keep_dim = False
+                elif index is None:
+                    data_new = array([data_old])
+                    keep_dim = True
+                else:
+                    raise IndexError ("Don't know what to do with non-array %s and index %s" % (data_old, index))
+
+                #new_s[idim] = index
+                #if not isinstance(data_old, Wave):
+                #    if keep_dim is None:
+                #        # strictly, it's not keeping;
+                #        # we're _extending_ the dimension :-)
+                #        # but in any case, we need to increase the
+                #        # idim counter below, so set keep_dim to "True"
+                #        data_new = array([data_old])
+                #        keep_dim = True
+                ##        print "here!"
+                #    else:
+                #        raise IndexError ("Don't know what to do with non-array %s and index %s" % (data_old, index))
+                #else:
+                #    data_new = data_old._copy_fi_lim (*tuple(new_s))
+                #    keep_dim = False
+                              
             data_old = data_new.view(Wave)
             idim += int(keep_dim)
+            iconsumed += 1
+
+            # print "intermediate: ", data_old
 
         return data_old
 
@@ -765,11 +818,14 @@ def _print_ok (test, ok="OK", fail="FAILED", verbose=True):
         print "%s" % ok_string[int(test)],
     return test, ok_string[int(test)]
 
-def _cmp_arrays (aa, bb, out=True):
+def _cmp_arrays (aa, bb, out=True, verbose=None):
     '''
     Compares *aa* and *bb* element-wise, returns True if they correspond
     and prints an OK or FAILED on stdout if *out* is True.
     '''
+
+    if verbose is not None:
+        out = verbose
 
     test1 = array([a==b for a, b in zip(aa.flatten(), bb.flatten())]).all()
     if not test1:
@@ -791,13 +847,13 @@ def _test_index_consistency (index, verbose=False):
     '''
     Tests the consistency of the Wave frational index with the regular
     indexing mechanism for *index*. Prints OK or FAILED for each test,
-    returns True if all tests are true
+    returns the (negative) number of failures.
     '''
 
     if verbose:
         print "Testing consistency of fractional indexing with standard indexing..."
 
-    ok_sum = 0
+    fail_sum = 0
 
     a = array([[[i+j*10+k*100 for i in range(5)] for j in range(5)] for k in range(5)])
     wa = a.view(Wave).copy()
@@ -815,53 +871,186 @@ def _test_index_consistency (index, verbose=False):
 
     foo = []
     if verbose:
-        print "  Standard indexing:",
+        print "    Standard indexing:",
+        print
+    verbose and pprint ("--0--")
     foo.append (a[S0][S1])
-    if verbose:
-        print
-        print "--0--"
-        pprint (foo[0])
+    verbose and pprint (foo[0])
+    verbose and pprint ("--1--")
     foo.append(a[S])
+    verbose and pprint (foo[1])
     if verbose:
-        print "--1--"
-        pprint (foo[1])
+        print
         print
 
-    print "  Limits interpolation:",
+    print "    Limits interpolation:",
+    if verbose:
+        print
+    verbose and pprint ("--2--")
     foo.append(wa._copy_fi_lim(S0)._copy_fi_lim(S1))
-    if verbose:
-        print
-        print "--2--"
-        pprint (foo[2])
+    verbose and pprint (foo[2])
+
+    verbose and pprint ("--3--")
     foo.append(wa._copy_fi_lim(*S))
-    if verbose:
-        print "--3--"
-        pprint (foo[3])
-    ok_sum += _cmp_arrays (foo[0], foo[2])[0]
-    ok_sum += _cmp_arrays (foo[1], foo[3])[0]
-    print
-
-    print "  Full interpolation:  ",
-    foo.append(wa._copy_fi_full(S0)._copy_fi_full(S1))
+    verbose and pprint (foo[3])
+    fail_sum -= not _cmp_arrays (foo[0], foo[2])[0]
+    fail_sum -= not _cmp_arrays (foo[1], foo[3])[0]
     if verbose:
         print
-        print "--4--"
-        pprint (foo[4])
+    print
+
+    print "    Full interpolation:  ",
+    verbose and pprint ("")
+    verbose and pprint ("--4--")
+    foo.append(wa._copy_fi_full(S0)._copy_fi_full(S1))
+    verbose and pprint (foo[4])
+    verbose and pprint ("--5--")
     foo.append(wa._copy_fi_full(*S))
+    verbose and pprint (foo[5])
+    fail_sum -= not _cmp_arrays (foo[0], foo[4])[0]
+    fail_sum -= not _cmp_arrays (foo[1], foo[5])[0]
     if verbose:
-        print "--5--"
-        pprint (foo[5])
-    ok_sum += _cmp_arrays (foo[0], foo[4])[0]
-    ok_sum += _cmp_arrays (foo[1], foo[5])[0]
+        print
     print
 
-    print WCast(a)(2.5, 2.5, 2.5), a[2,2,2]
-
-    print "  Result: ",
-    _print_ok(ok_sum == 4, ok="Consistent", fail="INCONSISTENT")
+    print "    Result: ",
+    _print_ok(fail_sum == 0, ok="Consistent", fail="INCONSISTENT")
     print
 
-    return ok_sum == 4
+    return fail_sum
+
+
+def _test_index_fraction (index, verbose=False):
+    '''
+    Tests the performance of the fractional indexing (i.e. whether it works
+    as expected), and returns the number of failures.
+    '''
+    #a = array([[[i*1+j*10+k*100 for i in range(50)] for j in range(50)] for k in range(50)])
+    #w = array([[[i*1+j*10+k*100 for i in range(5)] for j in range(5)] for k in range(5)]).view(Wave)
+
+    a = array([[i*1+j*10 for i in range(50)] for j in range(50)])
+    w = array([[i*1+j*10 for i in range(5)] for j in range(5)]).view(Wave)
+
+    w_index = index
+    _a_index = []
+    for i in w_index:
+        if isinstance(i, slice):
+            _a_index.append (slice(int(round(i.start*10)),
+                                   int(round(i.stop*10)),
+                                   int(round(i.step*10))))
+        elif hasattr(i, "__iter__"):
+            _a_index.append ([round(f*10) for f in i])
+        else:
+            _a_index.append (round(i*10))
+    a_index = tuple(_a_index)
+
+    print "  Fractional Index  %s  compared against Regular  %s :" % (w_index, a_index),
+
+    aa = a[a_index]
+    ww = w._copy_fi_full(*w_index)
+
+    verbose 
+    verbose and pprint (a)
+    verbose and pprint (w)
+
+    return -int(not _cmp_arrays(aa, ww*10, verbose=True)[0])
+
+def _test_index():
+    '''
+    Does some indexing tests, returns the number of errors.
+    '''
+
+    fail_sum = 0
+
+    print "\nTesting element selection"
+
+    fail_sum += _test_index_consistency ((slice(0,3),slice(None)))
+    fail_sum += _test_index_consistency ((slice(None),slice(0,3)))
+
+    fail_sum += _test_index_consistency ((slice(0,3),slice(None),1))
+    fail_sum += _test_index_consistency ((slice(0,3),1,slice(None)))
+    fail_sum += _test_index_consistency ((1,slice(0,3),slice(None)))
+
+    print "\nTesting dimension boundaries"
+
+    fail_sum += _test_index_consistency ((slice(0,5),slice(0,5),0))
+    fail_sum += _test_index_consistency ((slice(0,5),0,slice(0,5)))
+    fail_sum += _test_index_consistency ((0,slice(0,5),slice(0,5)))
+
+    fail_sum += _test_index_consistency ((slice(0,5),slice(0,5),4))
+    fail_sum += _test_index_consistency ((slice(0,5),4,slice(0,5)))
+    fail_sum += _test_index_consistency ((4,slice(0,5),slice(0,5)))
+
+    fail_sum += _test_index_consistency ((slice(0,5),slice(0,5),slice(4,5)))
+    fail_sum += _test_index_consistency ((slice(0,5),slice(4,5),slice(0,5)))
+    fail_sum += _test_index_consistency ((slice(4,5),slice(0,5),slice(0,5)))
+
+
+    print "\nTesting dimension increasing"
+
+    fail_sum += _test_index_consistency ((slice(None),slice(None),slice(None),None))
+    fail_sum += _test_index_consistency ((slice(None),slice(None),slice(None),None))
+
+    fail_sum += _test_index_consistency ((slice(None),slice(None),None,slice(None)))
+    fail_sum += _test_index_consistency ((slice(None),slice(None),None,slice(None)))
+
+    fail_sum += _test_index_consistency ((slice(None),None,slice(None),slice(None)))
+    fail_sum += _test_index_consistency ((slice(None),None,slice(None),slice(None)))
+
+    fail_sum += _test_index_consistency ((None,slice(None),slice(None),slice(None)))
+    fail_sum += _test_index_consistency ((None,slice(None),slice(None),slice(None)))
+
+    print "\nTesting dimension consistency"
+
+    fail_sum += _test_index_consistency ((2,3,4))
+    fail_sum += _test_index_consistency ((0,2,0))
+
+    fail_sum += _test_index_consistency ((2,3,4,None))
+    fail_sum += _test_index_consistency ((0,2,None,0))
+    fail_sum += _test_index_consistency ((0,None,2,0))
+    fail_sum += _test_index_consistency ((None,0,2,0))
+
+    fail_sum += _test_index_consistency ((2,slice(None),4))
+    fail_sum += _test_index_consistency ((0,slice(None),0))
+
+    fail_sum += _test_index_consistency ((2,3,slice(None)))
+    fail_sum += _test_index_consistency ((4,0,slice(None)))
+
+    fail_sum += _test_index_consistency ((slice(None),2,3))
+    fail_sum += _test_index_consistency ((slice(None),4,0))
+
+    fail_sum += _test_index_consistency ((slice(None),2,3,None))
+    fail_sum += _test_index_consistency ((slice(None),4,None,0))
+
+
+    print "\nTesting reduced dimension indexing"
+
+    fail_sum += _test_index_consistency ((2,4))
+    fail_sum += _test_index_consistency ((0,0))
+
+    fail_sum += _test_index_consistency ((slice(None),4))
+    fail_sum += _test_index_consistency ((slice(None),0))
+
+    fail_sum += _test_index_consistency ((2,slice(None)))
+    fail_sum += _test_index_consistency ((4,slice(None)))
+
+    fail_sum += _test_index_consistency ((slice(None),2))
+    fail_sum += _test_index_consistency ((slice(None),0))
+
+    print "\nTesting interpolation performance"
+
+    #fail_sum += _test_index_fraction ((slice(0,3,0.1)))
+
+    return fail_sum
+
+
+def _test_scale():
+    '''
+    Does some testing of the automatic scale adjustment of a Wave() when
+    indexing, either using [] or () is performed. Returns the number
+    of errors.
+    '''
+    return 0
 
 
 if __name__ == "__main__":
@@ -879,76 +1068,13 @@ if __name__ == "__main__":
 
     fail_sum = 0
 
-    print "\nTesting element selection"
-
-    fail_sum += not _test_index_consistency ((slice(0,3),slice(None)))
-    fail_sum += not _test_index_consistency ((slice(None),slice(0,3)))
-
-    fail_sum += not _test_index_consistency ((slice(0,3),slice(None),1))
-    fail_sum += not _test_index_consistency ((slice(0,3),1,slice(None)))
-    fail_sum += not _test_index_consistency ((1,slice(0,3),slice(None)))
-
-    print "\nTesting dimension boundaries"
-
-    fail_sum += not _test_index_consistency ((slice(0,5),slice(0,5),0))
-    fail_sum += not _test_index_consistency ((slice(0,5),0,slice(0,5)))
-    fail_sum += not _test_index_consistency ((0,slice(0,5),slice(0,5)))
-
-    fail_sum += not _test_index_consistency ((slice(0,5),slice(0,5),4))
-    fail_sum += not _test_index_consistency ((slice(0,5),4,slice(0,5)))
-    fail_sum += not _test_index_consistency ((4,slice(0,5),slice(0,5)))
-
-    fail_sum += not _test_index_consistency ((slice(0,5),slice(0,5),slice(4,5)))
-    fail_sum += not _test_index_consistency ((slice(0,5),slice(4,5),slice(0,5)))
-    fail_sum += not _test_index_consistency ((slice(4,5),slice(0,5),slice(0,5)))
-
-
-    print "\nTesting dimension increasing"
-
-    fail_sum += not _test_index_consistency ((slice(None),slice(None),slice(None),None))
-    fail_sum += not _test_index_consistency ((slice(None),slice(None),slice(None),None))
-
-    fail_sum += not _test_index_consistency ((slice(None),slice(None),None,slice(None)))
-    fail_sum += not _test_index_consistency ((slice(None),slice(None),None,slice(None)))
-
-    fail_sum += not _test_index_consistency ((slice(None),None,slice(None),slice(None)))
-    fail_sum += not _test_index_consistency ((slice(None),None,slice(None),slice(None)))
-
-    fail_sum += not _test_index_consistency ((None,slice(None),slice(None),slice(None)))
-    fail_sum += not _test_index_consistency ((None,slice(None),slice(None),slice(None)))
-
-    print "\nTesting dimension consistency"
-
-    fail_sum += not _test_index_consistency ((2,3,4))
-    fail_sum += not _test_index_consistency ((0,2,0))
-
-    fail_sum += not _test_index_consistency ((2,3,4,None))
-    fail_sum += not _test_index_consistency ((0,2,None,0))
-
-    fail_sum += not _test_index_consistency ((2,slice(None),4))
-    fail_sum += not _test_index_consistency ((0,slice(None),0))
-
-    fail_sum += not _test_index_consistency ((2,3,slice(None)))
-    fail_sum += not _test_index_consistency ((4,0,slice(None)))
-
-    fail_sum += not _test_index_consistency ((slice(None),2,3))
-    fail_sum += not _test_index_consistency ((slice(None),4,0))
-
-
-    print "\nTesting reduced dimension indexing"
-
-    fail_sum += not _test_index_consistency ((2,4))
-    fail_sum += not _test_index_consistency ((0,0))
-
-    fail_sum += not _test_index_consistency ((slice(None),4))
-    fail_sum += not _test_index_consistency ((slice(None),0))
-
-    fail_sum += not _test_index_consistency ((2,slice(None)))
-    fail_sum += not _test_index_consistency ((4,slice(None)))
-
-    fail_sum += not _test_index_consistency ((slice(None),2))
-    fail_sum += not _test_index_consistency ((slice(None),0))
-
-    
-
+    # debug
+    fail_sum += _test_index_fraction ((slice(0,5,0.1),slice(0,5,0.1)))
     print "\nResult: %s (%d failed)\n\n" % (_print_ok (fail_sum==0, verbose=False)[1], fail_sum)
+    sys.exit()
+    # /debug
+
+    fail_sum += _test_index()
+    fail_sum += _test_scale()
+
+    print "\nResult: %s (%d failed)\n\n" % (_print_ok (fail_sum==0, verbose=False)[1], -fail_sum)
