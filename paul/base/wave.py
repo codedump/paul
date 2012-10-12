@@ -932,11 +932,11 @@ def _test_index_fraction (index, verbose=False):
     Tests the performance of the fractional indexing (i.e. whether it works
     as expected), and returns the number of failures.
     '''
-    a = array([[[i*1+j*10+k*100 for i in range(50)] for j in range(50)] for k in range(50)])
-    w = array([[[i*1+j*10+k*100 for i in range(5)] for j in range(5)] for k in range(5)]).view(Wave)
+    #a = array([[[i*1+j*10+k*100 for i in range(50)] for j in range(50)] for k in range(50)])
+    #w = array([[[i*1+j*10+k*100 for i in range(5)] for j in range(5)] for k in range(5)]).view(Wave)
 
-    #a = array([[i*1+j*10 for i in range(50)] for j in range(50)])
-    #w = array([[i*1+j*10 for i in range(5)] for j in range(5)]).view(Wave)
+    a = array([[i*1+j*10 for i in range(50)] for j in range(50)])
+    w = array([[i*1+j*10 for i in range(5)] for j in range(5)]).view(Wave)
 
     w_index = index
     _a_index = []
@@ -956,9 +956,12 @@ def _test_index_fraction (index, verbose=False):
     aa = a[a_index]
     ww = w._copy_fi_full(*w_index)
 
-    verbose 
+    verbose and pprint ("input")
     verbose and pprint (a)
     verbose and pprint (w)
+    verbose and pprint ("result")
+    verbose and pprint (aa)
+    verbose and pprint (ww)
 
     fail = _cmp_arrays(aa, ww*10, out=True)
 
@@ -1094,8 +1097,10 @@ if __name__ == "__main__":
     fail_sum = 0
 
     # debug
-    #print "\nResult: %s (%d failed)\n\n" % (_print_ok (fail_sum==0, verbose=False)[1], fail_sum)
-    #sys.exit()
+    fail_sum += _test_index_fraction (  ([1.2, 2.3, 3.5], [0, 0.1, 0.2]) , verbose=True)
+    #fail_sum += _test_index_fraction (  (slice(None),  [1.2, 2.3, 1.5], [0.1, 0.2, 1.5]) , verbose=True)
+    print "\nResult: %s (%d failed)\n\n" % (_print_ok (fail_sum==0, verbose=False)[1], fail_sum)
+    sys.exit()
     # /debug
 
     fail_sum += _test_index()

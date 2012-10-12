@@ -65,7 +65,8 @@ plot_water = plotwater   # define an alias, for interface compatibility
 
 
 
-def imwater (fig_ax, wlist, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0), autoscale=True):
+def imwater (fig_ax, wlist, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0), autoscale=True,
+             ignore=[]):
     '''
     Same as plotwater(), but designed to work for 2D waves.
     if *autoscale* is True, then resulting line collection will have
@@ -80,13 +81,17 @@ def imwater (fig_ax, wlist, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0), autosca
        2) Calculate the real y-axis span of the 2 wave
        3) Calculate the ratio between spans of (1) and (2)
        4) Scale *offs*[y] and the signal intensity by the ratio at (3).
+
+    If specified, *ignore* is a list of line indices (in the final 'waterfall'
+    line set) which to exclude from plotting.
     '''
     if len(wlist) == 0:
         return
 
 
     if not isinstance(wlist, Wave):
-        new_wlist = np.vstack (wlist)  # this only works if waves have the same number of points
+        new_wlist = np.vstack (wlist)  # this only works if waves have
+                                       # the same number of points
         wlist = new_wlist
         
 
