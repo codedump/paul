@@ -467,7 +467,7 @@ class Wave(ndarray):
             if s_start is None:
                 s_start = 0
             if s_stop is None:
-                s_stop = data.shape[-1]
+                s_stop = data.shape[axis]
             if s_step is None:
                 s_step = 1
 
@@ -527,7 +527,8 @@ class Wave(ndarray):
         for index in obj:
             s0, s1, delta, keep_dim = self._get_br_index(data_old, idim, index, obj)
 
-            #print "s0=%s    idim: %d, keep: %d\ns1=%s    data shape: %s, data: %s" % (s0, idim, keep_dim, s1, data_old.shape, data_old)
+            #print "s0=%s    idim: %d, keep: %d\ns1=%s    data shape: %s, data: %s" 
+            #% (s0, idim, keep_dim, s1, data_old.shape, data_old)
 
             data0 = data_old.view(ndarray)[s0]
             if not keep_dim and (s1[idim] >= data_old.shape[idim]):
@@ -606,14 +607,13 @@ class Wave(ndarray):
 
             if keep_dim == True:
                 data_slices = []
-                print "idim %d, axis range %s" % (idim, ax_range)
+                #print "idim %d, axis range %s" % (idim, ax_range)
                 for pos in ax_range:
                     new_s[idim] = slice(pos, pos+1.0, None)
                     data_slice = data_old._copy_fi_lim (*tuple(new_s))
+                    #print "index: %s, slice: %s" % (new_s, data_slice)
                     data_slices.append (data_slice)
                 data_new = np.concatenate(data_slices, axis=idim)
-                print "slices:"
-                pprint (data_slices)
 
             else:
                 #
@@ -654,7 +654,7 @@ class Wave(ndarray):
             idim += int(keep_dim)
             iconsumed += 1
 
-            print "intermediate: ", data_old
+            #print "intermediate: ", data_old
 
         return data_old
 
@@ -663,7 +663,7 @@ class Wave(ndarray):
         print obj
 
 
-    def __call__(self, *vals):
+    def __call__(self, *vals, **kwargs):
         ''' 
         Takes a variable number of arguments (n-tuple) representing a fractional
         3D-coordinate within the space spanned by the (min,max) values of the axes.
@@ -732,7 +732,12 @@ class Wave(ndarray):
         more points :-)
         '''
 
-        i = True
+        if kwargs.has_key("i"):
+            i = kwargs['i']
+        elif kwargs.has_key("interpolate"):
+            i = kwargs['interpolate']
+        else:
+            i = True
 
         if i==True:
             data = self._copy_fi_full(*vals)
@@ -818,6 +823,7 @@ def _print_ok (test, ok="OK", fail="FAILED", verbose=True):
         print "%s" % ok_string[int(test)],
     return test, ok_string[int(test)]
 
+
 def _cmp_arrays (aa, bb, out=True, verbose=None):
     '''
     Compares *aa* and *bb* element-wise, returns True if they correspond
@@ -827,14 +833,15 @@ def _cmp_arrays (aa, bb, out=True, verbose=None):
     if verbose is not None:
         out = verbose
 
-    test1 = array([a==b for a, b in zip(aa.flatten(), bb.flatten())]).all()
+    test1 = array([int(round(a))==int(round(b)) for a, b in zip(aa.flatten(), bb.flatten())]).all()
     if not test1:
         print "Elements test failed: "
-        print ([int(a==b) for a, b in zip(aa.flatten(), bb.flatten())])
-        print "arrays were:"
-        pprint (aa)
-        print "and"
-        pprint (bb)
+        print ([int(int(round(a))==int(round(b))) for a, b in zip(aa.flatten(), bb.flatten())])
+        if verbose == True:
+            print "arrays were:"
+            pprint (aa)
+            print "and"
+            pprint (bb)
 
     test2 = (aa.shape == bb.shape)
     if not test2:
@@ -925,11 +932,11 @@ def _test_index_fraction (index, verbose=False):
     Tests the performance of the fractional indexing (i.e. whether it works
     as expected), and returns the number of failures.
     '''
-    #a = array([[[i*1+j*10+k*100 for i in range(50)] for j in range(50)] for k in range(50)])
-    #w = array([[[i*1+j*10+k*100 for i in range(5)] for j in range(5)] for k in range(5)]).view(Wave)
+    a = array([[[i*1+j*10+k*100 for i in range(50)] for j in range(50)] for k in range(50)])
+    w = array([[[i*1+j*10+k*100 for i in range(5)] for j in range(5)] for k in range(5)]).view(Wave)
 
-    a = array([[i*1+j*10 for i in range(50)] for j in range(50)])
-    w = array([[i*1+j*10 for i in range(5)] for j in range(5)]).view(Wave)
+    #a = array([[i*1+j*10 for i in range(50)] for j in range(50)])
+    #w = array([[i*1+j*10 for i in range(5)] for j in range(5)]).view(Wave)
 
     w_index = index
     _a_index = []
@@ -939,22 +946,25 @@ def _test_index_fraction (index, verbose=False):
                                    int(round(i.stop*10)),
                                    int(round(i.step*10))))
         elif hasattr(i, "__iter__"):
-            _a_index.append ([round(f*10) for f in i])
+            _a_index.append ([int(round(f*10)) for f in i])
         else:
-            _a_index.append (round(i*10))
+            _a_index.append (int(round(i*10)))
     a_index = tuple(_a_index)
 
-    print "  Fractional Index  %s  compared against Regular  %s :" % (w_index, a_index),
+    print "  Fractional index: %s \n  against regular:  %s :" % (w_index, a_index),
 
     aa = a[a_index]
     ww = w._copy_fi_full(*w_index)
 
     verbose 
-    #verbose and pprint (a)
+    verbose and pprint (a)
     verbose and pprint (w)
 
-    return 0
-    #return -int(not _cmp_arrays(aa, ww, verbose=True)[0])
+    fail = _cmp_arrays(aa, ww*10, out=True)
+
+    print
+
+    return -int(not fail[0])
 
 def _test_index():
     '''
@@ -1040,7 +1050,21 @@ def _test_index():
 
     print "\nTesting interpolation performance"
 
-    #fail_sum += _test_index_fraction ((slice(0,3,0.1)))
+    fail_sum += _test_index_fraction ((slice(0,4,0.1),slice(0,4,0.1),slice(0,4,0.1)), verbose=False)
+    fail_sum += _test_index_fraction ((slice(0,4,0.2),slice(0,4,0.1),slice(0,4,0.1)), verbose=False)
+    fail_sum += _test_index_fraction ((slice(0,4,0.1),slice(0,4,0.2),slice(0,4,0.1)), verbose=False)
+    fail_sum += _test_index_fraction ((slice(0,4,0.1),slice(0,4,0.1),slice(0,4,0.2)), verbose=False)
+
+    print "\nTesting list indexing with interpolation"
+
+    fail_sum += _test_index_fraction (  ([0.1, 0.2, 1.5], slice(0,4,0.1),  slice(0,4,0.1) ) , verbose=False)
+    fail_sum += _test_index_fraction (  (slice(0,4,0.2),  [0.1, 0.2, 1.5], slice(0,4,0.1) ) , verbose=False)
+    fail_sum += _test_index_fraction (  (slice(0,4,0.1),  slice(0,4,0.2),  [0.1, 0.2, 1.5]) , verbose=False)
+    fail_sum += _test_index_fraction (  (slice(0,4,0.1),  [1.2, 2.3, 1.5], [0.1, 0.2, 1.5]) , verbose=False)
+    fail_sum += _test_index_fraction (  ([1.2, 2.3, 1.5], [1.2, 2.3, 1.5], [0.1, 0.2, 1.5]) , verbose=False)
+    fail_sum += _test_index_fraction (  ([1.2, 2.3, 1.5], [0.1, 0.2, 1.5], slice(0,4,0.1) ) , verbose=False)
+    fail_sum += _test_index_fraction (  ([1.2, 2.3, 1.5], slice(0,4,0.1),  [0.1, 0.2, 1.5]) , verbose=False)
+    fail_sum += _test_index_fraction (  ([0.1, 0.2, 1.5], [0.1, 0.2, 1.5], [0.1, 0.2, 1.5]) , verbose=False)
 
     return fail_sum
 
@@ -1070,9 +1094,8 @@ if __name__ == "__main__":
     fail_sum = 0
 
     # debug
-    fail_sum += _test_index_fraction ((slice(0,5,0.1),slice(0,5,0.1)), verbose=True)
-    print "\nResult: %s (%d failed)\n\n" % (_print_ok (fail_sum==0, verbose=False)[1], fail_sum)
-    sys.exit()
+    #print "\nResult: %s (%d failed)\n\n" % (_print_ok (fail_sum==0, verbose=False)[1], fail_sum)
+    #sys.exit()
     # /debug
 
     fail_sum += _test_index()
