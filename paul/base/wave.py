@@ -659,8 +659,17 @@ class Wave(ndarray):
         return data_old
 
 
-    def test(self,obj):
-        print obj
+    def _slice_axinfo(self,obj):
+        '''
+        Returns a modified version of the axis-info list for *self*.
+        The modification is performed according to the slicing
+        information from *obj*.
+        '''
+        new_info = []
+        for index in obj:
+            pass
+
+        return new_info
 
 
     def __call__(self, *vals, **kwargs):
@@ -893,8 +902,8 @@ class Wave(ndarray):
 
         # do the actual interpolation
         new_index = tuple(index_obj)
-        #log.debug ("Old index: %s, new index: %s" % (vals, new_index))
 
+        #log.debug ("Old index: %s, new index: %s" % (vals, new_index))
         #print "index old:", vals, "new:", new_index, "inter:", i
 
         if i == True:
@@ -1147,7 +1156,6 @@ def _test_index_call(*call_i, **kwargs):
     for i in range(a2.ndim):
         a2.ax(i).delta   = 0.1
         a2.ax(i).offset -= (0.5 * a2.axEnd(i))
-        #a2.ax(i).offset *= 0.1
         verbose and pprint (str(a2.ax(i)))
 
     if lim_i  == True:
