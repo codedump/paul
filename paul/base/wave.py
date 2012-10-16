@@ -237,33 +237,20 @@ class Wave(ndarray):
         self.ax(aindex).delta = (right-left) / self.shape[aindex]
 
 
+    @property
+    def axes(self):
+        '''
+        Returns the axis information vector.
+        '''
+        return self.info['axes']
+
+
     def ax(self, aindex=-1):
         '''
         Returns the axis information for the specified axis.
-        This is a kind of a special function, as it's supposed
-        to work not only for Waves, but for any object that's
-        derived from numpy.ndarray. For generic ndarray objects
-        which don't have intrinsic axis information, the function
-        generates harmless defaults (offset=0, delta=1). This
-        way, one can use Wave.ax* calls on any kind of ndarray
-        without breaking stuff. The only difference to Wave() is
-        that with Wave(), it will have a slightly more meaningful
-        behavior :-)
-        NOTE: This won't work as a member function, need to take this
-              out of the object name space.
         '''
-        if isinstance(self, Wave):
-            axi = self.info['axes']
-        elif isinstance(self, ndarray):
-            axi = tuple([ AxisInfo() for i in range(self.ndim) ])
-            log.debug ("%s is not a Wave, using AxisInfo defaults." % self)
-        else:
-            raise NotImplementedError ("Intrinsic axis information only available for Wave or ndarrays")
+        return self.axes[aindex]
 
-        if (aindex < 0):
-            return axi
-        else:
-            return axi[aindex] 
 
     def axInfo(self, aindex=-1): # legacy
         log.debug ("Deprecated.")
@@ -379,6 +366,62 @@ class Wave(ndarray):
         return self.ax(aindex).rx2i(pt)
     ri = rx2i
 
+
+    def _slice_axinfo(self,obj):
+        '''
+        Returns a modified version of the axis-info list for *self*.
+        The modification is performed according to the slicing
+        information from *obj*.
+        '''
+        new_info = []
+        i = 0
+        
+        if not hasattr(obj, "__iter__"):
+            index_list = (obj,)
+        else:
+            index_list = obj
+
+        for index in index_list:
+            old_axi = self.ax(i)
+            new_axi = AxisInfo()
+
+            if isinstance(index, slice):
+                i_start = index.start
+                i_stop = index.stop
+                i_step = index.step
+                if i_start is not None:
+                    new_axi.offset = i_start
+                if i_step is not None:
+                    new_axi.delta = old_axi.delta * i_step
+                new_axi.units = old_axi.units
+                new_info.append(new_axi)
+                i += 1
+
+            elif hasattr(index, "__iter__"):
+                a = array(index).min()
+                new_axi.offset = a.min()
+                new_axi.delta = (a.max()-a.min())/float(len(a))
+                new_axi.units = old_axi.units
+                new_info.append(new_axi)
+                i += 1
+                
+            elif index is None or index == np.newaxis:
+                
+                new_info.append(new_axi) # new axis will just take default AxisInfo()
+                # don't increase i -- we need to process the current
+                # index (in the old info) for the next round
+
+            else:
+                new_axi = None
+                i += 1
+
+        while i < len(self.info['axes']):
+            new_info.append(copy.deepcopy(self.ax(i)))
+            i += 1
+
+        return new_info
+
+
     def __getitem__(self, obj):
         '''
         Reimplementation of __getitem__ to handle some more comfortable indexing
@@ -389,8 +432,13 @@ class Wave(ndarray):
         The only case where this is not the case is when we need to do
         interpolation work, but even there we try to keep things short.
         '''
-#        print "item index: ", obj
-        return self.view(ndarray)[obj]
+        data = self.view(ndarray)[obj]
+        if isinstance(data, ndarray):
+            w = data.view(Wave)
+            w.info['axes'] = self._slice_axinfo (obj)
+            return w
+        else:
+            return data
 
 
     def copy_fi (self, *obj, **kwargs):
@@ -659,19 +707,6 @@ class Wave(ndarray):
         return data_old
 
 
-    def _slice_axinfo(self,obj):
-        '''
-        Returns a modified version of the axis-info list for *self*.
-        The modification is performed according to the slicing
-        information from *obj*.
-        '''
-        new_info = []
-        for index in obj:
-            pass
-
-        return new_info
-
-
     def __call__(self, *vals, **kwargs):
         ''' 
         Takes a variable number of arguments (n-tuple) representing a fractional
@@ -908,10 +943,15 @@ class Wave(ndarray):
 
         if i == True:
             data = self._copy_fi_full(*new_index)
-        elif i == False:
+        elif i == False or i == None:
             data = self[new_index]
         elif i == 'lim':
             data = self._copy_fi_lim(*new_index)
+        else:
+            raise IndexError ("Don't know what to do: interpolation '%s' requested" % (str(i)))
+
+        if isinstance (data, Wave):
+            data.info['axes'] = self._slice_axinfo (new_index)
 
         return data
         
@@ -1183,6 +1223,34 @@ def _test_index_call(*call_i, **kwargs):
     return -int(ret[0] == False)
 
 
+def _test_index_axslice(index, offsets, deltas, units=None):
+    '''
+    Tests the correct axis-info slicing.
+    '''
+
+    print "  Index:", index,
+
+    a = array([[[i*1+j*10+k*100 for i in range(5)] for j in range(5)] for k in range(5)]).view(Wave)
+    a.axes[0].units = 'dim0'
+    a.axes[1].units = 'dim1'
+    a.axes[2].units = 'dim2'
+
+    foo0 = a[index]
+    foo1 = a(*index)
+    __get_fails = lambda foo: [int(abs(ai.delta - de)  > 10e-10) +
+                               int(abs(ai.offset - of) > 10e-10) + 
+                               int(un != ai.units)
+                               for ai,of,de,un in zip (foo.axes, offsets, deltas,units)]
+    fails0 = array(__get_fails(foo0)).sum()
+    fails1 = array(__get_fails(foo1)).sum()
+        
+    _print_ok(fails0 == 0)
+    _print_ok(fails1 == 0)
+    print
+
+    return (fails0+fails1)
+
+
 def _test_index():
     '''
     Does some indexing tests, returns the number of errors.
@@ -1347,13 +1415,47 @@ def _test_call():
     return fail_sum
 
 
+
+
 def _test_scale():
     '''
     Does some testing of the automatic scale adjustment of a Wave() when
     indexing, either using [] or () is performed. Returns the number
     of errors.
     '''
-    return 0
+    
+    fail_sum = 0
+
+    print "\nTesting correct axis slicing upon [] and () operators:"
+    fail_sum += _test_index_axslice (index=(slice(0,5,2),),
+                                     deltas=[2,1,1], offsets=[0, 0, 0],
+                                     units=['dim0', 'dim1', 'dim2'])
+    fail_sum += _test_index_axslice (index=(slice(0,5,2),None,), 
+                                     deltas=[2,1,1,1], offsets=[0, 0, 0, 0], 
+                                     units=['dim0','','dim1','dim2'])
+    fail_sum += _test_index_axslice (index=(None,slice(0,5,2),), 
+                                     deltas=[1,2,1,1], offsets=[0, 0, 0, 0], 
+                                     units=['','dim0','dim1','dim2'])
+    fail_sum += _test_index_axslice (index=(slice(None),None,slice(0,5,2),), 
+                                     deltas=[1,1,2,1], offsets=[0, 0, 0, 0],
+                                     units=['dim0','','dim1','dim2'])
+    fail_sum += _test_index_axslice (index=(slice(None),slice(0,5,3),None,slice(0,5,2),),
+                                     deltas=[1,3,1,2], offsets=[0, 0, 0, 0],
+                                     units=['dim0','dim1','','dim2'])
+    fail_sum += _test_index_axslice (index=(2,slice(None),slice(None),),
+                                     deltas=[1,1], offsets=[0, 0],
+                                     units=['dim1','dim2'])
+    fail_sum += _test_index_axslice (index=(slice(None),3,slice(None),),
+                                     deltas=[1,1], offsets=[0, 0],
+                                     units=['dim0','dim2'])
+    fail_sum += _test_index_axslice (index=(slice(None),slice(2,5,2),0),
+                                     deltas=[1,2], offsets=[0, 2],
+                                     units=['dim0','dim1'])
+    fail_sum += _test_index_axslice (index=(3,slice(2,5,3),0),
+                                     deltas=[3], offsets=[2],
+                                     units=['dim1'])
+
+    return fail_sum
 
 
 if __name__ == "__main__":
@@ -1378,8 +1480,9 @@ if __name__ == "__main__":
     #sys.exit()
     # /debug
 
-    #fail_sum += _test_index()
-    #fail_sum += _test_scale()    
+    fail_sum += _test_index()
     fail_sum += _test_call()
+    fail_sum += _test_scale()
+    
 
-    print "\nResult: %s (%d failed)\n\n" % (_print_ok (fail_sum==0, verbose=False)[1], -fail_sum)
+    print "\nModule: %s (%d failed)\n\n" % (_print_ok (fail_sum==0, verbose=False)[1], -fail_sum)
