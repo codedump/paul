@@ -197,7 +197,6 @@ class Wave(ndarray):
             ax = list(obj.info['axes'])
             del ax[axis]
             obj.info['axes'] = tuple(ax)
-
         return obj
 
 
@@ -218,6 +217,7 @@ class Wave(ndarray):
             del ax[axis]
             obj.info['axes'] = tuple(ax)
         return obj
+
 
     def setScale (self, aindex, delta, offset):
         '''
@@ -1248,6 +1248,13 @@ def _test_index_axslice(index, offsets, deltas, units=None):
     _print_ok(fails1 == 0)
     print
 
+    ##
+    ## some out-of-schedule testing... :-)
+    ##
+    #pprint ([str(i) for i in a.swapaxes(0,1).axes ])
+    #pprint ([str(i) for i in a.sum(1).axes ])
+    #pprint ([str(i) for i in a.mean(2).axes ])
+
     return (fails0+fails1)
 
 
@@ -1472,13 +1479,6 @@ if __name__ == "__main__":
     ch.setFormatter(fmt)
 
     fail_sum = 0
-
-    # debug
-    #fail_sum += _test_index_fraction (  ([1.2, 2.3, 3.5], [0, 0.1, 0.2]) , verbose=True)
-    #fail_sum += _test_index_fraction (  (slice(None),  [1.2, 2.3, 1.5], [0.1, 0.2, 1.5]) , verbose=True)
-    #print "\nResult: %s (%d failed)\n\n" % (_print_ok (fail_sum==0, verbose=False)[1], fail_sum)
-    #sys.exit()
-    # /debug
 
     fail_sum += _test_index()
     fail_sum += _test_call()
