@@ -305,10 +305,6 @@ class Wave(ndarray):
         Returns a tuple with the axis limits,
         in the format (ax[0].min, ax[0].max, ax[1].min, ax[1].max...)
         '''
-        #l = ()
-        #for a in range(len(self.ax())):
-        #    l += ((self.axMin(a), self.axMax(a)))
-        #return l
         return tuple([ (self.axMin(i), self.axMax(i)) for i in range(len(self.ax())) ])
 
 
@@ -323,6 +319,21 @@ class Wave(ndarray):
         The imshow() limit tuple format is: (left, right, top, bottom).
         '''
         return (self.axOff(1), self.axEnd(1), self.axEnd(0), self.axOff(0))
+
+    @property
+    def axv(self):
+        '''
+        Axis values
+        '''
+        return [arange(start=ax.offset, step=ax.delta, stop=ax.offset+ax.delta*dim) for ax,dim in zip(self.info['axes'], self.shape)]
+
+
+    @property
+    def imlim(self):
+        '''
+        Limits tuple to use with imshow -- short version
+        '''
+        return self.imLim()
 
 
     def imgLim (self):  # legacy
@@ -353,7 +364,7 @@ class Wave(ndarray):
         axis value corresponding
         to the specified point index 'pindex'.
         '''
-        return self.ax(aindex).ri2x(pindex)
+        return round(self.ax(aindex).i2x(pindex))
     rx = ri2x
 
 
@@ -371,7 +382,8 @@ class Wave(ndarray):
         '''
         Returns a modified version of the axis-info list for *self*.
         The modification is performed according to the slicing
-        information from *obj*.
+        information from *obj*. The slicing information is assumed
+        to be in index coordinates, possibly fractional.
         '''
         new_info = []
         i = 0
@@ -382,44 +394,53 @@ class Wave(ndarray):
             index_list = obj
 
         for index in index_list:
-            old_axi = self.ax(i)
             new_axi = AxisInfo()
 
             if isinstance(index, slice):
+                old_axi = self.ax(i)
                 i_start = index.start
-                i_stop = index.stop
-                i_step = index.step
+                i_stop  = index.stop
+                i_step  = index.step
                 if i_start is not None:
-                    new_axi.offset = i_start
+                    new_axi.offset = self.ax(i).i2x(i_start)
+                else:
+                    new_axi.offset = old_axi.offset
                 if i_step is not None:
                     new_axi.delta = old_axi.delta * i_step
+                else:
+                    new_axi.delta = old_axi.delta
                 new_axi.units = old_axi.units
                 new_info.append(new_axi)
+                #print "s: new info for axis", i, new_axi, i_start, self.ax(i).i2x(i_start)
                 i += 1
 
             elif hasattr(index, "__iter__"):
+                old_axi = self.ax(i)
                 a = array(index).min()
-                new_axi.offset = a.min()
-                new_axi.delta = (a.max()-a.min())/float(len(a))
+                new_axi.offset = self.ax(i).i2x(a.min())
+                new_axi.delta = (self.ax(i).i2x(a.max())-self.ax(i).i2x(a.min()))/float(len(a))
                 new_axi.units = old_axi.units
                 new_info.append(new_axi)
+                #print "i: new info for axis", i, new_axi
                 i += 1
                 
             elif index is None or index == np.newaxis:
-                
                 new_info.append(new_axi) # new axis will just take default AxisInfo()
                 # don't increase i -- we need to process the current
                 # index (in the old info) for the next round
+                #print "n: new info for axis", i, new_axi
 
             else:
                 new_axi = None
+                #print "d: new info for axis", i, new_axi
                 i += 1
 
         while i < len(self.info['axes']):
             new_info.append(copy.deepcopy(self.ax(i)))
+            #print "c: new info for axis", i, self.ax(i)
             i += 1
 
-        return new_info
+        return tuple(new_info)
 
 
     def __getitem__(self, obj):
@@ -436,6 +457,9 @@ class Wave(ndarray):
         if isinstance(data, ndarray):
             w = data.view(Wave)
             w.info['axes'] = self._slice_axinfo (obj)
+            #print [str(a) for a in self.info['axes'] ]
+            #print [str(a) for a in w.info['axes'] ]
+            #print w.axv
             return w
         else:
             return data

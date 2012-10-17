@@ -306,19 +306,26 @@ def wave_get_reading_structs(version, byte_order):
 
 
 def checksum_16(buffer, byte_order, oldcksum, numbytes):
+    '''
+    IgorPro(tm) buffer checksum, with 16-bit short int roll-over.
+    '''
     x = numpy.ndarray(
         (numbytes/2,), # 2 bytes to a short -- ignore trailing odd byte
         dtype=numpy.dtype(byte_order+'h'),
         buffer=buffer)
     oldcksum += x.sum()
-    if oldcksum > 2**15:  # fake the C implementation's int rollover
+    if oldcksum >= 2**15:  # fake the C implementation's int rollover
         oldcksum %= 2**16
-        if oldcksum > 2**15:
+        if oldcksum >= 2**15:
             oldcksum -= 2**15
     assert (oldcksum >= -2**15 and oldcksum < 2**15)
     return oldcksum & 0xffff
 
+
 def checksum_32(buffer, byte_order, oldcksum, numbytes):
+    '''
+    This was the old chksum-function, taken over from the Hooke project -- buggy version?
+    '''
     x = numpy.ndarray(
         (numbytes/2,), # 2 bytes to a short -- ignore trailing odd byte
         dtype=numpy.dtype(byte_order+'h'),
@@ -830,6 +837,7 @@ def wave_write (filename, wave, autoname=True):
             if wave.dtype == v:
                 wtype = v
                 wtype_id = k
+                #print wtype, wtype_id
         whead['type'] = wtype_id
 
         # encode the wave.info as note text
@@ -840,18 +848,25 @@ def wave_write (filename, wave, autoname=True):
 
         # size of the WaveHeader5 structure without wData, plus the size of the 
         # (separate) wave data. Version 5 files have no padding at the end of data.
-        bhead['wfmSize'] = WaveHeader5.size + len(wave.data) - 4
+        bhead['wfmSize'] = WaveHeader5.size + wave.size*wave.itemsize - 4
 
         # Checksum is the (negative of the) sum over BinHeader5 and WaveHeader5 structures,
         # not including wData. Thus, the sum over the first 384 bytes needs to be zero.
         chk = checksum (buffer(BinHeader5.pack_dict(bhead)+WaveHeader5.pack_dict(whead)),
                         byte_order(0), 0, BinHeader5.size+WaveHeader5.size - 4)
 
-        if chk > 2**15:  # fake the C implementation's int rollover
-            chk %= 2**16
-            if chk > 2**15:
-                chk -= 2**15
-                chk = chk & 0xffff
+        # Ok, so here's a gotcha: we calculate the checksum as a simulated 32-bit int
+        # with rollover, which is then, afterwards, truncated to the lowest 16-bits
+        # (i.e. by definition unsigned, always positive), but then and saved as a
+        # signed-inverted and saved as a _negative_ signed short!
+        # The checksum field is therefore signed, but the checksum value can,
+        # at times, be larger than 2**15. This is ok because... (why exactly?)
+        #
+        # BUT we need to check here, again, for the 2**15 rollover,
+        # or pack_dict() will get noisy about it. Seems to work.
+        # 
+        if chk >= 2**15:
+            chk -= 2**16
         bhead['checksum'] = -chk
 
         #pprint (bhead)
@@ -859,7 +874,7 @@ def wave_write (filename, wave, autoname=True):
         f.write (BinHeader5.pack_dict(bhead))
         f.write (buffer(WaveHeader5.pack_dict(whead), 0,
                         WaveHeader5.size - 4)) # don't write the wData field
-        f.write (buffer(wave.data))
+        wave.tofile(f)
         f.write (buffer(note_text+"\0"))
 
     finally:
@@ -1039,6 +1054,10 @@ def pack_unpack (filename, basedir=".", igordir="", packtree=None):
     src.close()
 
 
+#
+# standalone application functionality
+#
+
 def main_read_ibw(options):
     """
     IBW -> ASCII conversion
@@ -1064,27 +1083,37 @@ def main_pack_list (options):
     print "Pack Tree:"
     pprint.pprint (pack_tree)
 
-def main_test_rw(infile, outfile):
+#
+# unit testing functions
+#
+
+def _main_test_rw(argv):
+    outfiles = []
+    infile = os.path.abspath (os.path.join(argv[0], "../../../doc/igor-doc/URS_HO_App2_007g.ibw"))
+    print "Input:", infile
+    for i in range(3):
+        outfiles.append(tempfile.mkstemp (suffix=".ibw")[1])
+    print "Output:", outfiles
+
     wav = wave_read (infile)
-    wave_write (outfile, wav)
+    for i in range(len(outfiles)):
+        print i, outfiles[i], "writing...",
+        wave_write (outfiles[i], wav[::i+1])
+        print "reading...",
+        wav2 = wave_read (outfiles[i])
+        print "ok."
 
-    #pp.pprint (wav.info)
-    print
-    print "reading %s..." % outfile
-    wav2 = wave_read (outfile)
-
-    return
+    return 0
 
 
 if __name__ == '__main__':
     import optparse
-    import sys
+    import sys, os, tempfile
     import pprint
 
-#    main_test_rw ("/home/florin/local/analysis/uru2si2/2012-may-1cubed/kz-map.uxp-dir/kz-map/kz-1k/inorm/URS_HO_App2_007g.ibw",
-#                  "/home/florin/local/analysis/uru2si2/tmp.ToBeDeleted/igor-write.ibw")
-#    
-#    sys.exit(0)
+    if len(sys.argv) == 1:
+        _main_test_rw (sys.argv)
+        sys.exit(0)
 
     # preparing the logging system
     ch = logging.StreamHandler()

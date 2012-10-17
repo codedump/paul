@@ -65,7 +65,8 @@ class MatplotlibWidget(FigureCanvas):
         that if it's a higher-D matrix, it will be plotted as a
         series of 1D graphs.
         '''
-        self.axes.plot(data)
+        w = wave.WCast(data)
+        self.axes.plot(w.axv[0], w)
         if redraw == True:
                 self.draw()
 
@@ -76,10 +77,7 @@ class MatplotlibWidget(FigureCanvas):
         Called to plot the specified 2D wave. Uses matplotlib's
         imshow() to show the specified image.
         '''
-        if hasattr(data, 'imgLim'):
-            self.axes.imshow(data, aspect='auto', extent=data.imgLim())
-        else:
-            self.axes.imshow(data, aspect='auto')
+        self.axes.imshow(data, aspect='auto', extent=wave.WCast(data).imlim)
 
         if redraw == True:
                 self.draw()
@@ -94,7 +92,7 @@ class MatplotlibWidget(FigureCanvas):
         of the data.
         '''
 
-        if hasattr(data, '__iter__'):
+        if hasattr(data, '__iter__') and not hasattr(data, 'ndim'):
             data_list = data
             data = data_list[0]
 
