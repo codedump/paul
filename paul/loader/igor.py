@@ -42,6 +42,7 @@ log = logging.getLogger (__name__)
 from paul.base.struct_helper import *
 from paul.base.wave import Wave
 from paul.base.errors import *
+from numpy import getbuffer, transpose, array
 import os, re
 from pprint import pprint
 
@@ -267,13 +268,18 @@ PackedFileRecordType = {
 PackedFileRecordId = dict((v,k) for k, v in PackedFileRecordType.iteritems())
 
 def need_to_reorder_bytes(version):
-    # If the low order byte of the version field of the BinHeader
-    # structure is zero then the file is from a platform that uses
-    # different byte-ordering and therefore all data will need to be
-    # reordered.
+    '''
+    If the low order byte of the version field of the BinHeader
+    structure is zero then the file is from a platform that uses
+    different byte-ordering and therefore all data will need to be
+    reordered.
+    '''
     return version & 0xFF == 0
 
 def byte_order(needToReorderBytes):
+    '''
+    Returns the byte order.
+    '''
     little_endian = sys.byteorder == 'little'
     if needToReorderBytes:
         little_endian = not little_endian
@@ -282,6 +288,9 @@ def byte_order(needToReorderBytes):
     return '>'  # big-endian    
 
 def wave_get_reading_structs(version, byte_order):
+    '''
+    Returns the objects needed to read specified file version.
+    '''
     if version == 1:
         bin = BinHeader1
         wave = WaveHeader2
@@ -305,26 +314,10 @@ def wave_get_reading_structs(version, byte_order):
     return (bin, wave, checkSumSize)
 
 
-def checksum_16(buffer, byte_order, oldcksum, numbytes):
+def checksum(buffer, byte_order, oldcksum, numbytes):
     '''
-    IgorPro(tm) buffer checksum, with 16-bit short int roll-over.
-    '''
-    x = numpy.ndarray(
-        (numbytes/2,), # 2 bytes to a short -- ignore trailing odd byte
-        dtype=numpy.dtype(byte_order+'h'),
-        buffer=buffer)
-    oldcksum += x.sum()
-    if oldcksum >= 2**15:  # fake the C implementation's int rollover
-        oldcksum %= 2**16
-        if oldcksum >= 2**15:
-            oldcksum -= 2**15
-    assert (oldcksum >= -2**15 and oldcksum < 2**15)
-    return oldcksum & 0xffff
-
-
-def checksum_32(buffer, byte_order, oldcksum, numbytes):
-    '''
-    This was the old chksum-function, taken over from the Hooke project -- buggy version?
+    Returns the IgorPro checksum over *buffer*, simlating an 32-bit integer
+    rollover squeezed into a 16-bit signed short.
     '''
     x = numpy.ndarray(
         (numbytes/2,), # 2 bytes to a short -- ignore trailing odd byte
@@ -336,9 +329,10 @@ def checksum_32(buffer, byte_order, oldcksum, numbytes):
         if oldcksum > 2**31:
             oldcksum -= 2**31
     assert (oldcksum >= -2**31 and oldcksum < 2**31)
-    return oldcksum & 0xffff
-
-checksum = checksum_32
+    chk = oldcksum & 0xffff
+    if chk >= 2**15:
+        chk -= 2**16
+    return chk
 
 
 def load(filename):
@@ -581,7 +575,7 @@ def wave_read_data (f, wave_info, bin_info):
     data = Wave (shape=shape,
                  dtype=t.newbyteorder(bin_info['byte_order']),
                  buffer=data_b,
-                 order='F')
+                 order='F').newbyteorder('=')
     return data
 
 
@@ -780,7 +774,7 @@ def wave_init_header5():
     return bhead, whead
 
 
-def wave_write (filename, wave, autoname=True):
+def wave_write (filename, wav, autoname=True):
     '''
     Writes a wave to a Version 5 file. If 'autoname' is True,
     then the wave name will be set to the basename of the file name.
@@ -808,6 +802,8 @@ def wave_write (filename, wave, autoname=True):
         bhead["version"] = 5
         whead["whVersion"] = 1
 
+        wave = wav.newbyteorder('=')
+
         # treat the dimensions first
         if len(wave.shape) > MAXDIMS:
             raise FormatError("%d is too many dimensions (IBW suppors max. %d)"
@@ -825,7 +821,7 @@ def wave_write (filename, wave, autoname=True):
             dot_pos = wname.rfind (".")
             if  dot_pos  > 0:
                 wname = wname[:dot_pos]
-            log.debug ("renaming wave to '%s'" % wname)
+            #log.debug ("renaming wave to '%s'" % wname)
         whead['bname'] = wname[:MAX_WAVE_NAME5]+((MAX_WAVE_NAME5+1-len(wname))*'\0')
 
         # Find the data type by going through the TYPE_TABLE dict.
@@ -839,6 +835,8 @@ def wave_write (filename, wave, autoname=True):
                 wtype_id = k
                 #print wtype, wtype_id
         whead['type'] = wtype_id
+        if wtype == None:
+            log.warn ("Data type is remains 'None', which probably means that actual type '%s' was not recognized as any of: %s" % (str(wave.dtype), [str(v) for k,v in TYPE_TABLE.iteritems()]))
 
         # encode the wave.info as note text
         note_text = wave_note_write (wave.info)
@@ -854,27 +852,15 @@ def wave_write (filename, wave, autoname=True):
         # not including wData. Thus, the sum over the first 384 bytes needs to be zero.
         chk = checksum (buffer(BinHeader5.pack_dict(bhead)+WaveHeader5.pack_dict(whead)),
                         byte_order(0), 0, BinHeader5.size+WaveHeader5.size - 4)
-
-        # Ok, so here's a gotcha: we calculate the checksum as a simulated 32-bit int
-        # with rollover, which is then, afterwards, truncated to the lowest 16-bits
-        # (i.e. by definition unsigned, always positive), but then and saved as a
-        # signed-inverted and saved as a _negative_ signed short!
-        # The checksum field is therefore signed, but the checksum value can,
-        # at times, be larger than 2**15. This is ok because... (why exactly?)
-        #
-        # BUT we need to check here, again, for the 2**15 rollover,
-        # or pack_dict() will get noisy about it. Seems to work.
-        # 
-        if chk >= 2**15:
-            chk -= 2**16
         bhead['checksum'] = -chk
-
-        #pprint (bhead)
     
         f.write (BinHeader5.pack_dict(bhead))
         f.write (buffer(WaveHeader5.pack_dict(whead), 0,
                         WaveHeader5.size - 4)) # don't write the wData field
-        wave.tofile(f)
+        # Need to write data to file, apparently starting with higher
+        # dimensions first. Take care to access a "native" byte order
+        # version of the data, otherwise tofile() will do nasty things.
+        transpose(wave).tofile(f)
         f.write (buffer(note_text+"\0"))
 
     finally:
@@ -1103,6 +1089,20 @@ def _main_test_rw(argv):
         wav2 = wave_read (outfiles[i])
         print "ok."
 
+    #w2 = array ([[[i+j*10+k*100 for i in range(100)] for j in range(100)] for k in range(100)])
+    w2 = array ([[i+j*10for i in range(100)] for j in range(100)])
+    w2_files = [tempfile.mkstemp (suffix=".ibw")[1] for i in range(3)]
+
+    print "Test wave to", w2_files[0], "native byte order"
+    wave_write (w2_files[0], w2.view(Wave))
+
+    print "Test wave to", w2_files[1], "little endian"
+    wave_write (w2_files[1], w2.view(Wave).newbyteorder('<'))
+
+    print "Test wave to", w2_files[2], "swapped byte order"
+    wave_write (w2_files[2], w2.view(Wave).newbyteorder('S'))
+                
+
     return 0
 
 
@@ -1111,15 +1111,15 @@ if __name__ == '__main__':
     import sys, os, tempfile
     import pprint
 
-    if len(sys.argv) == 1:
-        _main_test_rw (sys.argv)
-        sys.exit(0)
-
     # preparing the logging system
     ch = logging.StreamHandler()
     ch.setLevel (logging.DEBUG)
     log.setLevel (logging.DEBUG)
     log.addHandler (ch)
+
+    if len(sys.argv) == 1:
+        _main_test_rw (sys.argv)
+        sys.exit(0)
 
     # parsing options
     p = optparse.OptionParser(version=__version__)
