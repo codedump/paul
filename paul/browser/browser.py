@@ -56,7 +56,10 @@ def create(path='~', args=[], shell=False):
     main_win.show()
 
     if shell:
-        paul = main_win
+        # Start an interactive shell, this will be the name space
+        # of the shell. Basically, everything needs to be accessed
+        # through main_win (aliased 'P' in the shell :-) )
+        P = main_win
         ipshell = InteractiveShellEmbed.instance()
         IPython.lib.inputhook.enable_gui (gui='qt')
         ipshell()
