@@ -45,7 +45,7 @@ class TreeWindow (QtGui.QMainWindow):
         self.tools_hbox = QtGui.QHBoxLayout()
         self.vbox.addLayout (self.tools_hbox)
 
-        self.tools_label = QtGui.QLabel ("Dir: ")
+        self.tools_label = QtGui.QLabel ("Root: ")
 
         self.tools_treedrop = QtGui.QComboBox ()
         self.tools_treedrop.setSizePolicy (QtGui.QSizePolicy.Expanding,
@@ -57,6 +57,12 @@ class TreeWindow (QtGui.QMainWindow):
         self.tools_btnUp.setSizePolicy (QtGui.QSizePolicy.Minimum,
                                         QtGui.QSizePolicy.Minimum)
         self.tools_btnUp.clicked.connect (self.treeUp)
+
+        #self.tools_btnSh = QtGui.QPushButton ("&Shell")
+        #self.tools_btnSh.show()
+        #self.tools_btnSh.setSizePolicy (QtGui.QSizePolicy.Minimum,
+        #                                QtGui.QSizePolicy.Minimum)
+        #self.tools_btnSh.clicked.connect (self.runShell)
 
         for w in [ self.tools_label, self.tools_treedrop, self.tools_btnUp ]:
             self.tools_hbox.addWidget (w)
@@ -138,6 +144,14 @@ class TreeWindow (QtGui.QMainWindow):
         new_path = os.path.dirname(self.current_path)
         log.debug ("Moving to parent: %s" % new_path)
         self.setRoot (new_path)
+
+    @QtCore.pyqtSlot()
+    def runShell(self):
+        '''
+        Runs an introspection IPython shell.
+        '''
+        from IPython import embed
+        embed()
 
 
     @QtCore.pyqtSlot('QModelIndex')
