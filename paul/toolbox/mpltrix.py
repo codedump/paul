@@ -100,14 +100,14 @@ def imwater (fig_ax, wlist, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0), autosca
         log.error (err)
         raise ValueError (err)
 
-    min_i  = wlist.ax(0).rx2i(wlist.axMin()) # index of k|| = min
-    zero_i = wlist.ax(0).rx2i(0)             # index of k|| = 0
-    max_i  = wlist.ax(0).rx2i(wlist.axMax()) # index of k|| = max
-    x = np.arange(start=wlist.axOff(1),
-                  stop=wlist.axEnd(1),
-                  step=wlist.axDelta(1))
+    min_i  = wlist.ax(0).x2i_rnd(wlist.dim[0].min) # index of k|| = min
+    zero_i = wlist.ax(0).x2i_rnd(0)                # index of k|| = 0
+    max_i  = wlist.ax(0).x2i_rnd(wlist.dim[0].max) # index of k|| = max
+    x = np.arange(start=wlist.dim[1].axOff,
+                  stop=wlist.dim[1].end,
+                  step=wlist.dim[1].delta)
     ylim_wouldbe = (0, wlist.shape[0]*offs[1])
-    ylim_data = (wlist.axMin(0), wlist.axMax(0))
+    ylim_data = (wlist.dim[0].min, wlist.dim[0].max)
     axzoom = (ylim_data[1]-ylim_data[0]) / (ylim_wouldbe[1]-ylim_wouldbe[0])
     offs = (offs[0], offs[1]*axzoom)
     data_offset = -(zero_i - min_i) * offs[1]
@@ -116,8 +116,8 @@ def imwater (fig_ax, wlist, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0), autosca
     wlist += data_offset
     
     if xlim == (0, 0):
-        xlim = (wlist.axMin(1) - (offs[0]*len(wlist))*(offs[0]<0),
-                wlist.axMax(1) + (offs[0]*len(wlist))*(offs[0]>0))
+        xlim = (wlist.dim[1].min - (offs[0]*len(wlist))*(offs[0]<0),
+                wlist.dim[1].max + (offs[0]*len(wlist))*(offs[0]>0))
     if ylim == (0, 0):
         ylim = (ylim_data[0], ylim_data[1])
 

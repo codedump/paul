@@ -20,6 +20,10 @@ class BrowserWindow (QtGui.QMainWindow):
         self.initMainFrame()
         self.initBrowser()
         self.initViewer()
+        self.initRootPwd()
+
+        # start synchronizing the current working directory with self.root
+        self.rootpwd = True
 
         # inter-component connections
         self.tree.wavesSelected.connect(self.viewer.plotFiles)
@@ -55,9 +59,55 @@ class BrowserWindow (QtGui.QMainWindow):
         # ...
         pass
 
+    def initRootPwd(self):
+        '''
+        Starts timer for synchronization between self.root and current working directory
+        '''
+        self.rootpwd_timer = QtCore.QTimer (self)
+        self.rootpwd_timer.timeout.connect (self.syncRootPwd)
+        self.rootpwd_timer.stop()
+        self.rootpwd_timer.setInterval(500)
+
+
+    @QtCore.pyqtSlot()
+    def syncRootPwd(self):
+        '''
+        Synchronizes self.root with the current working directory, both ways.
+        '''
+        cur_path = os.getcwd()
+        if os.path.abspath(self.root) != os.path.abspath(cur_path):
+            self.root = cur_path
+        
+
     #
     # Some useful browser properties
     #
+
+    @property
+    def rootpwd(self):
+        '''
+        Returns 'True' if the browser is in pwd-sync mode, i.e.
+        if the current root directory is synced with the current
+        working directory of the application.
+        '''
+        return self.rootpwd_timer.isActive()
+
+
+    @rootpwd.setter
+    def rootpwd(self, val):
+        '''
+        Starts/stops pwd sync function.
+        '''
+        if not hasattr(self, 'rootpwd_timer'):
+            return
+
+        if val:
+            self.rootpwd_timer.start()
+            self.tree.set_root_pwd = True
+        else:
+            self.rootpwd_timer.stop()
+            self.tree.set_root_pwd = False
+
 
     @property
     def root(self):
@@ -74,7 +124,7 @@ class BrowserWindow (QtGui.QMainWindow):
         return self.tree.setRoot (path)
 
     @property
-    def _sel(self):
+    def sel(self):
         '''
         Same as *BrowserWindow.sel*, only the selection returns full
         a list of full paths instead of wave names. This also works correctly
@@ -83,30 +133,30 @@ class BrowserWindow (QtGui.QMainWindow):
         return self.tree.selected_paths
 
     @property
-    def sel(self):
+    def ksel(self):
         '''
         The currently selected waves as a dictionary of full file paths,
         with key indices being the basename of the file path.
         (Note that files with the same basename in different directories
         will misbehave. Use the *BrowserWindow._sel* property instead.)
         '''
-        return dict({os.path.basename(i): os.path.abspath(i) for i in self._sel})
+        return dict({os.path.basename(i): os.path.abspath(i) for i in self.sel})
 
     @property
-    def wav(self):
+    def kwav(self):
         '''
         A dictionary of Wave() objects, using file base names (i.e. 
         the part of the path after the last '/') as keys. It will misbehave
         if different waves in different directories have the same file name.
         For this purpose, use *BrowserWindow._wav* instead.
         '''
-        return dict({i: igor.load(j) for i,j in self.sel})
+        return dict({i: igor.load(j) for i,j in self.ksel})
 
 
     @property
-    def _wav(self):
+    def wav(self):
         '''
         The currently selected waves as a list of Wave() objects.
         Works correctly for similary named waves in different directories.
         '''
-        return [igor.load(i) for i in self._sel]
+        return [igor.load(i) for i in self.sel]

@@ -240,7 +240,12 @@ class PlotscriptToolbar(QtGui.QToolBar):
         (see psModel() for more information).
         '''
         pscr_path = ''
-        locator = self.combo.itemData(key).toPyObject()
+        pscr_item = self.combo.itemData(key)
+        if pscr_item is None:
+            log.error ("Invalid plotscript combo item selected at index %d" % key)
+            return
+
+        locator = pscr_item.toPyObject()
         if locator is not None:
             pscr_path = locator(self.path_ref)
 

@@ -19,6 +19,7 @@ class TreeWindow (QtGui.QMainWindow):
         # some variables
         self.current_path = ''
         self.selected_paths = []
+        self.set_root_pwd = False # if 'True', change into the Root directory
 
         # create UI elements
         self.initMainFrame()
@@ -108,7 +109,7 @@ class TreeWindow (QtGui.QMainWindow):
         self.filetree.scrollTo (index)
         self.current_path = str(self.filesys.filePath(index))
 
-        print "Current:", self.current_path
+        print "Setting root index:", self.current_path
 
         if silent != 0:
             return
@@ -119,6 +120,9 @@ class TreeWindow (QtGui.QMainWindow):
             self.tools_treedrop.insertItem (0, self.current_path)
             combo_index = 0
         self.tools_treedrop.setCurrentIndex (combo_index)
+        
+        if self.set_root_pwd:
+            os.chdir (self.current_path)
 
 
     def treeMakeDrop (self):

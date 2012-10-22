@@ -60,10 +60,10 @@ def waterfall (ws):
                   stop=ws.axEndpoint(ax1),
                   step=ws.axDelta(ax1))
 
-    log.debug ("Axis limits: %f, %f" % (ws.axMin(ax1), ws.axMax(ax1)))
+    log.debug ("Axis limits: %f, %f" % (ws.dim[ax1].min, ws.dim[ax1].max))
 
-    xmin = ws.axMin(ax1)
-    xmax = ws.axMax(ax1)
+    xmin = ws.dim[ax1].min
+    xmax = ws.dim[ax1].max
     ymin = ws.min() + (yoffs*ws.shape[ax2]) * (yoffs<0)
     ymax = ws.max() + (yoffs*ws.shape[ax2]) * (yoffs>0)
     G.fig.axes.set_xlim (xmin, xmax)

@@ -66,7 +66,7 @@ class MatplotlibWidget(FigureCanvas):
         series of 1D graphs.
         '''
         w = wave.WCast(data)
-        self.axes.plot(w.axv[0], w)
+        self.axes.plot(w.dim[0].range, w)
         if redraw == True:
                 self.draw()
 

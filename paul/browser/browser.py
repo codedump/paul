@@ -72,4 +72,13 @@ def create(path='~', args=[], shell=False):
     return main_win
 
 if __name__ == "__main__":
-    create(args=sys.argv, shell=True)
+
+    # start an ipython-shell, if '--shell' is specified
+    use_shell = False
+    if len(sys.argv) > 1:
+        i = sys.argv.index('--shell') 
+        if i >= 0:
+            use_shell = True
+            del sys.argv[i]
+
+    create(args=sys.argv, shell=use_shell)

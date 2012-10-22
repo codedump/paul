@@ -10,100 +10,172 @@ import math, copy
 class AxisInfo:
     '''
     This class represents one axis info container.
-    The concept probably needs to be reconsidered for a number of reasons:
-       (1) I'd like the axis info to be editable together with the
-           wave.info[] block seamlessly with other wave.info[] sections.
-           For this, the offset/delta/units parameters from AxisInfo
-           should be accessible in a dictionarly-like manner
-           (and iterable like a dictionary -- maybe derrive AxisInfo
-           from dict() could be an option?)
-       (2) Currently, AxisInfo is used fully by the Wave object,
-           which itself is ndarray based. Working with Waves
-           in APIs designed for ndarray, while retaining ndarray
-           compatibility, involves asking the object whether it's
-           an instance of Wave or not; if yes, use AxisInfo stuff,
-           otherwise fall back to ndarray menchanisms (basically
-           point indices). This makes programming cumbersome and
-           mostly defeats the purpose of AxisInfo (which is making
-           life with intrinsically scaled axes easier).
-           Therefore, most of the Wave.ax*() functions need
-           to be unbound methods (they're currently bound),
-           and deliver best restuls for Wave
-           instances, and usable results for ndarrays.
-       (3) Beyond the basic information (offset, delta, units)
-           there is more information often used, that can be
-           created from (offset, delta, units), but for which
-           there should exist functions to conveniently create it.
-           These functions are now spread across two classes:
-           One is the AxisInfo.*() stuff (like x2i(), i2x(), ppi()...)
-           The other is Wave.ax*() stuff (axMin(), axMax(), axEnd()...).
-           On one hand, this is ugly. It would be nice to have
-           a consistent interface: everything axes-related either
-           inside, or outside AxisInfo.
-           On the other hand, some things (like Wave.axMax()
-           and axEnd()) need information from the Wave instance
-           which it's applied to, which is not avaliable locally
-           to AxisInfo (like the dimension size).
+    It needs to be constructed with a specific parent (which is
+    a Wave class), of which it describes a particular dimension.
+    To avoid bugs by wiggling indices around (because the dimensions
+    of the Wave/ndarray objects can be permutated), this class
+    does not specifically save its own dimension index.
+    The dimension index is needed only for operations which
+    depend on the length of the dimension (i.e. for things
+    that somehow involve the *size* property, see below).
+    On each operation that involves the *size* property,
+    the correct dimension index is computed by looking
+    for the index of *self* in _parent.info['axes'].
+
+    In principle, three properties define the property of an axis
+    completely:
+      . offset: starting point of the axis
+      . delta:  increment per step (possibly negative)
+      . size:   equals to _parent.shape[i] and is the number
+                of points.
+    These are the elements that need updating, e.g. when the
+    corresponding Wave() dimension is subject to slicing, etc.
+    From these, the following properties can be easily computed:
+      . end:     the endpoint of the data
+      . min/max: the minimum/maximum axis value (which will be
+                 the same as offset/end if delta is positive),
+      . range:   which is a list with the axis elements, e.g. to use
+                 for X-axis plotting information, mathematics etc.
+      . lim:     the (offset, end) tuple
+      . span:    the (min, max) tuple
+    These are read-only for now, but there's nothing that speaks
+    against defining write-operations for them (e.g. set support
+    for lim/span/ would be great :-) )
+    
+    (To avoid confusion, look at it like this:
+     there's  delta/offset/end  -> lim
+         and  min/step/max      -> span,
+    with the only difference being that *step* is guaranteed to be
+    positive, while delta is not.
+
+    The *units* property is just for convenience, does not influence
+    the function of AxisInfo().
            
     So... need to rethink this. Here's one possible sollution:
        . Implement AxisInfo as a subclass of dict()
        . Insert default keys 'offset', 'delta' and 'units'
-       . Add a reference to the parent Wave/ndarray to AxisInfo
-       . Move all axis related stuff inside AxisInfo
        . Make one non-bound method ax(), which can be applied
          to any object (not only to waves) and which would
          return either the corresponding AxisInfo() object
          in case of a Wave, or a sane default (offset=0, delta=1)
          in case of an ndarray.
-       . (Optionally, keep the Wave.ax*() members for backwards
-          compatibility, as wrappers to the corresponding AxisInfo
-          members.)
-       . On slicing operations, i.e. for ndarray views, we need to
-         (could?) reset the .delta parameter. This could work
-         on simple slicing (i.e. when selecting every N-th slice),
-         but will break on more advanced slicing (i.e. on boolean
-         indexing).
-           
     '''
     
     offset = 0  # axis offset (typically min or max)
     delta  = 1  # axis increment (negative if offset = max, positive otherwise)
     units  = '' # axis units string
+
+    _parent = None # the Wave() object this AxisInfo belongs to
+
+    def __init__(self, parent):
+        self._parent = parent
+
+    @property
+    def size(self):
+        '''
+        The length of the respective dimension.
+        '''
+        ax = self._parent.info['axes'] 
+        i = ax.index(self)
+        return self._parent.shape[i]
+
+    @property
+    def end(self):
+        '''
+        Returns the value of the last point of the axis.
+        '''
+        return self.offset + self.delta*self.size
+
+    #@property
+    #def step(self):
+    #    '''
+    #    Absolute value of self.delta
+    #    '''
+    #    return abs(self.delta)
+
+    @property
+    def min(self):
+        '''
+        Smalles axis coordinate
+        '''
+        if self.delta > 0:
+            return self.offset
+        else:
+            return self.end
+
+    @property
+    def max(self):
+        '''
+        Biggest axis coordinate
+        '''
+        if self.delta > 0:
+            return self.end
+        else:
+            return self.offset
+
+    @property
+    def lim(self):
+        '''
+        Axis limits tuple (offset, end)
+        '''
+        return (self.offset, self.end)
+
+    #@property
+    #def span(self):
+    #    '''
+    #    Axis limits tuple (min, max)
+    #    '''
+    #    return (self.min, self.max)
     
-    def i2x(self, index):
+    @property
+    def range(self):
+        '''
+        List of all axis values, from the first to the last point.
+        '''
+        return np.linspace(start=self.offset, num=self.size, stop=self.end)
+
+    
+    def i2x_fra(self, index):
         '''
         Returns the axis value corresponding to the
         specified index value.
         '''
         return self.offset+self.delta*index
+    i2x = i2x_fra
+
+    def i2x_flo(self, index):
+        '''
+        Returns the floor of the axis value corresponding to the
+        specified index value.
+        '''
+        return int(math.floor(self.i2x_fra(index)))
+
+    def i2x_rnd(self, index):
+        '''
+        Returns the rounded axis value corresponding to the
+        specified index.
+        '''
+        return int(round(self.i2x_fra(index)))
 
 
-    def _x2i(self, val):
+    def x2i_fra(self, val):
         '''
         Returns the *fractional* index corresponding to the axis value.
         '''
         return (val-self.offset)/self.delta
-
+    x2i = x2i_fra
     
-    def x2i(self, val):
+    def x2i_flo(self, val):
         '''
         Returns the (floor) index corresponding to the axis value.
         '''
-        return int(math.floor(self._x2i(val)))
+        return int(math.floor(self.x2i_fra(val)))
 
-
-    def fx2i(self, val):
-        '''
-        Returns the floor index corresponding to the axis value.
-        '''
-        return int(math.floor(self._x2i(val)))
-
-
-    def rx2i(self, val):
+    def x2i_rnd(self, val):
         '''
         Returns the index corresponding to the rounded axis value.
         '''
-        return int(round(self._x2i(val)))
+        return int(round(self.x2i_fra(val)))
 
 
     def ppi(self, interval):
@@ -111,7 +183,7 @@ class AxisInfo:
         Returns the (fractional) number of points
         spanned by *interval* on axis.
         '''
-        return self._x2i(0) - self._x2i(-abs(interval))
+        return self.x2i_fra(0) - self.x2i_fra(-abs(interval))
 
     def __str__(self):
         return "delta=%f, offset=%f, units='%s'" % (self.delta, self.offset, self.units)
@@ -152,7 +224,7 @@ class Wave(ndarray):
         else:                    # explicit construction, or new from non-Wave template.
             # Need to set sane defaults for self.info[]
             for i in range(len(self.shape)):
-                self.info['axes'] = self.info.setdefault('axes', ()) + (AxisInfo(),)
+                self.info['axes'] = self.info.setdefault('axes', ()) + (AxisInfo(self),)
             self.info['name']='wave%x' % id(obj)
             if obj is None: pass         # this would be explicit construction...
             else:           pass         # ...and new from 'ndarray' or another subtype of it
@@ -238,147 +310,29 @@ class Wave(ndarray):
 
 
     @property
-    def axes(self):
+    def dim(self):
         '''
         Returns the axis information vector.
         '''
         return self.info['axes']
 
 
-    def ax(self, aindex=-1):
+    def ax(self, aindex):
         '''
         Returns the axis information for the specified axis.
         '''
-        return self.axes[aindex]
-
-
-    def axInfo(self, aindex=-1): # legacy
-        log.debug ("Deprecated.")
-        return self.ax(aindex)
-
-
-    def axMin(self, aindex=0):
-        '''
-        Returns the minimum axis value.
-        '''
-        return min(self.axOff(aindex), self.axEnd(aindex))
-
-
-    def axMax(self, aindex=0):
-        '''
-        Returns the minimum axis value.
-        '''
-        return max(self.axOff(aindex), self.axEnd(aindex))
-
-
-    def axOff (self, aindex=0):
-        '''
-        Returns the axis offset.
-        '''
-        return self.ax(aindex).offset
-
-    def axOffset (self, ai=0):  # legacy
-        log.debug ("Deprecated.")
-        return self.axOff(ai)
-
-
-    def axDelta (self, aindex=0):
-        '''
-        Returns the axis increment.
-        '''
-        return self.ax(aindex).delta
-
-
-    def axEnd (self, aindex=0):
-        '''
-        Returns the axis endpoint (offset + dim*delta), opposite of offset.
-        '''
-        return self.ax(aindex).offset + self.ax(aindex).delta*self.shape[aindex]
-
-    def axEndpoint (self, ai):   # legacy
-        log.debug ("Deprecated.")
-        return self.axEnd(ai)
-
-
-    def axLim(self):
-        '''
-        Returns a tuple with the axis limits,
-        in the format (ax[0].min, ax[0].max, ax[1].min, ax[1].max...)
-        '''
-        return tuple([ (self.axMin(i), self.axMax(i)) for i in range(len(self.ax())) ])
-
-
-    def imLim (self):
-        '''
-        same as axLim(), only this one is especially for images,
-        to use with Matplotlib's imshow(). This means that:
-          . it only works with 2 dimensions
-          . axes are switched (axis 1 represents left-right boundaries,
-                               axis 0 represents top-bottom boundaries)
-       
-        The imshow() limit tuple format is: (left, right, top, bottom).
-        '''
-        return (self.axOff(1), self.axEnd(1), self.axEnd(0), self.axOff(0))
-
-    @property
-    def axv(self):
-        '''
-        Axis values
-        '''
-        return [arange(start=ax.offset, step=ax.delta, stop=ax.offset+ax.delta*dim) for ax,dim in zip(self.info['axes'], self.shape)]
+        return self.dim[aindex]
 
 
     @property
     def imlim(self):
         '''
-        Limits tuple to use with imshow -- short version
+        Limits tuple to use with imshow.
         '''
-        return self.imLim()
+        return (self.dim[1].offset, self.dim[1].end, self.dim[0].end, self.dim[0].offset)
+    
 
-
-    def imgLim (self):  # legacy
-        log.debug ("Deprecated.")
-        return self.imLim()
-
-
-    def i2x(self, aindex, pindex):
-        '''
-        For the specified axis 'aindex', returns the axis value corresponding
-        to the specified point index 'pindex'.
-        '''
-        return self.ax(aindex).i2x(pindex)
-    fx = i2x
-
-    def x2i(self, aindex, pt):
-        '''
-        For the specified axis 'aindex', returns the index corresponding
-        to the specified point 'pt' on the axis.
-        '''
-        return self.ax(aindex).x2i(pt)
-    fi = x2i
-
-
-    def ri2x(self, aindex, pindex):
-        '''
-        For the specified axis 'aindex', returns the *rounded axis value*, i.e. the
-        axis value corresponding
-        to the specified point index 'pindex'.
-        '''
-        return round(self.ax(aindex).i2x(pindex))
-    rx = ri2x
-
-
-    def rx2i(self, aindex, pt):
-        '''
-        For the specified axis 'aindex', returns the *rounden index*,
-        i.e. the index corresponding
-        to the specified point 'pt' on the axis.
-        '''
-        return self.ax(aindex).rx2i(pt)
-    ri = rx2i
-
-
-    def _slice_axinfo(self,obj):
+    def _slice_axinfo(self,obj,parent):
         '''
         Returns a modified version of the axis-info list for *self*.
         The modification is performed according to the slicing
@@ -394,7 +348,7 @@ class Wave(ndarray):
             index_list = obj
 
         for index in index_list:
-            new_axi = AxisInfo()
+            new_axi = AxisInfo(parent)
 
             if isinstance(index, slice):
                 old_axi = self.ax(i)
@@ -456,7 +410,7 @@ class Wave(ndarray):
         data = self.view(ndarray)[obj]
         if isinstance(data, ndarray):
             w = data.view(Wave)
-            w.info['axes'] = self._slice_axinfo (obj)
+            w.info['axes'] = self._slice_axinfo (obj, w)
             #print [str(a) for a in self.info['axes'] ]
             #print [str(a) for a in w.info['axes'] ]
             #print w.axv
@@ -975,7 +929,7 @@ class Wave(ndarray):
             raise IndexError ("Don't know what to do: interpolation '%s' requested" % (str(i)))
 
         if isinstance (data, Wave):
-            data.info['axes'] = self._slice_axinfo (new_index)
+            data.info['axes'] = self._slice_axinfo (new_index, data)
 
         return data
         
@@ -1040,6 +994,20 @@ def WCopy(nda):
     if isinstance(nda, Wave):
         return nda
     return nda.copy(Wave)
+
+def WAx(dat, ax):
+    '''
+    Returns access to axis info specified by index *ax* for ndarray
+    or Wave() *dat*. This is a convenience function to make writing
+    of generic plotting code easier (i.e. code that can make use of
+    the fancy Wave() AxisInfo interface, but can transparently fall
+    back to ndarrays using default axis information).
+    '''
+    if isinstance(dat, Wave):
+        return dat.dim[ax]
+    else:
+        # assuming ndarray interface and returning a default AxisInfo.
+        return AxisInfo(dat)
 
 #
 # some testing functions defined below
