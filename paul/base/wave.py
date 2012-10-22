@@ -67,8 +67,17 @@ class AxisInfo:
 
     _parent = None # the Wave() object this AxisInfo belongs to
 
-    def __init__(self, parent):
+    def __init__(self, parent, copy_info=None):
+        '''
+        Initializes a new AxisInfo object with *parent* as the parent wave.
+        If copy_info is specified, then significant fields (offset, delta, units)
+        are copied from *copy_info*.
+        '''
         self._parent = parent
+        if copy_info is not None:
+            self.delta = copy_info.delta
+            self.offset = copy_info.offset
+            self.units = "%s" % copy_info.units
 
     @property
     def size(self):
@@ -215,11 +224,7 @@ class Wave(ndarray):
 
         if type(obj) is Wave:    # view casting or new from a Wave template
             # deep-copy the obj.info field:
-            self.info = copy.deepcopy(obj.info)
-        
-            ## insert AxisInfo altering code here (e.g. to adjust
-            ## the delfa/offset to the new view parameters)
-            # ...
+            self._copy_info(obj)
 
         else:                    # explicit construction, or new from non-Wave template.
             # Need to set sane defaults for self.info[]
@@ -229,7 +234,25 @@ class Wave(ndarray):
             if obj is None: pass         # this would be explicit construction...
             else:           pass         # ...and new from 'ndarray' or another subtype of it
 
-
+                
+    def _copy_info(self, from_wave):
+        '''
+        Copies the info field from *from_wave*. This is basically just
+        a wrapper around deepcopy() with some caveats to avoid recursion
+        and correct AxisInfo() handling.
+        '''
+        for k,v in from_wave.info.iteritems():
+            if k != 'axes':
+                self.info[k] = copy.deepcopy(v)
+            else:
+                # the AxesInfo() objects contain references to the parent wave,
+                # inducing an endless recursion on deepcopy. Need to copy those
+                # by hand.
+                axes = []
+                for ax in v:
+                    axes.append (AxisInfo (self, copy_info=ax))
+                self.info['axes'] = axes
+        
 
     def reshape(self, sizes):
         ''' 
@@ -334,7 +357,8 @@ class Wave(ndarray):
 
     def _slice_axinfo(self,obj,parent):
         '''
-        Returns a modified version of the axis-info list for *self*.
+        Returns a modified version of the axis-info list of *self*,
+        intended for the target object *parent*.
         The modification is performed according to the slicing
         information from *obj*. The slicing information is assumed
         to be in index coordinates, possibly fractional.
@@ -390,7 +414,7 @@ class Wave(ndarray):
                 i += 1
 
         while i < len(self.info['axes']):
-            new_info.append(copy.deepcopy(self.ax(i)))
+            new_info.append(AxisInfo(parent, copy_info=self.ax(i)))
             #print "c: new info for axis", i, self.ax(i)
             i += 1
 
@@ -830,9 +854,9 @@ class Wave(ndarray):
                     if len(ind) == 3:
                         i_step = ind[2]
                 if i_start is not None:
-                    i_start = self.ax(axis_i)._x2i(i_start)
+                    i_start = self.ax(axis_i).x2i(i_start)
                 if i_stop is not None:
-                    i_stop = self.ax(axis_i)._x2i(i_stop)
+                    i_stop = self.ax(axis_i).x2i(i_stop)
                 if i_step is not None:
                     i_step /= self.ax(axis_i).delta
 
@@ -885,7 +909,7 @@ class Wave(ndarray):
                 #
                 # default: ind is probably a simple float()-able number
                 #
-                nr = self.ax(axis_i)._x2i(ind)
+                nr = self.ax(axis_i).x2i(ind)
                 if abs(nr-round(nr)) > 1e-10:
                     if recmd_intrp not in (True, False):
                         recmd_intrp = 'lim'
@@ -949,7 +973,7 @@ class Wave(ndarray):
         i2 = ndarray([len(self.shape)], dtype=int)
         for v, ai in zip(vals, range(len(self.shape))):
             ax = self.ax(ai)
-            ii[ai] = (ax._x2i(v))
+            ii[ai] = (ax.x2i(v))
             i1[ai] = floor(ii[ai])
             i2[ai] = i1[ai]+1
         
@@ -1186,8 +1210,8 @@ def _test_index_call(*call_i, **kwargs):
     a2 = array([[[i*1+j*10+k*100 for i in range(5)] for j in range(5)] for k in range(5)]).view(Wave)
 
     for i in range(a2.ndim):
-        a2.ax(i).delta   = 0.1
-        a2.ax(i).offset -= (0.5 * a2.axEnd(i))
+        a2.dim[i].delta   = 0.1
+        a2.dim[i].offset -= (0.5 * a2.dim[i].end)
         verbose and pprint (str(a2.ax(i)))
 
     if lim_i  == True:
@@ -1223,16 +1247,16 @@ def _test_index_axslice(index, offsets, deltas, units=None):
     print "  Index:", index,
 
     a = array([[[i*1+j*10+k*100 for i in range(5)] for j in range(5)] for k in range(5)]).view(Wave)
-    a.axes[0].units = 'dim0'
-    a.axes[1].units = 'dim1'
-    a.axes[2].units = 'dim2'
+    a.dim[0].units = 'dim0'
+    a.dim[1].units = 'dim1'
+    a.dim[2].units = 'dim2'
 
     foo0 = a[index]
     foo1 = a(*index)
     __get_fails = lambda foo: [int(abs(ai.delta - de)  > 10e-10) +
                                int(abs(ai.offset - of) > 10e-10) + 
                                int(un != ai.units)
-                               for ai,of,de,un in zip (foo.axes, offsets, deltas,units)]
+                               for ai,of,de,un in zip (foo.dim, offsets, deltas,units)]
     fails0 = array(__get_fails(foo0)).sum()
     fails1 = array(__get_fails(foo1)).sum()
         

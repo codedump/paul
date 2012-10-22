@@ -19,7 +19,7 @@ def __init__():
     log.debug ("plotscript: Initialized.")
 
 
-def decorate (fig, waves):
+def decorate (*args, **kwargs):
     '''
     Decorates the specified FigureCanvas.
     Parameters: 'fig'   Is the FigureCanvas object.
@@ -27,5 +27,6 @@ def decorate (fig, waves):
                         containing the data. Usually, the first of these
                         waves will be already plotted.
     '''
+    fig = kwargs['can']
     fig.axes.set_title ('Example Plotscript...')
     fig.draw()

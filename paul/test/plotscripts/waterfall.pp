@@ -12,24 +12,34 @@ log = logging.getLogger (__name__)
 class GlobalVars:
     pass
 
-def reload(can, win, vars):
+def reload(*args, **kwargs):
     '''
     called in case of reload -- we don't want to lose our GUI settings
     '''
+    vars = kwargs['vars']
+    can  = kwargs['can']
+    win  = kwargs['win']
     global G
     G = GlobalVars()
     G.gui = vars.gui
     G.gui.sliced.connect (waterfall)
     G.fig = can
 
-def unload(can, win, vars):
+def unload(*args, **kwargs):
     global G
+    vars = kwargs['vars']
+    can  = kwargs['can']
+    win  = kwargs['win']
     vars.gui = G.gui
     vars.fig = G.can
     G.gui.sliced.disconnect (waterfall)
 
-def init(can, win, vars):
+def init(*args, **kwargs):
     log.debug ("Initializing waterfall plotscript")
+    vars = kwargs['vars']
+    can  = kwargs['can']
+    win  = kwargs['win']
+    
     global G
     G = GlobalVars()
     G.gui = WaterfallSlicer(tparent=win)
@@ -37,10 +47,11 @@ def init(can, win, vars):
     G.fig = can
 
 
-def populate(can, wav):
+def populate(*args, **kwargs):
     global G
-    G.fig = can
-    G.gui.slice(wav / wav.max())
+    G.fig = kwargs['can']
+    wav   = kwargs['wav']
+    G.gui.slice(wav[0] / wav[0].max())
 
 
 def waterfall (ws):
@@ -56,9 +67,9 @@ def waterfall (ws):
     ax1    = not ax2
     xoffs = G.gui.xoffset
     yoffs = G.gui.yoffset
-    x = np.arange(start=ws.axOffset(ax1),
-                  stop=ws.axEndpoint(ax1),
-                  step=ws.axDelta(ax1))
+    x = np.arange(start=ws.dim[ax1].offset,
+                  stop=ws.dim[ax1].end,
+                  step=ws.dim[ax1].delta)
 
     log.debug ("Axis limits: %f, %f" % (ws.dim[ax1].min, ws.dim[ax1].max))
 

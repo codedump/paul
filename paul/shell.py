@@ -8,10 +8,14 @@ name space, and also defines some convenience API functions.
 
 import paul.browser.browser as browser
 import paul.viewer.viewer as viewer
-
 from paul.base.wave import *
+import numpy as np
+import scipy as sp
+import matplotlib as mpl
+import paul.loader.igor as ig
 
 import paul.toolbox as tools
+
 
 def view(obj=None):
     '''
@@ -19,6 +23,7 @@ def view(obj=None):
     file name (wave or plotscript), or a Wave() object.
     '''
     return viewer.create(obj)
+
 
 def browse(path='~'):
     '''
