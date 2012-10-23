@@ -109,8 +109,6 @@ class TreeWindow (QtGui.QMainWindow):
         self.filetree.scrollTo (index)
         self.current_path = str(self.filesys.filePath(index))
 
-        print "Setting root index:", self.current_path
-
         if silent != 0:
             return
 

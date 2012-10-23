@@ -63,7 +63,7 @@ def addWaterfall():
     global GUI, PLOT
     GUI.slices.append(WaterfallSlicer(axis=0, viewer=ViewerWindow()))
     GUI.slices[-1].viewer.resize (500, 350)
-    GUI.slices[-1].slice(wave=PLOT.waves)
+    GUI.slices[-1].slice(wave=PLOT.waves[0])
     GUI.slices[-1].viewer.show()
 
 
@@ -145,7 +145,7 @@ def decorate(*args, **kwargs):
     for s in GUI.slices:
         if (s.viewer.isVisible()):
             log.debug ("Calling slice window %s (for axis %d)" % (s, s.slice_axis))
-            s.slice(wave=wav)
+            s.slice(wave=wav[0])
         else:
             log.debug ("Removing hidden slice window %s (for axis %d)" % (s, s.slice_axis))
             GUI.slices.remove(s)
