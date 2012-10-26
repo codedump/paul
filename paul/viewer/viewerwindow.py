@@ -369,7 +369,7 @@ class ViewerWindow(QtGui.QMainWindow):
         # the plotting area (matplotlib's FigureCanvas and NavigationToolbar)
 
         self.plot.waves = None        # the currently plotted wave(s)
-        self.plot.files = ''
+        self.plot.files = []
         self.plot.canvas = MatplotlibWidget()
         self.plot.canvas.reset()
         self.plot.tools = NavigationToolbar(self.plot.canvas, self.main_frame)
@@ -476,7 +476,7 @@ class ViewerWindow(QtGui.QMainWindow):
             d = igor.load (fname)
             d.info.setdefault('name', os.path.basename(str(fname)))
             self.pscr.toolbar.path_ref = str(fname)
-            self.plot.files = flist
+            self.plot.files = list(flist)
             data.append (d)
         self.plotWaves (data)
 
@@ -666,7 +666,8 @@ class ViewerWindow(QtGui.QMainWindow):
 
 
     @QtCore.pyqtSlot()
-    def onDump(self):
+    @QtCore.pyqtSlot('QString')
+    def onDump(self, path=None):
         '''
         Called when the "Dump" button on the toolbar is pressed. Creates a copy
         of the currently selected plotscript at a user-specified location (pops
@@ -676,9 +677,12 @@ class ViewerWindow(QtGui.QMainWindow):
         The purpose is a poor man's 'Save Figure' replacement that will save
         not the image file, but the actual commands to generate it :-)
         '''
-         
-        save_path = str(QtGui.QFileDialog.getSaveFileName (self, "Save plotscript copy as...", os.curdir,
-                                                           "Python scripts (*%s)" % self.pscr.file_ext))
+
+        if path is None:
+            save_path = str(QtGui.QFileDialog.getSaveFileName (self, "Save plotscript copy as...", os.curdir,
+                                                               "Python scripts (*%s)" % self.pscr.file_ext))
+        else:
+            save_path = str(path)
 
         if len(save_path) == 0:
             log.debug ("Aborted" % save_path)
@@ -688,7 +692,8 @@ class ViewerWindow(QtGui.QMainWindow):
 
         shutil.copyfile (self.pscr.cur_file, save_path)
 
-        new_paths = [os.path.relpath(i, os.path.dirname(save_path)) for i in self.plot.files]
+        new_paths = [os.path.relpath(str(i), os.path.dirname(save_path)) for i in self.plot.files]
         
         sf = open (save_path, "a")
-        sf.write ("default_files = %s\n" % str(self.plot.files))
+        sf.write ("default_files = %s\n" % str(new_paths))
+        sf.close()

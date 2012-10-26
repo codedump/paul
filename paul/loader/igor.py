@@ -349,7 +349,7 @@ def load(filename):
     return wave_read(filename)
 
 
-def wave_note_parse (notestr, strict_blocks=False, sep='\r'):
+def wave_note_parse (notestr, strict_blocks=False, sep=None):
     '''
     Parses the "notes" string of a wave for useful information.
     Here's the rules:
@@ -379,6 +379,14 @@ def wave_note_parse (notestr, strict_blocks=False, sep='\r'):
     cur_map = nmap
     cur_map_name = ""
     sec = re.compile ("\[[^].]\]")
+
+    if sep is None:
+        #
+        # Automatic separator: use both \r and \n
+        #
+        new_note = notestr.replace('\r', '\n')
+        newnote = new_note
+        sep = '\n'
 
     for n in notestr.split(sep):
         line = n.strip()
@@ -1113,6 +1121,14 @@ def main_pack_make (options):
     pack_make_uxp (options.make, out=options.output)
     log.debug ("Done.")
 
+def main_read_info (options):
+    """
+    IBW -> ASCII conversion
+    """
+    log.debug ("reading %s..." % options.info)
+    wav = wave_read (options.info)
+    pprint.pprint (wav.info)
+
 #
 # unit testing functions
 #
@@ -1167,7 +1183,7 @@ if __name__ == '__main__':
 
     # parsing options
     p = optparse.OptionParser(version=__version__)
-    p.add_option('-i', '--ibwread', dest='ibwread', metavar='FILE',
+    p.add_option('-b', '--ibwread', dest='ibwread', metavar='FILE',
                  help='Input IGOR (.ibw, .pxp, .pxt) file.')
     p.add_option('-l', '--list', dest='list', metavar='FILE',
                  help='Lists contents of Igor Packed file (PXP or PXT).')
@@ -1179,15 +1195,13 @@ if __name__ == '__main__':
                  help='File for ASCII output (IBW), or directory for unpacking (PXP).')
     p.add_option('-m', '--make-uxp', dest='make', metavar='FILE',
                  help='Creates an UXP script for directory specified by output.')
+    p.add_option ('-i', '--info', dest='info', metavar='FILE',
+                  help='Parses wave info from specified file and prints it on stdout.')
     options,args = p.parse_args()
 
     if options.ibwread == '-':
         log.debug ("Expecting IBW on STDIN.")
         options.ibwread = sys.stdin
-
-    #if options.packlist == '-':
-    #    log.debug ("Reading packed file from STDIN...")
-    #    options.packlist = sys.stdin
 
     if options.output == None:
         if options.unpack == None:
@@ -1208,6 +1222,9 @@ if __name__ == '__main__':
 
     elif not options.make == None:
         main_pack_make (options)
+
+    elif options.info is not None:
+        main_read_info (options)
 
     else:
         main_test()

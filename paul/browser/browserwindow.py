@@ -131,9 +131,9 @@ class BrowserWindow (QtGui.QMainWindow):
         *path* is None, then the absolute path is returned.
         '''
         if path is None:
-            return [ os.path.normpath(os.path.abspath(i)) for i self.tree.selected_paths ]
+            return [ os.path.normpath(os.path.abspath(i)) for i in self.tree.selected_paths ]
         else:
-            return [ os.path.normpath(os.path.relpath(i)) for i self.tree.selected_paths ]
+            return [ os.path.normpath(os.path.relpath(i)) for i in self.tree.selected_paths ]
 
 
     @property
