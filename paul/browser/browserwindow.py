@@ -123,24 +123,52 @@ class BrowserWindow (QtGui.QMainWindow):
         '''
         return self.tree.setRoot (path)
 
+
+    def getSel(self, path='.'):
+        '''
+        Returns the currently selected wave files as a list of paths,
+        relative to *path* (default is the current directory). If 
+        *path* is None, then the absolute path is returned.
+        '''
+        if path is None:
+            return [ os.path.normpath(os.path.abspath(i)) for i self.tree.selected_paths ]
+        else:
+            return [ os.path.normpath(os.path.relpath(i)) for i self.tree.selected_paths ]
+
+
     @property
     def sel(self):
         '''
-        Same as *BrowserWindow.sel*, only the selection returns full
-        a list of full paths instead of wave names. This also works correctly
-        for waves with similar names in different directories.
+        Alias for *BrowserWindow.rsel*.
         '''
-        return self.tree.selected_paths
+        return self.getSel(os.curdir)
+        
 
+    @property
+    def asel(self, path=None):
+        '''
+        Wrapper for *BrowserWindow.getSel()*, returns absolute file paths.
+        '''
+        return self.getSel(None)
+
+
+    @property
+    def rsel(self, path=None):
+        '''
+        Wrapper for *BrowserWindow.getSel()*, returns relative file paths.
+        '''
+        return self.getSel(os.curdir)
+
+        
     @property
     def ksel(self):
         '''
-        The currently selected waves as a dictionary of full file paths,
+        The currently selected waves as a dictionary of absolute file paths,
         with key indices being the basename of the file path.
         (Note that files with the same basename in different directories
         will misbehave. Use the *BrowserWindow._sel* property instead.)
         '''
-        return dict({os.path.basename(i): os.path.abspath(i) for i in self.sel})
+        return dict({os.path.basename(i): os.path.abspath(i) for i in self.getSel(None)})
 
     @property
     def kwav(self):

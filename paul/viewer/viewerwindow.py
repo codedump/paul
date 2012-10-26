@@ -2,7 +2,7 @@
 import logging
 log = logging.getLogger (__name__)
 
-import sys, os, random, imp, subprocess, tempfile, glob
+import sys, os, random, imp, subprocess, tempfile, glob, shutil
 from PyQt4 import QtCore, QtGui
 
 import matplotlib
@@ -317,6 +317,10 @@ class ViewerWindow(QtGui.QMainWindow):
         self.pscr.file_ext = ".pp"
         self.pscr.mod_name = ''
         self.pscr.vars = self.Plotscript.Vars()
+        # Check for a variable named 'default_files' in the Plotscript
+        # If it exists, and empty list is specified, with plotWaves() or plotFiles(),
+        # then load files from that variable for displaying.
+        self.pscr.use_default_files = True
         self.plot = self.Plotter()
 
         # QFileSystemWatcher will send duplicate fileChanged() signals.
@@ -380,6 +384,7 @@ class ViewerWindow(QtGui.QMainWindow):
         self.pscr.cur_file = ''
         self.pscr.toolbar = PlotscriptToolbar(self, pscr_ext=self.pscr.file_ext)
         self.pscr.toolbar.setWindowTitle ("Plotscript toolbar")
+        self.pscr.toolbar.addAction ("Dump", self.onDump)
         self.addToolBarBreak()
         self.addToolBar (self.pscr.toolbar)
         self.pscr.toolbar.fileSelected.connect (self.loadPlotScript)
@@ -403,6 +408,16 @@ class ViewerWindow(QtGui.QMainWindow):
         to plot the wave(s) and have 'decorate' only do the
         plot decorations afterwards.
         '''
+        if wavlist is None or not len(wavlist):
+            if hasattr(self.pscr, 'obj') and self.pscr.obj is not None and  hasattr(self.pscr.obj, "default_waves"):
+                log.debug ("Plotting <pscr:%s>.default_waves" % os.path.basename(self.pscr.cur_file))
+                wavlist = self.pscr.obj.default_waves
+            elif hasattr(self.pscr, 'obj') and self.pscr.obj is not None and  hasattr(self.pscr.obj, "default_files"):
+                log.debug ("Plotting <pscr:%s>.default_files" % os.path.basename(self.pscr.cur_file))
+                flist = [self.pscrRelPath(i) for i in self.pscr.obj.default_files]
+                self.plotFiles (flist)
+                return
+                
         if wavlist is None or not len(wavlist):
             log.info ("Nothing to plot.")
             self.plot.waves = None
@@ -441,11 +456,21 @@ class ViewerWindow(QtGui.QMainWindow):
         '''
         Loads the specified data file(s) and plots them.
         '''
-        if len(flist) < 1:
+        if len(flist) < 1 or (flist is None):
+            if hasattr(self.pscr, 'obj') and self.pscr.obj is not None and  hasattr(self.pscr.obj, "default_waves"):
+                log.debug ("Plotting <pscr:%s>.default_waves" % os.path.basename(self.pscr.cur_file))
+                self.plotWaves (self.pscr.obj.default_waves)
+                return
+            elif hasattr(self.pscr, 'obj') and self.pscr.obj is not None and  hasattr(self.pscr.obj, "default_files"):
+                log.debug ("Plotting <pscr:%s>.default_files" % os.path.basename(self.pscr.cur_file))
+                flist = [self.pscrRelPath(i) for i in self.pscr.obj.default_files]
+        
+                
+        if len(flist) < 1 or (flist is None):
             log.debug ("Empty list, nothing to do.")
             return
 
-        log.debug ("Plotting '%s'" % flist[0])
+        log.debug ("File list: %s" % str(flist))
         data = []
         for fname in flist:
             d = igor.load (fname)
@@ -474,6 +499,20 @@ class ViewerWindow(QtGui.QMainWindow):
         self.plotWaves(self.plot.waves)
 
 
+    def pscrRelPath (self, path):
+        '''
+        Returns a file path relative to the current working directory,
+        which was previously assumed to be relative to the plotscript file.
+        '''
+        if hasattr (self.pscr, 'cur_file'):
+            pscr_dir = os.path.dirname(self.pscr.cur_file)
+        else:
+            pscr_dir = '<unknown>'
+            log.warn ('Translation of path (%s) relative to plotscript requested, but no plotscript specified!' % path)
+        assert (len(pscr_dir) != 0)
+        return os.path.normpath(os.path.join(os.path.relpath(pscr_dir, os.getcwd()), path))
+
+
     def pscrHasMethod (self, method):
         '''
         Checks if the plotscript has the specified method.
@@ -481,6 +520,7 @@ class ViewerWindow(QtGui.QMainWindow):
         '''
         return (hasattr(self.pscr, 'obj') and self.pscr.obj is not None and hasattr(self.pscr.obj, method))
 
+        
     def pscrCall (self, method, *args, **kwargs):
         '''
         Runs the specified method in the plotscript. This is just a wrapper
@@ -623,3 +663,32 @@ class ViewerWindow(QtGui.QMainWindow):
             self.loadPlotScript (filename)
         else:
             log.error ("Not supposed to be here...")
+
+
+    @QtCore.pyqtSlot()
+    def onDump(self):
+        '''
+        Called when the "Dump" button on the toolbar is pressed. Creates a copy
+        of the currently selected plotscript at a user-specified location (pops
+        up a file select box to choose the location), and appends the current
+        wave files to the file as the 'default_files' variable.
+
+        The purpose is a poor man's 'Save Figure' replacement that will save
+        not the image file, but the actual commands to generate it :-)
+        '''
+         
+        save_path = str(QtGui.QFileDialog.getSaveFileName (self, "Save plotscript copy as...", os.curdir,
+                                                           "Python scripts (*%s)" % self.pscr.file_ext))
+
+        if len(save_path) == 0:
+            log.debug ("Aborted" % save_path)
+            return
+
+        log.debug ("Dumping current plotscript to '%s'" % save_path)
+
+        shutil.copyfile (self.pscr.cur_file, save_path)
+
+        new_paths = [os.path.relpath(i, os.path.dirname(save_path)) for i in self.plot.files]
+        
+        sf = open (save_path, "a")
+        sf.write ("default_files = %s\n" % str(self.plot.files))

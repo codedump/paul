@@ -51,7 +51,11 @@ def plot (data, win):
         
         # check whether we're actually loading a plotscript
         if ext.lower() == ".pp":
-            w = Wave([1, 1])
+            #w = Wave([1, 1])
+
+            # This will trigger reading the variables 'default_waves' or
+            # 'default_files' from the Plotscript, if they are available.
+            w = None
             win.plotWaves (w)
             win.setPlotScript(os.path.abspath(wavs[0]))
         else:
