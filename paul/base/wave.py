@@ -415,8 +415,11 @@ class Wave(ndarray):
                         return "%s = %s" % [i for i in item.iteritems()][defitem]
                     else:
                         return item
+            else:
+                return str(item)
 
         except (IndexError, KeyError):
+            log.debug ("KeyError with field 'name'")
             return default
         
         
