@@ -353,7 +353,89 @@ class Wave(ndarray):
         Limits tuple to use with imshow.
         '''
         return (self.dim[1].offset, self.dim[1].end, self.dim[0].end, self.dim[0].offset)
-    
+
+    def infs(self, *args, **kwargs):
+        '''
+        Syntanctic sugar for *self.info[]*. Returns the first element
+        of *self.info[index]*, where *index* is specified by the *args* list.
+        *kwargs* may contain a "def=..." element, which will be returned
+        in case that the *index* key is not found.
+
+        The idea is that *self.info[foo]* is often either not present, or an
+        undefined data type (list/string/float...). This requires further
+        checks when being used. This function attempts to hide most of those
+        checks for the most common use case: when the user is just interested
+        in a (numerical or string) information.
+
+        Strategy:
+          . if *self.info[index]* is a list: return the *item*-th item (or the list,
+                                             if *item* is None)
+          . if *self.info[index]* is a dict: return the "key=val" for the *item*-th item
+                                             (or the dict, if *item* is None)
+          . else return the str()-casted item itself, or *def*, it item is not found
+
+        Valid *kwargs*:
+          . def:  Default value to return, if the key is not valid.
+                  Default is "n/a".
+          . item: Index of the item to return, if the object pointed
+                  to by *args* is a list or dict. Default is 0.
+                  If it is None, then the list/dict object itself
+                  will be returned.
+                  
+
+        Remember that *self.info[]* may not be a "falt" dictionary, i.e.
+        there may be sub-sections. For this reason, *args* is accepted to
+        be a list of keys, applied subsequently to sub-sections of *self.info[]*.
+        For example, self.infs("foo", "bar")  is the similar to 
+        *self.info["foo"]["bar"]*.
+
+        With default settings (i.e. not *kwargs* specified), this function
+        _always_ returns a string.
+        '''
+
+        default = kwargs.setdefault('def', None)
+        defitem = kwargs.setdefault('item', 0)
+
+        try:
+            info = self.info
+            for i in args:
+                item = info[i]
+                info = item
+
+            # check the type of item
+            if hasattr (item, "__iter__"):
+                if isinstance(item, list):
+                    if defitem is not None:
+                        return str(item[defitem])
+                    else:
+                        return item
+                    
+                elif isinstance(item, dict):
+                    if defitem is not None:
+                        return "%s = %s" % [i for i in item.iteritems()][defitem]
+                    else:
+                        return item
+
+        except (IndexError, KeyError):
+            return default
+        
+        
+    def infv(self, *args, **kwargs):
+        '''
+        Same as *Wave.infs()*, only the returned type is always casted to float().
+        If any error occurs, the contents of kwargs['def'] are returned, or 'NaN'.
+        '''
+
+        try:
+            val = self.infs(*args, **kwargs)
+        except ValueError:
+            val = kwargs.setdefault('def', None)
+
+        if val is None:
+            return float('nan')
+        else:
+            return float(val)
+        
 
     def _slice_axinfo(self,obj,parent):
         '''
