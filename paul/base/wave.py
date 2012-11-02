@@ -235,16 +235,24 @@ class Wave(ndarray):
             else:           pass         # ...and new from 'ndarray' or another subtype of it
 
                 
-    def _copy_info(self, from_wave):
+    def _copy_info(self, from_wave, noax=False):
         '''
         Copies the info field from *from_wave*. This is basically just
         a wrapper around deepcopy() with some caveats to avoid recursion
         and correct AxisInfo() handling.
+        Parameter *noax* specifies whether info fields used for internal
+        purposes (specifically Axis info) is to be copied or retained.
+        If *noax* is True, then the AxisInfo() is retained. Default is
+        False (i.e. by default, AxisInfo() is copied, too).
         '''
         for k,v in from_wave.info.iteritems():
             if k != 'axes':
                 self.info[k] = copy.deepcopy(v)
             else:
+                # copy AxisInfo() from from_wave only if keepint is False
+                if noax:
+                    continue
+
                 # the AxesInfo() objects contain references to the parent wave,
                 # inducing an endless recursion on deepcopy. Need to copy those
                 # by hand.
@@ -252,6 +260,15 @@ class Wave(ndarray):
                 for ax in v:
                     axes.append (AxisInfo (self, copy_info=ax))
                 self.info['axes'] = axes
+
+
+    def copy_info_from (self, from_wave, noax=True):
+        '''
+        Copies the "info" field from Wave specified by *from_wave*.
+        This is just a wrapper for self._copy_info(), with a cleaner
+        syntax and a reversed default setting for *noax*.
+        '''
+        self._copy_info(from_wave, noax)
         
 
     def reshape(self, sizes):
@@ -419,7 +436,7 @@ class Wave(ndarray):
                 return str(item)
 
         except (IndexError, KeyError):
-            log.debug ("KeyError with field 'name'")
+            log.info ("KeyError with info[%s]" % (str(args)))
             return default
         
         
