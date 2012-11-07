@@ -16,24 +16,9 @@ def populate (*args, **kwargs):
 
     log.debug ("%d waves to plot" % len(wav))
 
-    #new_wav = []
-    #for i in range(0,len(wav),2):
-    #    log.debug ("%d %d %d" % ( i, i+1, len(wav)))
-    #    w0 = wav[i]   / wav[i].max()
-    #    w1 = wav[i+1] / wav[i+1].max()
-    #    wd = w1 / w0
-    #    wd.info['name'] = 'LV/LH ratio'
-    #    new_wav.append(w0)
-    #    new_wav.append(w1)
-    #    new_wav.append(wd)
-    #old_wav = wav
-    #wav = new_wav
-
     fig.clear()
-    prows = math.ceil(math.sqrt( len(wav) ))
-    pcols = math.ceil(len(wav) / prows)
-
-    log.debug ("Figure: %dx%d, %d plots" % (prows, pcols, len(wav)))
+    pcols = math.ceil(math.sqrt( len(wav) ))
+    prows = math.ceil(len(wav) / pcols)
     
     fig.axes = []
     for i in range(len(wav)):
@@ -43,15 +28,20 @@ def populate (*args, **kwargs):
         ax = fig.fig.add_subplot (prows, pcols, i+1)
         ax.imshow(w, aspect='auto', extent=w.imlim)
         decorate (wav=[w], axis=ax)
-        if not ((i+1) > (len(wav)-pcols) != 0):
+
+        # keep xlabels only for the bottom row
+        if (len(wav)-pcols) > i:
             ax.set_xlabel (r'')
-        if not ((i) % pcols == 0):
+
+        # keep ylabels only for the left column
+        if not ((i % pcols) == 0):
             ax.set_ylabel (r'')
+
         fig.axes.append(ax)
     
-    fig.fig.subplots_adjust(          top=0.95,
+    fig.fig.subplots_adjust(          top=0.94,
                             left=0.1,             right=0.95,
-                                      bottom=0.1,
+                                      bottom=0.12,
                             hspace=0.2, wspace=0.2)
     
 
@@ -60,29 +50,16 @@ def decorate(*args, **kwargs):
     Set decorative elements, called once for each (sub-)plot.
     '''
     ax = kwargs['axis']
-    wav = kwargs['wav']
-    w = wav[0]
-
-    if w.info.has_key ('T'):
-        temp = w.info['T'][0]+" K"
-    else:
-        temp =  'n/a'
+    w  = kwargs['wav'][0]
     
-    ax.set_title ("Sample %s, T = %s" % (w.info['name'], temp))
+    ax.set_title (r'%s   T=%.0f K' % (w.infs('name'), w.infv('T')))
     ax.axhline(ls=':', color=(1, 1, 1, 0.8))
-    #ax.set_ylim (w.dim[0].lim) # make graph correct side up
-    ax.set_ylim (w.dim[0].lim[0], 0.02)
-
-    if (w.dim[1].lim[1] > 1):
-        ax.set_xlim (-10, 10)
-    else:
-        ax.set_xlim (-0.3, 0.3)
+    ax.set_ylim (w.dim[0].lim) # make graph correct side up
 
     ax.set_xlabel (r'$k_{\parallel} (\AA^{-1})$')
     ax.set_ylabel (r'$E$ (eV)')
 
-
-
-#
-# default wave list, in case we have nothing else to plot
-#
+    # adjust color limits, in case we have an FDD sample
+    if not np.isnan(w.infv('FDD', 'V_max')):
+        ax.images[0].set_clim (w.infv('FDD', 'V_min'),
+                               w.infv('FDD', 'V_max'))

@@ -42,11 +42,11 @@ def plotwater (fig_ax, wlist, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0)):
     if isinstance(wlist, Wave):
         return imwater(fig_ax, wlist, axis, offs, xlim, ylim, autoscale=True)
 
-    xlist = [np.arange(start=w.axOff(), stop=w.axEnd(), step=w.axDelta()) for w in wlist]
+    xlist = [np.arange(start=w.dim[0].offset, stop=w.dim[0].end, step=w.dim[0].delta) for w in wlist]
     
     if xlim == (0, 0):
-        xlim = (min([w.axMin(0) for w in wlist]) - (offs[0]*len(wlist))*(offs[0]<0),
-                max([w.axMax(0) for w in wlist]) + (offs[0]*len(wlist))*(offs[0]>0))
+        xlim = (min([w.dim[0].min for w in wlist]) - (offs[0]*len(wlist))*(offs[0]<0),
+                max([w.dim[0].max for w in wlist]) + (offs[0]*len(wlist))*(offs[0]>0))
     if ylim == (0, 0):
         ylim = (min([w.min() for w in wlist]) + (offs[1]*len(wlist)) * (offs[1]<0),
                 max([w.max() for w in wlist]) + (offs[1]*len(wlist)) * (offs[1]>0))
@@ -103,7 +103,7 @@ def imwater (fig_ax, wlist, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0), autosca
     min_i  = wlist.ax(0).x2i_rnd(wlist.dim[0].min) # index of k|| = min
     zero_i = wlist.ax(0).x2i_rnd(0)                # index of k|| = 0
     max_i  = wlist.ax(0).x2i_rnd(wlist.dim[0].max) # index of k|| = max
-    x = np.arange(start=wlist.dim[1].axOff,
+    x = np.arange(start=wlist.dim[1].offset,
                   stop=wlist.dim[1].end,
                   step=wlist.dim[1].delta)
     ylim_wouldbe = (0, wlist.shape[0]*offs[1])

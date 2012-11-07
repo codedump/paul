@@ -142,13 +142,39 @@ def decorate(*args, **kwargs):
     can.axes.set_ylim (min(yax), max(yax))
     #can.fig.colorbar(can.axes.images[0])
 
+    log.debug ("Slices: %s" % str(GUI.slices))
     for s in GUI.slices:
         if (s.viewer.isVisible()):
+            # calculate slice, if slicer window is visible
             log.debug ("Calling slice window %s (for axis %d)" % (s, s.slice_axis))
             s.slice(wave=wav[0])
+
+            ## show slicing rect
+            #sax   = s.slice_axis
+            #sfrom =       s.val_from.value()  / wav[0].dim[sax].size
+            #sto   = sfrom+s.val_delta.value() / wav[0].dim[sax].size
+            #
+            ## rectangle orientation depends on which axis we're slicing...
+            #if sax == 0:
+            #    sx = sfrom
+            #    sy = 0
+            #    sw = sto
+            #    sh = 1
+            #else:
+            #    sx = 0
+            #    sy = sfrom
+            #    sw = 1
+            #    sh = sto
+            #
+            #log.debug ("Slice marker rect: %d %d %d %d" % (sx, sy, sw, sh))
+            #rect = mp.patches.Rectangle ((sx, sy), sw, sh, axes=ax[5], transform=fig.transFigure,
+            #                             hatch='/', edgecolor=(0, 0.5, 1.0, 0.5), lw=0.5, fill=False)
+            #can.axes.add_patch(rect)
+            
         else:
             log.debug ("Removing hidden slice window %s (for axis %d)" % (s, s.slice_axis))
             GUI.slices.remove(s)
+        
 
 
     

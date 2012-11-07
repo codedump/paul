@@ -388,7 +388,7 @@ def wave_note_parse (notestr, strict_blocks=False, sep=None):
         newnote = new_note
         sep = '\n'
 
-    for n in notestr.split(sep):
+    for n in new_note.split(sep):
         line = n.strip()
 
         # What to do on empty lines?
@@ -714,7 +714,7 @@ def wave_read (filename):
                 data.setScale (mydim, wave_info["sfA"][igordim], wave_info["sfB"][igordim])
             
         # store the read headers for debug information
-        data.info['debug'] = [bin_info, wave_info ]
+        ##data.info['debug'] = [bin_info, wave_info ]
 
         #log.debug ("Loaded %s from path: %s" % (data.info['name'], data.info['path']))
 

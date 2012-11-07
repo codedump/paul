@@ -197,7 +197,7 @@ class PlotscriptToolbar(QtGui.QToolBar):
             os.write(tmp_fd,
                      "#!/usr/bin/python\n"
                      "\n"
-                     "def decorate (fig, waves):\n"
+                     "def decorate (*args, **kwargs):\n"
                      "    pass\n")
             os.close(tmp_fd)
             log.debug ("Loading temporary plotscript %s" % tmp_path)
