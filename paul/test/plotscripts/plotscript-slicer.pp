@@ -10,6 +10,8 @@ from paul.base.wave import Wave
 from paul.toolbox.slicers import SingleSlicer, WaterfallSlicer
 from paul.toolbox.widgets import ValueWidget
 
+import math
+
 
 class UiElements(QtCore.QObject):
     pass
@@ -29,17 +31,21 @@ def setColor(i):
     if not hasattr(PLOT, 'waves') or len(PLOT.waves) == 0:
         return
 
-    data = PLOT.waves
+    data = PLOT.waves[0]
     if not len(PLOT.canvas.axes.images) > 0:
         return
     img = PLOT.canvas.axes.images[0]
 
     log.debug ("values: %f, %f" % (GUI.col_min.value(), GUI.col_max.value()))
+    
+    dmin = data.infv('FDD', 'V_min')
+    if math.isnan(dmin):
+        dmin = data.min()
+    dmax = data.infv('FDD', 'V_max')
+    if math.isnan(dmax):
+        dmin = data.max()
 
-    dmin = data.min()
-    dmax = data.max()
-
-    #log.debug ("min/max: %f, %f" % (dmin, dmax))
+    log.debug ("min/max: %f, %f" % (dmin, dmax))
 
     col_min = GUI.col_min.value() * (dmax-dmin) + dmin
     col_max = GUI.col_max.value() * (dmax-dmin) + dmin
@@ -57,6 +63,7 @@ def addSlice():
     GUI.slices[-1].viewer.resize (400, 350)
     GUI.slices[-1].slice(wave=PLOT.waves[0])
     GUI.slices[-1].viewer.show()
+    #GUI.slices[-1].sliced.connect()
      
 @QtCore.pyqtSlot()
 def addWaterfall():
@@ -119,6 +126,11 @@ def exit(*args, **kwargs):
     return
 
 
+@QtCore.pyqtSlot()
+def updateSliceIndicators():
+    log.debug ("Updating slicing indicators")
+    pass
+
 def decorate(*args, **kwargs):
     '''
     Called when a newly plotted 2D image (or 1D graph) is to be decorated.
@@ -150,23 +162,23 @@ def decorate(*args, **kwargs):
             s.slice(wave=wav[0])
 
             ## show slicing rect
-            #sax   = s.slice_axis
-            #sfrom =       s.val_from.value()  / wav[0].dim[sax].size
-            #sto   = sfrom+s.val_delta.value() / wav[0].dim[sax].size
+            sax   = s.slice_axis
+            sfrom =       s.val_from.value()  / wav[0].dim[sax].size
+            sto   = sfrom+s.val_delta.value() / wav[0].dim[sax].size
             #
-            ## rectangle orientation depends on which axis we're slicing...
-            #if sax == 0:
-            #    sx = sfrom
-            #    sy = 0
-            #    sw = sto
-            #    sh = 1
-            #else:
-            #    sx = 0
-            #    sy = sfrom
-            #    sw = 1
-            #    sh = sto
-            #
-            #log.debug ("Slice marker rect: %d %d %d %d" % (sx, sy, sw, sh))
+            # rectangle orientation depends on which axis we're slicing...
+            if sax == 0:
+                sx = sfrom
+                sy = 0
+                sw = sto
+                sh = 1
+            else:
+                sx = 0
+                sy = sfrom
+                sw = 1
+                sh = sto
+            
+            log.debug ("Slice marker rect: %d %d %d %d" % (sx, sy, sw, sh))
             #rect = mp.patches.Rectangle ((sx, sy), sw, sh, axes=ax[5], transform=fig.transFigure,
             #                             hatch='/', edgecolor=(0, 0.5, 1.0, 0.5), lw=0.5, fill=False)
             #can.axes.add_patch(rect)

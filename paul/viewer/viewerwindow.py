@@ -697,3 +697,11 @@ class ViewerWindow(QtGui.QMainWindow):
         sf = open (save_path, "a")
         sf.write ("default_files = %s\n" % str(new_paths))
         sf.close()
+
+        
+    def figSave (file):
+        '''
+        Poor man's "save figure" implementation: API wrapper around
+        the plotscript dump functionality.
+        '''
+        return self.onDump (file)
