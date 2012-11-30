@@ -21,8 +21,8 @@ def ncomp (iwave, axis=0, step=1, intg=-1, norm=False):
     graphs (single 1D arrays) are integrated over 'step' slices.
     Returns a new N-dim ndarray (or Wave?), but with dimension
     size in 'axis' direction reduced.
-    If 'norm' is True, then the slices will be divided by
-    their maximum intensity point.
+    If 'norm' is True, then each slice will be divided by
+    the surface below the graph.
     '''
 
     # create a new wave, same as input wave, but with a reduced
@@ -30,18 +30,22 @@ def ncomp (iwave, axis=0, step=1, intg=-1, norm=False):
     # to match the new dimension.
     new_shape = list(iwave.shape)
     new_shape[axis] = iwave.shape[axis] / step
-    owave = np.zeros(new_shape).view(Wave)
-    owave.info = copy.deepcopy(iwave.info)
-    owave.ax(axis).delta *= step
+    owave = None
         
     # ignore the points that don't align well with 'step'
     max_i = new_shape[axis] * step
 
     nval = 1.0 / intg
     for s in range(0, intg):
-        # marker:  select every N-th poiunt ...but ignore bogus points at the end
+        # marker:  select every N-th point ...but ignore bogus points at the end
         marker = [ ((((step+i-s) % step) == 0) and (i < max_i))*1 for i in range (0, iwave.shape[axis]) ]
-        owave += iwave.compress (marker, axis) * nval
+        tmp = iwave.compress (marker, axis) * nval
+        if owave is None:
+            owave = tmp.copy()
+        else:
+            owave += tmp
+
+    owave.dim[axis].delta *= step
         
     if norm:
         for s in owave.swapaxes(0,axis):    # scaling and normalizing

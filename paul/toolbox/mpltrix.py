@@ -88,6 +88,9 @@ def imwater (fig_ax, wlist, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0), autosca
     if len(wlist) == 0:
         return
 
+    if len(ignore) > 0:
+        log.error ("NOT IMPLEMENTED: 'ignore' parameter!  (Hint: You should rather preselect input wave range.)")
+
 
     if not isinstance(wlist, Wave):
         new_wlist = np.vstack (wlist)  # this only works if waves have
@@ -100,27 +103,55 @@ def imwater (fig_ax, wlist, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0), autosca
         log.error (err)
         raise ValueError (err)
 
+    ## first, calculate the X axis values
+    x = np.arange(start = wlist.dim[1].offset,
+                  stop  = wlist.dim[1].end,
+                  step  = wlist.dim[1].delta)
+
+    
+    ## Do the auto-scaling magic... :-)
+    
+    # some indices along the y axis...
     min_i  = wlist.ax(0).x2i_rnd(wlist.dim[0].min) # index of k|| = min
     zero_i = wlist.ax(0).x2i_rnd(0)                # index of k|| = 0
     max_i  = wlist.ax(0).x2i_rnd(wlist.dim[0].max) # index of k|| = max
-    x = np.arange(start=wlist.dim[1].offset,
-                  stop=wlist.dim[1].end,
-                  step=wlist.dim[1].delta)
+    
+    # the "natural" y scaling, that would be in effect if we didn't change anything
     ylim_wouldbe = (0, wlist.shape[0]*offs[1])
-    ylim_data = (wlist.dim[0].min, wlist.dim[0].max)
-    axzoom = (ylim_data[1]-ylim_data[0]) / (ylim_wouldbe[1]-ylim_wouldbe[0])
-    offs = (offs[0], offs[1]*axzoom)
-    data_offset = -(zero_i - min_i) * offs[1]
-    
+
+    # the original y-range of the data
+    ylim_data    = (wlist.dim[0].min, wlist.dim[0].max)
+
+
+    # zoom factor from "original" to "natural" scaling
+    axzoom       = (ylim_data[1]-ylim_data[0]) / (ylim_wouldbe[1]-ylim_wouldbe[0])
+
+    # recalculate the offs parameter to have the same effect on our
+    # "rescaled" data that the original parameter would have had
+    # on the original data.
+    offs         = (offs[0], offs[1]*axzoom)
+
+    # Usually, LineCollection would start displaying
+    # data at y=0. Here we calculate an offset we need to
+    # apply to the data in order to have the lines aligned
+    # at the correct position on the y axis.
+    data_yshift  = -(zero_i - min_i) * offs[1]
+                                            
+
+    # Scale the wave intensity to have it appear as big
+    # (compared to the 'offs' parameter) as it would have been
+    # if we didn't interfere. Then apply the y-shifting
     wlist *= axzoom
-    wlist += data_offset
-    
+    wlist += data_yshift
+
+    ## set the proper limis (only if user didn't specify his own).
     if xlim == (0, 0):
         xlim = (wlist.dim[1].min - (offs[0]*len(wlist))*(offs[0]<0),
                 wlist.dim[1].max + (offs[0]*len(wlist))*(offs[0]>0))
     if ylim == (0, 0):
         ylim = (ylim_data[0], ylim_data[1])
 
+    ## ...then go for the actual work.
     lines = LineCollection([zip(x, w) for w in wlist], offsets=offs)
 
     if xlim is not None:

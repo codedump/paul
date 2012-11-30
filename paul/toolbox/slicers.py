@@ -5,6 +5,7 @@ from PyQt4 import QtGui, QtCore
 from paul.viewer.viewerwindow import ViewerWindow
 from paul.toolbox.widgets import ValueWidget
 from paul.base.wave import Wave
+from paul.toolbox.atrix import ncomp
 
 import logging
 log = logging.getLogger (__name__)
@@ -64,7 +65,7 @@ class BaseSlicer(QtCore.QObject):
 
         self.master_wave = master  # reference to the wave we will be slicing
         self.slice_wave  = None    # the result (i.e. wave to be plotted)
-        self.tools       = QtGui.QToolBar()   # subclasses should attach all UI elements here
+        self.tools       = QtGui.QToolBar("Slicing specs")   # subclasses should attach all UI elements here
 
         # the slicing timer: will be activated by triggerSlicing(),
         # will call slice() on timeout.
@@ -216,34 +217,22 @@ class SingleSlicer (AxisSlicer):
         log.debug ("%d axes: %s" % (self.slice_wave.ndim, [str(a) for a in self.slice_wave.dim]))
         self.slice_label.setText(" ax%d: %5.2f : %5.2f"
                                  % (self.slice_axis,
-                                    self.slice_wave.dim[0].i2x (xfrom),
-                                    self.slice_wave.dim[0].i2x (xto)))
+                                    self.master_wave.dim[self.slice_axis].i2x (xfrom),
+                                    self.master_wave.dim[self.slice_axis].i2x (xto)))
         self.sliced.emit (self.slice_wave)
 
 
-class WaterfallSlicer (AxisSlicer):
+class CompressingSlicer (AxisSlicer):
     '''
-    This class generates and displays a waterfall diagram, i.e. a series
-    of equally spaced 1D graphs along a given axis, from the specified
-    2D image.
-    The following parameters are important for a waterfall diagram:
+    This class generates a compressed version of the specified wave.
+    It is useful for creating waterfall diagrams along specified axes.
       axis:  The slice axis
       step:  Distance between display slices
-      intg:  Integration width, i.e. over how many single-step slices
-             to integrate in order to generate 1 display slice
-
-             The i-th display slice will have its intensity
-             modified as follows:
-             
-                slice = slice*imul + i*iadd
-             
-      iadd:  Additional constant for intensity of display slices
-             (i.e. every i-th slice will receive additonal i*iadd intensity)
-      imul:  Intensity scaling to apply to every display slice.
-
       norm:  Normalize: if specified, the wave will be normalized
              to the maximum intensity point prior to intensity
              manipulation.
+      intg:  Specifies whether slices between step N and N+step
+             should be added up.
     '''
     
 
@@ -257,23 +246,18 @@ class WaterfallSlicer (AxisSlicer):
         self.yoffset = 0 
 
         # Initialize GUI.
-        self.val_step = ValueWidget (None, "Step: ",    QtGui.QSpinBox(), 1, 99, 1, 1,            self.triggerSlicing)
-        self.val_intg = ValueWidget (None, "Intg.: ",   QtGui.QSpinBox(), 1, 1e2, 1, 1,            self.triggerSlicing)
-        self.val_iadd = ValueWidget (None, "Offset: ", QtGui.QDoubleSpinBox(), -1e3, 1e3, 0.01,  0, self.triggerSlicing)
-        self.val_imul = ValueWidget (None, "Scaling: ", QtGui.QDoubleSpinBox(), 0, 1e3, 1,  1,     self.triggerSlicing)
-        self.chk_norm = QtGui.QCheckBox ("Normalize")
-        self.chk_norm.stateChanged.connect (self.setOffsetSteps)
+        self.val_step = ValueWidget (None, "Step: ", QtGui.QSpinBox(), 1, 99, 1, 1,
+                                     self.triggerSlicing)
+        self.chk_norm = QtGui.QCheckBox ("Norm")
+        self.chk_intg = QtGui.QCheckBox ("Intg")
+        
+
         self.chk_norm.stateChanged.connect (self.triggerSlicing)
-        self.val_step.spin.valueChanged.connect (self.stepChanged)
+        self.chk_intg.stateChanged.connect (self.triggerSlicing)
 
         # attach toolbar to parent, by default (or to us, if no parent)
-        for w in [ self.val_step, self.val_intg,
-                   self.val_iadd, self.val_imul,
-                   self.chk_norm ]:
+        for w in [ self.val_step, self.chk_norm, self.chk_intg ]:
             self.tools.addWidget(w)
-
-        # reposition the tool bar to accomodate the parmeter widgets better
-        self.tools_parent.addToolBar (QtCore.Qt.LeftToolBarArea, self.tools)
 
 
     def _prepareMaster(self, wave):
@@ -281,44 +265,15 @@ class WaterfallSlicer (AxisSlicer):
         if self.master_wave is None:
             return
         self.val_step.spin.setRange (1, self.master_wave.shape[self.slice_axis])
-        self.val_intg.spin.setRange (1, self.val_step.value())
-        for v in [ self.val_iadd, self.val_imul ]:
-            v.spin.setRange(-wave.max(), wave.max())
-            self.setOffsetSteps()
-
-    @QtCore.pyqtSlot(int)
-    def setOffsetSteps(self, state=0):
-        '''
-        Sets the step size of the offset spinbox, depending
-        on whether we do or we don't have a normalization.
-        '''
-        if self.master_wave is None:
-            return
-        wave = self.master_wave
-        step_factor = 0.0025
-        for v in [ self.val_iadd, self.val_imul ]:
-            if (self.master_wave.ndim == 2) and not self.chk_norm.isChecked():
-                v.spin.setSingleStep ((wave.max()-wave.min())/wave.ndim*step_factor)
-            else:
-                v.spin.setSingleStep (step_factor)
             
-            
-
-    @QtCore.pyqtSlot(int)
-    def stepChanged(self, step):
-        '''
-        Called when step value is changed by user. Intependently of the
-        triggerSlicing() slot, we'll also use this slot to change the
-        intg value accordingly.
-        '''
-        self.val_intg.spin.setRange (1, step)  # make sure that  intg <= step
-        if self.old_intg == self.old_step:
-            # "stick" intg and step together, if they had equal values before
-            self.val_intg.spin.setValue (step)
-
 
     @QtCore.pyqtSlot()
     def slice (self, wave=None):
+        '''
+        Creates a slice-wise compressed version of the input wave.
+        (I.e. one with a reduced size in the specified dimension,
+        that has beend periodically sliced and integrated.)
+        '''
         if wave is not None:
             self._prepareMaster(wave)
         if self.master_wave is None:
@@ -326,35 +281,11 @@ class WaterfallSlicer (AxisSlicer):
 
         ax = self.slice_axis
         self.old_step = step = self.val_step.value()
-        self.old_intg = intg = self.val_intg.value()
-        log.debug ("Waterfall along axis %d, %d slices every %d points" % (self.slice_axis, intg, step))
 
-        new_shape = list(self.master_wave.shape)
-        new_shape[ax] = self.master_wave.shape[ax] / self.val_step.value()
-        new_wave = Wave(shape=new_shape, dtype=self.master_wave.dtype)
-        new_wave = 0
+        if self.chk_intg.isChecked():
+            intg = step
+        else:
+            intg = 1
         
-        # ignore the points that don't align well with 'step'
-        max_i = new_shape[ax] * self.val_step.value()
-
-        norm = 1.0 / float(self.val_intg.value())
-        for s in range(0, intg):
-            # marker:  select every N-th poiunt ...but ignore bogus points at the end
-            marker = [ ((((step+i-s) % step) == 0) and (i < max_i))*1 for i in range (0, self.master_wave.shape[ax]) ]
-            new_wave += self.master_wave.compress (marker, ax)
-
-        # post proceesing:
-        #   . 'iadd' (i.e. the y-offset) will be handled at plot time,
-        #      here we just have to save the parameter in a sane
-        #      object property, independent of our implementation details
-        #   . 'norm' and 'imul' we will handle right away, slice by slice
-            
-        self.yoffset = self.val_iadd.value() # saving 'iadd' for plotting
-        for s in new_wave.swapaxes(0, ax):    # scaling and normalizing
-            if self.chk_norm.isChecked():
-                s /= s.sum()
-            s *= (norm*self.val_imul.value())
-
-        self.slice_wave = new_wave
-
+        self.slice_wave = ncomp(self.master_wave, ax, step, intg, self.chk_norm.isChecked())
         self.sliced.emit (self.slice_wave)

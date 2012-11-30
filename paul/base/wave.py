@@ -410,7 +410,7 @@ class Wave(ndarray):
         _always_ returns a string.
         '''
 
-        default = kwargs.setdefault('def', None)
+        default = kwargs.setdefault('default', None)
         defitem = kwargs.setdefault('item', 0)
 
         try:
@@ -443,13 +443,13 @@ class Wave(ndarray):
     def infv(self, *args, **kwargs):
         '''
         Same as *Wave.infs()*, only the returned type is always casted to float().
-        If any error occurs, the contents of kwargs['def'] are returned, or 'NaN'.
+        If any error occurs, the contents of kwargs['default'] are returned, or 'NaN'.
         '''
 
         try:
             val = self.infs(*args, **kwargs)
         except ValueError:
-            val = kwargs.setdefault('def', None)
+            val = kwargs.setdefault('defefault', None)
 
         if val is None:
             return float('nan')
