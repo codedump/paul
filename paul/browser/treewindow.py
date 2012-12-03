@@ -7,6 +7,7 @@ import os.path
 import logging
 log = logging.getLogger (__name__)
 
+
 class TreeWindow (QtGui.QMainWindow):
 
     # Signal emited when user selected one or more files for plotting.
@@ -83,6 +84,7 @@ class TreeWindow (QtGui.QMainWindow):
         self.filetree = QtGui.QTreeView()
         self.vbox.addWidget (self.filetree)
         self.filetree.setSelectionMode (QtGui.QAbstractItemView.ExtendedSelection)
+        self.filetree.setSortingEnabled (True)
         self.filetree.activated.connect(self.itemActivated)
         self.filetree.setModel (self.filesys)
         self.filetree.selectionModel().selectionChanged.connect(self.itemSelected)

@@ -436,7 +436,7 @@ class Wave(ndarray):
                 return str(item)
 
         except (IndexError, KeyError):
-            log.info ("KeyError with info[%s]" % (str(args)))
+            #log.info ("KeyError with info[%s]" % (str(args)))
             return default
         
         

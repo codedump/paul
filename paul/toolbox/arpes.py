@@ -98,6 +98,20 @@ def e(mrel=1.0, ebind=0.0, kpos=0.0, klim=1.0, pts=100, out=None):
 
 def hybridize(wlist, V=0.0, count=1):
     '''
+    --------------------------------------------------------------
+    ACHTUNG: This implementation is broken, gives too high gaps
+             (by a factor of somewhere around ~2).
+             Besides, this implementation is not physically
+             sound (although the results, apart from the
+             wrong factor, seem plausible).
+             A physically correct implementation would
+             involve constructing a Hamiltonian matrix
+             with the bands on the diagonals and the
+             interaction potentials off-diagonal, and
+             diagonalizing that matrix in order to gain
+             the hybridized bands.
+    --------------------------------------------------------------
+    
     Hybridizes bands from *wlist* using the coupling matrix *V*.
     *V* is a NxN matrix, where N = len(wlist).
     Returns a list hybridized bands, corresponding to:
@@ -163,6 +177,52 @@ def hybridize(wlist, V=0.0, count=1):
 
     return hlist
 
+
+def norm_by_noise (data, dim=0, pos=None, xpos=None):
+    '''
+    Normalizes 1D sub-arrays obtained from a 2D ndarray
+    along axis *dim* by the values integrated along
+    *dim* in range specified by *pos*.
+    
+    In ARPES, this is a useful feature for normalizing    
+    spectra obtained in a synchrotron facility, which usually
+    have significant amount of 2nd-order intensity above
+    the Fermi level. Usually, *dim* would be set to represent
+    the energy axis, and *pos* should be set to a range
+    well above the Fermi level.
+
+    Parameters:
+      - *data* is the (multi-dimensional) ndarray containing
+        the data. Data poins _will be modified_, so be sure to
+        operate on a copy if you wish to retain original data.
+        If the data has more than 2 dimensions, the array
+        is rotated such that *dim* becomes the last axis, and
+        norm_by_noise() iterated on all elements of data,
+        recursively until dimension is 2.
+    
+      - *pos* is expected to be a tuple containing a
+        (from, to) value pair in 
+        If *pos* is 'None', a background auto-detection is
+        attempted using gnd_autodetect().
+        If *pos* is a tuple, but either of the *pos* elements
+        is None, the element is replaced by the beginning
+        or ending index, respectively.
+
+      - *dim* is the axis representing the array to be, i.e.
+        the one to be normalized.
+
+    '''
+
+    # rotate axes such that dim is last axis:
+    dim2 = len(data.shape)-1
+    if dim2 != dim:
+        data2 = data.swapaxes (dim, len(data.shape)-1)
+
+    if len(data2.shape) > 2:
+        for d in data2:
+            norm_by_axis (d, dim=(dim2-1), pos=pos, xpos=xpos)
+    else:
+        pass
 
 
 if __name__ == "__main__":

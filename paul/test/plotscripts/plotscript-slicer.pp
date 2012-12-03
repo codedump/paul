@@ -82,10 +82,10 @@ def addWaterfall():
 def rmSlice(s):
     global GUI
     if hasattr(s, "marker_rect"):
-        i = can.axes.patches.index (s.marker_rect)
+        i = PLOT.canvas.axes.patches.index (s.marker_rect)
         if i > 0:
-            del can.axes.patches[i]
-    GUI.slices.remove(s)    
+            del PLOT.canvas.axes.patches[i]
+    GUI.slices.remove(s) 
     
 
 def init(*args, **kwargs):
