@@ -178,7 +178,7 @@ def hybridize(wlist, V=0.0, count=1):
     return hlist
 
 
-def norm_by_noise (data, dim=0, pos=None, xpos=None):
+def norm_by_noise (data, dim=0, xpos=(None, None), ipos=(None, None), copy=True):
     '''
     Normalizes 1D sub-arrays obtained from a 2D ndarray
     along axis *dim* by the values integrated along
@@ -200,29 +200,68 @@ def norm_by_noise (data, dim=0, pos=None, xpos=None):
         norm_by_noise() iterated on all elements of data,
         recursively until dimension is 2.
     
-      - *pos* is expected to be a tuple containing a
+      - *ipos* is expected to be a tuple containing a
         (from, to) value pair in 
-        If *pos* is 'None', a background auto-detection is
+        If *ipos* is 'None', a background auto-detection is
         attempted using gnd_autodetect().
-        If *pos* is a tuple, but either of the *pos* elements
+        If *ipos* is a tuple, but either of the *ipos* elements
         is None, the element is replaced by the beginning
         or ending index, respectively.
+
+      - *xpos* same as *ipos*, only positions are specified
+        in axis coordinates of the axis specified by *dim*.
+        If present, *xpos* takes precedent over *ipos*.
 
       - *dim* is the axis representing the array to be, i.e.
         the one to be normalized.
 
+      - *copy* if True (the default), then the normalization will
+        be performed on a copy of the original array, the original
+        data remaining unchanged. Otherwise the original array
+        will be modified.
+
     '''
 
-    # rotate axes such that dim is last axis:
+    # rotate axes such that dim is last axis
     dim2 = len(data.shape)-1
     if dim2 != dim:
-        data2 = data.swapaxes (dim, len(data.shape)-1)
+        _data = data.swapaxes(dim, dim2)
+    else:
+        _data = data
 
+    # we'll be working on Waves all along -- this is
+    # because we want to retain axis scaling information
+    if copy == True:
+        data2 = _data.copy(w.Wave)
+    else:
+        #if isinstance(data, w.Wave):
+        #data2 = _data
+        #else:
+        data2 = _data.view(w.Wave)
+        data2.setflags(write=True)
+
+    # for more than 2 dimensions: work recursively through all dimensions
     if len(data2.shape) > 2:
         for d in data2:
-            norm_by_axis (d, dim=(dim2-1), pos=pos, xpos=xpos)
+            norm_by_noise (d, dim=(dim2-1), ipos=ipos, xpos=xpos, copy=False)
+            
+    elif len(data2.shape) == 2:
+        # translate everything to index coordinates,
+        # xpos has precedence over ipos
+        index = [data2.dim[1].x2i_rnd(x) if x is not None
+                 else i if i is not None
+                 else f
+                 for x, i, f in zip(xpos, ipos, (0, data2.shape[1]-1))]
+
+        #print "index: ", index, "shape: ", data2.shape
+        for d in data2:
+            d[index[0]:index[1]] /= 2
+            
     else:
-        pass
+        raise ValueError ("Wrong dimension for normalizing along %d: %s" % (dim, data.shape))
+
+    return data2.swapaxes(dim2, dim) if dim2 != dim else data2
+            
 
 
 if __name__ == "__main__":

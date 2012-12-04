@@ -244,6 +244,9 @@ class Wave(ndarray):
         purposes (specifically Axis info) is to be copied or retained.
         If *noax* is True, then the AxisInfo() is retained. Default is
         False (i.e. by default, AxisInfo() is copied, too).
+        Default is usally only be changed by internal functions
+        e.g. when slicing is involved and AxisInfo() information needs
+        to be reconstructed from scratch anyway.
         '''
         for k,v in from_wave.info.iteritems():
             if k != 'axes':
@@ -1134,6 +1137,87 @@ def WAx(dat, ax):
     else:
         # assuming ndarray interface and returning a default AxisInfo.
         return AxisInfo(dat)
+
+#
+# wrappers for some useful Numpy functions to make them Wave-aware
+#
+def concatenate (waves, axis=0):
+    '''
+    Custom numpy.concatenate() replacement for Waves. It concatenates
+    the Waves in the specified axis using numpy.concatenate(), then
+    creates a Wave() view of the resulting array, then restores
+    axis information on all axes.
+    '''
+    _tmp = np.concatenate (waves, axis=axis).view(Wave)
+    _tmp._copy_info (waves)
+    return _tmp
+
+    
+def dstack (waves, delta=1, offset=0, units=''):
+    '''
+    numpy.dstack() wrapper that is aware of AxisInfo stuff.
+    Uses numpy.dstack() internally, then copies unmodified
+    AxisInfo to current wave.
+    The newly created axis will use the parameters
+    *delta* and *offset* are used for the new axis info.
+    '''
+    obj = np.dstack (waves).view(Wave)
+    obj._copy_info (waves, noax=True)
+    for dst, src in zip(obj.dim, waves[0].dim):
+        dst.ofset = src.offset
+        dst.delta = src.delta
+        dst.units = src.units
+    dst.dim[2].offset = offset
+    dst.dim[2].delta = delta
+    dst.dim[2].units = units
+
+    
+def vstack (waves, delta=1, offset=0, units=''):
+    '''
+    numpy.hstack() wrapper that is aware of AxisInfo stuff.
+    Uses numpy.hstack() internally, then copies unmodified
+    AxisInfo to current wave.
+    The newly created axis will use the parameters
+    *delta* and *offset* are used for the new axis info.
+    '''
+    obj = np.vstack (waves).view(Wave)
+    obj._copy_info (waves, noax=True)
+
+    # works for:      (src)      (dst)
+    # ----------------------------------
+    # for 1D waves: old dim0 -> new dim0
+    #               new dim1 -> new dim1
+    #
+    # for 2D waves: old dim0 -> new dim0
+    #               old dim1 -> new dim2
+    #               new dim2 == new dim2
+    for dst, src in zip(obj.dim, waves[0].dim):
+        dst.ofset = src.offset
+        dst.delta = src.delta
+        dst.units = src.units
+    dst.dim[1].offset = offset
+    dst.dim[1].delta = delta
+    dst.dim[1].units = units
+
+
+def hstack (waves, delta=1, offset=0, units=''):
+    '''
+    numpy.hstack() wrapper that is aware of AxisInfo stuff.
+    Uses numpy.hstack() internally, then copies unmodified
+    AxisInfo to current wave.
+    The newly created axis will use the parameters
+    *delta* and *offset* are used for the new axis info.
+    '''
+    obj = np.hstack (waves).view(Wave)
+    obj._copy_info (waves, noax=True)
+    for dst, src in zip(obj.dim[1,2], waves[0].dim):
+        dst.ofset = src.offset
+        dst.delta = src.delta
+        dst.units = src.units
+    dst.dim[0].offset = offset
+    dst.dim[0].delta = delta
+    dst.dim[0].units = units
+    
 
 #
 # some testing functions defined below
