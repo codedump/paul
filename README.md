@@ -1,12 +1,18 @@
 paul
 ====
 
-The Paul toolbox for python-based scientific data analysis. It's basically
-a series of scripts built around NumPy, Matplotlib. IPython and Qt4, for easier
-everyday handling of "normal" scientific data. '"normal" scientific data'
-in this context means what you would usually get out of spectral analysers,
-tunneling microscope images etc. In my case, it means data from angle-resolved
-photoelectron spectroscopy.
+Paul is a visual data navigation and analyis tool written on top of Python,
+Qt4, IPython, Numpy and Matplotlib (just to name the most prominent
+dependencies). It's basically a series of scripts for easier everyday
+handling of "normal" scientific data. '"normal" scientific data'
+in this context means what you would usually get out of spectral
+analysers, tunneling microscope images etc. In my case, it means
+data from angle-resolved photoelectron spectroscopy.
+
+It allows point-and-view displaying of scientific spectra, integrates
+a Matplotlib viewer (and soon editor :-) ) with an easy-to-use file
+navigator and offers powerful live data introspection and processing
+from an integrated IPython shell.
 
 It features some sueful ideas borrowed from a commercial data analysis 
 tool called IgorPro(tm) made by a great company called Wavemetrics,
@@ -26,6 +32,9 @@ Supported data formats:
 
   . Reading of Elmitec's proprietary LEED/LEEM image format
     (used in low electron energy microscopy)
+
+  . Generating of IgorPro(tm) UXP (Unpacked Experiment Files)
+    for easier exchange of data between Paul and Igor.
 
 
 Data processing:

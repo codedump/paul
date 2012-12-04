@@ -67,7 +67,7 @@ class AxisInfo:
 
     _parent = None # the Wave() object this AxisInfo belongs to
 
-    def __init__(self, parent, copy_info=None):
+    def __init__(self, parent, copy_info=None, offset=0, delta=1, units=''):
         '''
         Initializes a new AxisInfo object with *parent* as the parent wave.
         If copy_info is specified, then significant fields (offset, delta, units)
@@ -78,6 +78,9 @@ class AxisInfo:
             self.delta = copy_info.delta
             self.offset = copy_info.offset
             self.units = "%s" % copy_info.units
+        self.offset = offset
+        self.delta = delta
+        self.units = units
 
     @property
     def size(self):
@@ -695,10 +698,13 @@ class Wave(ndarray):
             else:
                 data1 = data_old.view(ndarray)[s1]
 
-            #print "index[%d]=%s, shapes: data0=%s  data1=%s" % (idim, index, data0.shape, data1.shape)
+            #print "index[%d]=%s, shapes: data0=%s  data1=%s" 
+            #    % (idim, index, data0.shape, data1.shape)
 
             cur_dim = idim - int(not keep_dim)
-            if (isinstance(data1, ndarray) and isinstance(data0, ndarray)) and (data1.shape[cur_dim] != data0.shape[cur_dim]):
+            if (isinstance(data1, ndarray) and \
+                isinstance(data0, ndarray)) \
+                and (data1.shape[cur_dim] != data0.shape[cur_dim]):
                 data1 = np.resize (data1, data0.shape)
                 if data0.shape[0] > 0:
                     data1[0] = data0[0]
@@ -782,34 +788,16 @@ class Wave(ndarray):
 
                 if isinstance(data_old, Wave):
                     data_new = data_old._copy_fi_lim (*tuple(new_s))
-                    #keep_dim = False
                 elif index is None:
                     data_new = array([data_old])
                     keep_dim = True
                 else:
-                    raise IndexError ("Don't know what to do with non-array %s and index %s" % (data_old, index))
-
-                #new_s[idim] = index
-                #if not isinstance(data_old, Wave):
-                #    if keep_dim is None:
-                #        # strictly, it's not keeping;
-                #        # we're _extending_ the dimension :-)
-                #        # but in any case, we need to increase the
-                #        # idim counter below, so set keep_dim to "True"
-                #        data_new = array([data_old])
-                #        keep_dim = True
-                ##        print "here!"
-                #    else:
-                #        raise IndexError ("Don't know what to do with non-array %s and index %s" % (data_old, index))
-                #else:
-                #    data_new = data_old._copy_fi_lim (*tuple(new_s))
-                #    keep_dim = False
+                    raise IndexError ("Don't know what to do with non-array %s "
+                                      "and index %s" % (data_old, index))
                               
             data_old = data_new.view(Wave)
             idim += int(keep_dim)
             iconsumed += 1
-
-            #print "intermediate: ", data_old
 
         return data_old
 
@@ -1036,7 +1024,8 @@ class Wave(ndarray):
         elif (i == 'lim') and (recmd_intrp is None):
             pass # stick with i, recmd_intrp can be upgraded to it
         else:
-            raise IndexError ("Explicitly specified interpolation method '%s' contradicts recommended '%s'" % (i, recmd_intrp))
+            raise IndexError ("Explicitly specified interpolation method '%s' "
+                              "contradicts recommended '%s'" % (i, recmd_intrp))
 
         # default recommendation, if index permits: False (i.e. standard [] indexing).
         if i == 'auto':
@@ -1160,44 +1149,47 @@ def dstack (waves, delta=1, offset=0, units=''):
     AxisInfo to current wave.
     The newly created axis will use the parameters
     *delta* and *offset* are used for the new axis info.
+
+    (Stacks along dim 3.)
     '''
     obj = np.dstack (waves).view(Wave)
-    obj._copy_info (waves, noax=True)
-    for dst, src in zip(obj.dim, waves[0].dim):
-        dst.ofset = src.offset
-        dst.delta = src.delta
-        dst.units = src.units
-    dst.dim[2].offset = offset
-    dst.dim[2].delta = delta
-    dst.dim[2].units = units
+    obj._copy_info (waves[0], noax=True)
+
+    src_dim = list(waves[0].dim)
+    while len(src_dim) < obj.ndim:
+        src_dim.insert (2, AxisInfo(None, offset=offset, delta=delta, units=units))
+
+    for src, dst in zip(src_dim, obj.dim):
+        dst.offset = src.offset
+        dst.delta  = src.delta
+        dst.units  = src.units
+
+    return obj
 
     
 def vstack (waves, delta=1, offset=0, units=''):
     '''
-    numpy.hstack() wrapper that is aware of AxisInfo stuff.
-    Uses numpy.hstack() internally, then copies unmodified
+    numpy.vstack() wrapper that is aware of AxisInfo stuff.
+    Uses numpy.vstack() internally, then copies unmodified
     AxisInfo to current wave.
     The newly created axis will use the parameters
     *delta* and *offset* are used for the new axis info.
+
+    (Stacks along dim 2.)
     '''
     obj = np.vstack (waves).view(Wave)
-    obj._copy_info (waves, noax=True)
+    obj._copy_info (waves[0], noax=True)
 
-    # works for:      (src)      (dst)
-    # ----------------------------------
-    # for 1D waves: old dim0 -> new dim0
-    #               new dim1 -> new dim1
-    #
-    # for 2D waves: old dim0 -> new dim0
-    #               old dim1 -> new dim2
-    #               new dim2 == new dim2
-    for dst, src in zip(obj.dim, waves[0].dim):
-        dst.ofset = src.offset
-        dst.delta = src.delta
-        dst.units = src.units
-    dst.dim[1].offset = offset
-    dst.dim[1].delta = delta
-    dst.dim[1].units = units
+    src_dim = list(waves[0].dim)
+    while len(src_dim) < obj.ndim:
+        src_dim.insert (1, AxisInfo(None, offset=offset, delta=delta, units=units))
+
+    for src, dst in zip(src_dim, obj.dim):
+        dst.offset = src.offset
+        dst.delta  = src.delta
+        dst.units  = src.units
+
+    return obj
 
 
 def hstack (waves, delta=1, offset=0, units=''):
@@ -1207,16 +1199,22 @@ def hstack (waves, delta=1, offset=0, units=''):
     AxisInfo to current wave.
     The newly created axis will use the parameters
     *delta* and *offset* are used for the new axis info.
+
+    (Stacks along dim 1.)
     '''
     obj = np.hstack (waves).view(Wave)
-    obj._copy_info (waves, noax=True)
-    for dst, src in zip(obj.dim[1,2], waves[0].dim):
-        dst.ofset = src.offset
-        dst.delta = src.delta
-        dst.units = src.units
-    dst.dim[0].offset = offset
-    dst.dim[0].delta = delta
-    dst.dim[0].units = units
+    obj._copy_info (waves[0], noax=True)
+
+    src_dim = list(waves[0].dim)
+    while len(src_dim) < obj.ndim:
+        src_dim.insert (0, AxisInfo(None, offset=offset, delta=delta, units=units))
+
+    for src, dst in zip(src_dim, obj.dim):
+        dst.offset = src.offset
+        dst.delta  = src.delta
+        dst.units  = src.units
+
+    return obj
     
 
 #
@@ -1432,7 +1430,10 @@ def _test_index_axslice(index, offsets, deltas, units=None):
 
     print "  Index:", index,
 
-    a = array([[[i*1+j*10+k*100 for i in range(5)] for j in range(5)] for k in range(5)]).view(Wave)
+    a = array([[[i*1+j*10+k*100 \
+                     for i in range(5)] \
+                    for j in range(5)] \
+                   for k in range(5)]).view(Wave)
     a.dim[0].units = 'dim0'
     a.dim[1].units = 'dim1'
     a.dim[2].units = 'dim2'
@@ -1544,16 +1545,23 @@ def _test_index():
 
     print "\nTesting interpolation performance"
 
-    fail_sum += _test_index_fraction ((slice(0,4,0.1),slice(0,4,0.1),slice(0,4,0.1)), verbose=False)
-    fail_sum += _test_index_fraction ((slice(0,4,0.2),slice(0,4,0.1),slice(0,4,0.1)), verbose=False)
-    fail_sum += _test_index_fraction ((slice(0,4,0.1),slice(0,4,0.2),slice(0,4,0.1)), verbose=False)
-    fail_sum += _test_index_fraction ((slice(0,4,0.1),slice(0,4,0.1),slice(0,4,0.2)), verbose=False)
+    fail_sum += _test_index_fraction ((slice(0,4,0.1),slice(0,4,0.1),slice(0,4,0.1)),
+                                      verbose=False)
+    fail_sum += _test_index_fraction ((slice(0,4,0.2),slice(0,4,0.1),slice(0,4,0.1)), 
+                                      verbose=False)
+    fail_sum += _test_index_fraction ((slice(0,4,0.1),slice(0,4,0.2),slice(0,4,0.1)), 
+                                      verbose=False)
+    fail_sum += _test_index_fraction ((slice(0,4,0.1),slice(0,4,0.1),slice(0,4,0.2)), 
+                                      verbose=False)
 
     print "\nTesting list indexing with interpolation"
 
-    fail_sum += _test_index_fraction (  ([0.1, 0.2, 1.5], slice(0,4,0.1),  slice(0,4,0.1) ) , verbose=False)
-    fail_sum += _test_index_fraction (  (slice(0,4,0.2),  [0.1, 0.2, 1.5], slice(0,4,0.1) ) , verbose=False)
-    fail_sum += _test_index_fraction (  (slice(0,4,0.1),  slice(0,4,0.2),  [0.1, 0.2, 1.5]) , verbose=False)
+    fail_sum += _test_index_fraction (  ([0.1, 0.2, 1.5], slice(0,4,0.1),  slice(0,4,0.1) ) ,
+                                        verbose=False)
+    fail_sum += _test_index_fraction (  (slice(0,4,0.2),  [0.1, 0.2, 1.5], slice(0,4,0.1) ) ,
+                                        verbose=False)
+    fail_sum += _test_index_fraction (  (slice(0,4,0.1),  slice(0,4,0.2),  [0.1, 0.2, 1.5]) ,
+                                        verbose=False)
 
     ##
     ## These will FAIL due to a different way Wave() is handling multi-dimensional
@@ -1677,7 +1685,8 @@ if __name__ == "__main__":
     ch = logging.StreamHandler()
     ch.setLevel (logging.DEBUG)
     log.addHandler (ch)
-    fmt = logging.Formatter('%(asctime)s %(levelname)s: %(name)s: %(module)s.%(funcName)s: %(message)s')
+    fmt = logging.Formatter('%(asctime)s %(levelname)s: %(name)s: '
+                            '%(module)s.%(funcName)s: %(message)s')
     ch.setFormatter(fmt)
 
     fail_sum = 0
@@ -1687,4 +1696,5 @@ if __name__ == "__main__":
     fail_sum += _test_scale()
     
 
-    print "\nModule: %s (%d failed)\n\n" % (_print_ok (fail_sum==0, verbose=False)[1], -fail_sum)
+    print "\nModule: %s (%d failed)\n\n" % (_print_ok (fail_sum==0, verbose=False)[1],
+                                            -fail_sum)
