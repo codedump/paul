@@ -2,7 +2,7 @@
 import logging
 log = logging.getLogger (__name__)
 
-import sys, os, random
+import sys, os, random, pprint
 from PyQt4 import QtCore, QtGui
 
 import matplotlib
@@ -105,6 +105,12 @@ class MatplotlibWidget(FigureCanvas):
         elif data.ndim == 2:
             self.plot2d(data, redraw)
         else:
-            log.error ("Don't know what to do with %d-dimensional data."
-                       % (data.ndim))
+            self.axes.clear()
+            w = data.view(wave.Wave)
+            axinfo_str = ''.join([ ("axis %d: %f...%f (units: '%s')\n" % (j, i.offset, i.end, i.units))
+                                   for i,j in zip(w.dim, range(w.ndim))])
+            self.axes.text (0.05, 0.95, "Don't know how to display wave!\n\nname: %s\ndimensions: %d\n%s\n%s" % 
+                            (w.infs('name'), w.ndim, axinfo_str, pprint.pformat(w.info)),
+                            transform=self.axes.transAxes, va='top')
+            self.draw()
 

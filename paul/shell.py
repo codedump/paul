@@ -13,8 +13,10 @@ import numpy as np
 import scipy as sp
 import matplotlib as mpl
 import paul.loader.igor as ig
-
+import paul.base.wave as w
 import paul.toolbox as tools
+
+import logging, sys
 
 
 def view(obj=None):
@@ -32,5 +34,25 @@ def browse(path='~'):
     '''
     return browser.create(path)
 
+#
+# default stand-alone behavior: start a browser with
+# an IPython shell in the calling terminal.
+#
 if __name__ == "__main__":
-    pass # no stand-alone stuff yet -- maybe start an ipython shell?
+
+    # starting logging system
+    log = logging.getLogger ('paul')
+    log.setLevel (logging.DEBUG)
+    ch = logging.FileHandler("/tmp/paul-current.log", "w")
+    ch.setLevel (logging.DEBUG)
+    log.addHandler (ch)
+    fmt = logging.Formatter('%(asctime)s %(levelname)s: %(name)s: %(module)s.%(funcName)s: %(message)s')
+    ch.setFormatter(fmt)
+    log.debug ("Starting...")
+    
+    if len(sys.argv) > 1:
+        path = sys.argv[1]
+    else:
+        path = "~"
+        
+    P = browser.create(path, shell=True, log=log)

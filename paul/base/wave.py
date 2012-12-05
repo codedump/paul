@@ -67,20 +67,21 @@ class AxisInfo:
 
     _parent = None # the Wave() object this AxisInfo belongs to
 
-    def __init__(self, parent, copy_info=None, offset=0, delta=1, units=''):
+    def __init__(self, parent, copy_from=None, offset=0, delta=1, units=''):
         '''
         Initializes a new AxisInfo object with *parent* as the parent wave.
-        If copy_info is specified, then significant fields (offset, delta, units)
-        are copied from *copy_info*.
+        If *copy_from* is not None, then significant fields (offset, delta, units)
+        are copied from *copy_from*.
         '''
         self._parent = parent
-        if copy_info is not None:
-            self.delta = copy_info.delta
-            self.offset = copy_info.offset
-            self.units = "%s" % copy_info.units
-        self.offset = offset
-        self.delta = delta
-        self.units = units
+        if copy_from is not None:
+            self.delta  = copy_from.delta
+            self.offset = copy_from.offset
+            self.units  = "%s" % copy_from.units
+        else:
+            self.offset = offset
+            self.delta  = delta
+            self.units  = units
 
     @property
     def size(self):
@@ -264,7 +265,7 @@ class Wave(ndarray):
                 # by hand.
                 axes = []
                 for ax in v:
-                    axes.append (AxisInfo (self, copy_info=ax))
+                    axes.append (AxisInfo (self, copy_from=ax))
                 self.info['axes'] = axes
 
 
@@ -302,17 +303,14 @@ class Wave(ndarray):
     def sum (self, axis=None, dtype=None, out=None):
         '''
         Overwrites the ndarray.sum() function.
-        Integrates over axes in 'axes'. The overloaded function takes
+        Integrates over dimension specified by *axes*. The overloaded function takes
         care to remove the corresponding axes from the axinfo vector.
         '''
         obj = ndarray.sum (self, axis, dtype, out)
-        if hasattr(axis, "__iter__"):
-            ax = list(obj.info['axes'])
-            for i in axis:
-                del ax[i]
-            obj.info['axes'] = tuple(ax)
-        elif axis is not None:
-            ax = list(obj.info['axes'])
+
+        # if axis is None, result is a single element - nothing to do.
+        if axis is not None:
+            ax = list(self.info['axes'])
             del ax[axis]
             obj.info['axes'] = tuple(ax)
         return obj
@@ -463,16 +461,27 @@ class Wave(ndarray):
             return float(val)
         
 
-    def _slice_axinfo(self,obj,parent):
+    def _get_sliced_axinfo(self, obj, parent=None, source=None):
         '''
-        Returns a modified version of the axis-info list of *self*,
-        intended for the target object *parent*.
+        Returns a version of the axis-info copied from the source
+        object *source*, sliced according to the slicing object
+        *obj*, intended for use in slicing object *parent*.
+        If *parent* is None, *self* is used.
+        If *source* is None,  *self* is used.
         The modification is performed according to the slicing
         information from *obj*. The slicing information is assumed
         to be in index coordinates, possibly fractional.
+
+        Returns the slicing information tuple.
         '''
         new_info = []
         i = 0
+
+        if parent is None:
+            parent = self
+
+        if source is None:
+            source = self
         
         if not hasattr(obj, "__iter__"):
             index_list = (obj,)
@@ -483,12 +492,12 @@ class Wave(ndarray):
             new_axi = AxisInfo(parent)
 
             if isinstance(index, slice):
-                old_axi = self.ax(i)
+                old_axi = source.ax(i)
                 i_start = index.start
                 i_stop  = index.stop
                 i_step  = index.step
                 if i_start is not None:
-                    new_axi.offset = self.ax(i).i2x(i_start)
+                    new_axi.offset = source.ax(i).i2x(i_start)
                 else:
                     new_axi.offset = old_axi.offset
                 if i_step is not None:
@@ -501,10 +510,10 @@ class Wave(ndarray):
                 i += 1
 
             elif hasattr(index, "__iter__"):
-                old_axi = self.ax(i)
+                old_axi = source.ax(i)
                 a = array(index).min()
-                new_axi.offset = self.ax(i).i2x(a.min())
-                new_axi.delta = (self.ax(i).i2x(a.max())-self.ax(i).i2x(a.min()))/float(len(a))
+                new_axi.offset = source.ax(i).i2x(a.min())
+                new_axi.delta = (source.ax(i).i2x(a.max())-source.ax(i).i2x(a.min()))/float(len(a))
                 new_axi.units = old_axi.units
                 new_info.append(new_axi)
                 #print "i: new info for axis", i, new_axi
@@ -521,8 +530,8 @@ class Wave(ndarray):
                 #print "d: new info for axis", i, new_axi
                 i += 1
 
-        while i < len(self.info['axes']):
-            new_info.append(AxisInfo(parent, copy_info=self.ax(i)))
+        while i < len(source.info['axes']):
+            new_info.append(AxisInfo(parent=parent, copy_from=source.ax(i)))
             #print "c: new info for axis", i, self.ax(i)
             i += 1
 
@@ -542,7 +551,7 @@ class Wave(ndarray):
         data = self.view(ndarray)[obj]
         if isinstance(data, ndarray):
             w = data.view(Wave)
-            w.info['axes'] = self._slice_axinfo (obj, w)
+            w.info['axes'] = self._get_sliced_axinfo (obj, parent=w, source=self)
             #print [str(a) for a in self.info['axes'] ]
             #print [str(a) for a in w.info['axes'] ]
             #print w.axv
@@ -1047,7 +1056,7 @@ class Wave(ndarray):
             raise IndexError ("Don't know what to do: interpolation '%s' requested" % (str(i)))
 
         if isinstance (data, Wave):
-            data.info['axes'] = self._slice_axinfo (new_index, data)
+            data.info['axes'] = self._get_sliced_axinfo (new_index, source=self, parent=data)
 
         return data
         

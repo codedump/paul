@@ -153,28 +153,31 @@ def updateIndicators():
                 s.marker_rect.set_transform (PLOT.canvas.axes.transAxes)
                 s.marker_rect.set_axes (PLOT.canvas.axes)
                 PLOT.canvas.axes.add_patch (s.marker_rect)
+
+            if PLOT.waves[0].ndim == 2:
+                sax = s.slice_axis
+                wav = PLOT.waves[0]
+                
+            elif PLOT.waves[0].ndim == 3:
+                wav = PLOT.cut_wav
+                if (PLOT.cut_dim == 0):
+                    sax = 0 if s.slice_axis == 1 else 1
+                elif (PLOT.cut_dim == 1):
+                    sax = 0 if s.slice_axis == 0 else 1
+                elif (PLOT.cut_dim == 2):
+                    sax = s.slice_axis
+    
+            else:
+                return # nothing to do, 1D wave
             
-            sax   = s.slice_axis
             sfrom = float(s.val_from.value())  / wav.dim[sax].size
             ssize = float(s.val_delta.value()) / wav.dim[sax].size
 
             sx = sfrom*(sax==1)
             sy = sfrom*(sax==0)
-            sw = ssize*(sax==1) + (sax!=1)
-            sh = ssize*(sax==0) + (sax!=0)
-            
-            ## rectangle orientation depends on which axis we're slicing...
-            #if sax == 1:
-            #    sx = sfrom
-            #    sy = 0
-            #    sw = ssize
-            #    sh = 1
-            #else:
-            #    sx = 0
-            #    sy = sfrom
-            #    sw = 1
-            #    sh = ssize
-            
+            sw = ssize*(sax==1) + (sax!=1) if (PLOT.cut_dim != s.slice_axis) else 0
+            sh = ssize*(sax==0) + (sax!=0) if (PLOT.cut_dim != s.slice_axis) else 0
+                        
             log.debug ("Slice marker rect: %f %f %f %f" % (sx, sy, sw, sh))
             s.marker_rect.set_xy ((sx, sy))
             s.marker_rect.set_width (sw)
@@ -182,7 +185,41 @@ def updateIndicators():
         else:
             print "...no marker rect"
     PLOT.canvas.draw()
-    
+
+def populate (*args, **kwargs):
+    w0 = kwargs['wav'][0]
+    wav = w0 if isinstance(w0, Wave) else w0.view(Wave)
+    kwargs['can'].reset()
+    ax = kwargs['can'].axes
+
+    if wav.ndim == 1:
+        log.debug ("1D data (line)")
+        ax.plot (wav.dim[0].lim, wav)
+        
+    elif wav.ndim == 2:
+        log.debug ("2D data (image)")
+        ax.imshow (wav, extent=wav.imlim)
+        
+    elif wav.ndim == 3:
+        log.debug ("3D data (volume)")
+        
+        # show only a representative slice through the volume, for orientation
+        PLOT.cut_dim = 2    # dimension perpendicular to screen
+        PLOT.cut_fac = 0.3  # where to cut, relative on cut_dim
+        PLOT.cut_wav = None # the representative wave
+
+        index = [slice(None)] * wav.ndim
+        index[PLOT.cut_dim] = wav.dim[PLOT.cut_dim].size*PLOT.cut_fac
+
+        PLOT.cut_wav = wav[index]
+        kwargs['cut'] = PLOT.cut_wav
+        
+        ax.imshow (PLOT.cut_wav, extent=PLOT.cut_wav.imlim)
+        ax.text (0, 1.05, "3D wave: representative cut (%d%% of ax%d)"
+                 % (PLOT.cut_fac*100, PLOT.cut_dim), transform=ax.transAxes)
+
+    decorate (*args, **kwargs)
+
     
 def decorate(*args, **kwargs):
     '''
@@ -192,12 +229,18 @@ def decorate(*args, **kwargs):
     wav = kwargs['wav']
     global GUI, PLOT
     
-    PLOT.waves = wav
+    PLOT.waves = kwargs['wav']
 
-    can.axes.set_xlabel (r'$k_{||}$ ($^\circ$)')
-    can.axes.set_ylabel (r'E$_{total}$ (meV)')
-    can.axes.set_ylim (PLOT.waves[0].dim[0].lim)
-    setColor(-1)
+    if PLOT.waves[0].ndim == 2:
+        can.axes.set_xlabel (r'$k_{||}$ ($^\circ$)')
+        can.axes.set_ylabel (r'E$_{total}$ (meV)')
+        can.axes.set_ylim (PLOT.waves[0].dim[0].lim)
+        setColor(-1)
+    elif PLOT.waves[0].ndim == 3:
+        can.axes.set_xlabel (r'')
+        can.axes.set_ylabel (r'')
+        can.axes.set_ylim (kwargs['cut'].dim[0].lim)
+        setColor(-1)
     
     log.debug ("Slices: %s" % str(GUI.slices))
     for s in GUI.slices:

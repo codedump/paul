@@ -255,7 +255,7 @@ def norm_by_noise (data, dim=0, xpos=(None, None), ipos=(None, None), copy=True)
 
         #print "index: ", index, "shape: ", data2.shape
         for d in data2:
-            d[index[0]:index[1]] /= 2
+            d /= (d[index[0]:index[1]].sum() / (index[1]-index[0]))
             
     else:
         raise ValueError ("Wrong dimension for normalizing along %d: %s" % (dim, data.shape))

@@ -9,7 +9,7 @@ from paul.browser.browserwindow import BrowserWindow
 from PyQt4 import QtGui
 import sys
 
-def create(path='~', args=[], shell=False):
+def create(path='~', args=[], log=None, shell=False):
     '''
     Creates a paul-browser instance, returns the main window object.
     A "paul-browser" is a GUI window featuring a tree-view and a
@@ -38,7 +38,8 @@ def create(path='~', args=[], shell=False):
                 path = a
                 break
 
-    log.debug ("Start path is '%s'" % path)
+    if log is not None:
+        log.debug ("Start path is '%s'" % path)
 
     main_win = BrowserWindow(path)
     main_win.show()
@@ -47,16 +48,27 @@ def create(path='~', args=[], shell=False):
         # Start an interactive shell, this will be the name space
         # of the shell. Basically, everything needs to be accessed
         # through main_win (aliased 'P' in the shell :-) )
+
+        import numpy as np
+        import scipy as sp
+        import matplotlib as mpl
+        import paul.loader.igor as ig
+        import paul.base.wave as w
+        import paul.toolbox as tools
+        import paul.shell as psh
+        
         P = main_win
         ipshell = InteractiveShellEmbed.instance()
         IPython.lib.inputhook.enable_gui (gui='qt')
         ipshell()
         
     if not gui.is_event_loop_running_qt4():
-        log.debug ("Starting main event loop")
+        if log is not None:
+            log.debug ("Starting main event loop")
         app.exec_()
     else:
-        log.debug ("Event loop is already running")
+        if log is not None:
+            log.debug ("Event loop is already running")
     return main_win
 
 if __name__ == "__main__":
@@ -83,4 +95,4 @@ if __name__ == "__main__":
     ch.setFormatter(fmt)
     log.debug ("Starting...")
 
-    create(args=sys.argv, shell=use_shell)
+    create(args=sys.argv, shell=use_shell, log=log)
