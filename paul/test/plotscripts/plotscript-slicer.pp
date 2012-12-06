@@ -32,10 +32,12 @@ def setColor(i):
     if not hasattr(PLOT, 'waves') or len(PLOT.waves) == 0:
         return
 
-    data = PLOT.waves[0]
     if not len(PLOT.canvas.axes.images) > 0:
         return
-    img = PLOT.canvas.axes.images[0]
+    img  = PLOT.canvas.axes.images[0]
+    data = PLOT.cut_wav \
+      if (hasattr(PLOT, 'cut_wav') and PLOT.cut_wav is not None) \
+      else PLOT.waves[0]
     
     dmin = data.infv('FDD', 'V_min', default=data.min())
     dmax = data.infv('FDD', 'V_max', default=data.max())
@@ -116,11 +118,14 @@ def init(*args, **kwargs):
     # some setup variables (graph coloring etc)
     GUI.col_min = ValueWidget (None, "Color min: ", QtGui.QDoubleSpinBox(), -99, 99, 0.01, 0.00, setColor)
     GUI.col_max = ValueWidget (None, " max: ", QtGui.QDoubleSpinBox(), -99, 99, 0.01, 1.00, setColor)
+    GUI.cut_dim = ValueWidget (None, " 3D visual plane: ", QtGui.QSpinBox(), 0, 2, 1, 1, set3DDisplay)
     GUI.toolbar = QtGui.QToolBar("Slicing and colors")
     GUI.mainwin.addToolBarBreak()
     GUI.mainwin.addToolBar(GUI.toolbar)
-    for w in GUI.col_min, GUI.col_max:
-        GUI.toolbar.addWidget (w)
+    GUI.tool_act = [ GUI.toolbar.addWidget (w)
+                         for w in GUI.col_min, GUI.col_max, GUI.cut_dim ]
+    GUI.cut_dim_act = GUI.tool_act[2]
+    
     GUI.toolbar.addAction ("+S", addSlice)
     GUI.toolbar.addAction ("+C", addWaterfall)
 
@@ -131,9 +136,6 @@ def exit(*args, **kwargs):
     GUI.mainwin.removeToolBar (GUI.toolbar)
     for s in GUI.slices:
         log.debug ("Removing slicer %s" % s)
-        #GUI.mainwin.removeToolBar (s.tools) # sometimes the __del__ function
-        #                                    # is not called -- need to remove
-        #                                    # the toolbar by hand.
         del s
     del GUI.slices
     del GUI
@@ -160,12 +162,15 @@ def updateIndicators():
                 
             elif PLOT.waves[0].ndim == 3:
                 wav = PLOT.cut_wav
-                if (PLOT.cut_dim == 0):
-                    sax = 0 if s.slice_axis == 1 else 1
-                elif (PLOT.cut_dim == 1):
-                    sax = 0 if s.slice_axis == 0 else 1
-                elif (PLOT.cut_dim == 2):
-                    sax = s.slice_axis
+                other_dims = range(PLOT.waves[0].ndim)
+                other_dims.remove(PLOT.cut_dim)
+                sax = 0 if (s.slice_axis == min(other_dims)) else 1
+                #if (PLOT.cut_dim == 0):
+                #    sax = 0 if s.slice_axis == 1 else 1
+                #elif (PLOT.cut_dim == 1):
+                #    sax = 0 if s.slice_axis == 0 else 1
+                #elif (PLOT.cut_dim == 2):
+                #    sax = s.slice_axis
     
             else:
                 return # nothing to do, 1D wave
@@ -186,7 +191,52 @@ def updateIndicators():
             print "...no marker rect"
     PLOT.canvas.draw()
 
+
+@QtCore.pyqtSlot('int')
+def set3DDisplay (dim):
+    '''
+    Takes the currently displaying waves (PLOT.waves[0]), assuming
+    that it's a 3D wave, and generates a cut perpendicular to *dim*,
+    in order to generate a displaying version suitable for holding
+    slice markers.
+    '''
+    global PLOT, GUI
+
+    log.debug ("Generating 3D display proxy plane")
+
+    wav = PLOT.waves[0]
+    ax = PLOT.canvas.axes
+    
+    PLOT.cut_dim = dim  # dimension perpendicular to screen
+    PLOT.cut_fac = 0.5  # where to cut, relative on cut_dim
+    PLOT.cut_wav = None # the representative wave
+
+    dlim = wav.dim[PLOT.cut_dim].lim
+    
+    if dlim[0] < 0 and dlim[1] > 0:
+        PLOT.cut_fac = wav.dim[PLOT.cut_dim].x2i(0) / wav.dim[PLOT.cut_dim].size
+        log.debug ("Calculated proxy plane @ %d%% along axis %d" 
+                   % (PLOT.cut_fac, PLOT.cut_dim))
+
+    index = [slice(None)] * wav.ndim
+    index[PLOT.cut_dim] = wav.dim[PLOT.cut_dim].size*PLOT.cut_fac
+
+    PLOT.cut_wav = wav[index]
+        
+    ax.imshow (PLOT.cut_wav, extent=PLOT.cut_wav.imlim)
+    ax.text (0, 1.05, "3D wave: representative cut at %d%% axis %d"
+             % (PLOT.cut_fac*100, PLOT.cut_dim), transform=ax.transAxes)
+
+    decorate()
+    updateIndicators()
+    
+
 def populate (*args, **kwargs):
+
+    global GUI, PLOT
+    
+    PLOT.waves = kwargs['wav']
+    
     w0 = kwargs['wav'][0]
     wav = w0 if isinstance(w0, Wave) else w0.view(Wave)
     kwargs['can'].reset()
@@ -194,30 +244,20 @@ def populate (*args, **kwargs):
 
     if wav.ndim == 1:
         log.debug ("1D data (line)")
+        GUI.cut_dim_act.setEnabled(False)
         ax.plot (wav.dim[0].lim, wav)
         
     elif wav.ndim == 2:
         log.debug ("2D data (image)")
+        GUI.cut_dim_act.setEnabled(False)
         ax.imshow (wav, extent=wav.imlim)
         
     elif wav.ndim == 3:
         log.debug ("3D data (volume)")
-        
-        # show only a representative slice through the volume, for orientation
-        PLOT.cut_dim = 2    # dimension perpendicular to screen
-        PLOT.cut_fac = 0.3  # where to cut, relative on cut_dim
-        PLOT.cut_wav = None # the representative wave
-
-        index = [slice(None)] * wav.ndim
-        index[PLOT.cut_dim] = wav.dim[PLOT.cut_dim].size*PLOT.cut_fac
-
-        PLOT.cut_wav = wav[index]
+        set3DDisplay (2)
+        GUI.cut_dim_act.setEnabled(True)
         kwargs['cut'] = PLOT.cut_wav
         
-        ax.imshow (PLOT.cut_wav, extent=PLOT.cut_wav.imlim)
-        ax.text (0, 1.05, "3D wave: representative cut (%d%% of ax%d)"
-                 % (PLOT.cut_fac*100, PLOT.cut_dim), transform=ax.transAxes)
-
     decorate (*args, **kwargs)
 
     
@@ -225,21 +265,20 @@ def decorate(*args, **kwargs):
     '''
     Called when a newly plotted 2D image (or 1D graph) is to be decorated.
     '''
-    can = kwargs['can']
-    wav = kwargs['wav']
     global GUI, PLOT
-    
-    PLOT.waves = kwargs['wav']
 
-    if PLOT.waves[0].ndim == 2:
-        can.axes.set_xlabel (r'$k_{||}$ ($^\circ$)')
-        can.axes.set_ylabel (r'E$_{total}$ (meV)')
-        can.axes.set_ylim (PLOT.waves[0].dim[0].lim)
+    ax = PLOT.canvas.axes
+    wav = PLOT.waves[0]
+
+    if wav.ndim == 2:
+        ax.set_xlabel (r'$k_{||}$ ($^\circ$)')
+        ax.set_ylabel (r'E$_{total}$ (meV)')
+        ax.set_ylim (wav.dim[0].lim)
         setColor(-1)
     elif PLOT.waves[0].ndim == 3:
-        can.axes.set_xlabel (r'')
-        can.axes.set_ylabel (r'')
-        can.axes.set_ylim (kwargs['cut'].dim[0].lim)
+        ax.set_xlabel (r'')
+        ax.set_ylabel (r'')
+        ax.set_ylim (PLOT.cut_wav.dim[0].lim)
         setColor(-1)
     
     log.debug ("Slices: %s" % str(GUI.slices))
@@ -247,13 +286,11 @@ def decorate(*args, **kwargs):
         if (s.viewer.isVisible()):
             # calculate slice, if slicer window is visible
             log.debug ("Calling slice window %s (for axis %d)" % (s, s.slice_axis))
-            s.slice(wave=PLOT.waves[0])
+            s.slice(wave=wav)
                 
         else:
             log.debug ("Removing hidden slice window %s (for axis %d)" % (s, s.slice_axis))
             rmSlice (s)
-
-            #print "Patches:", PLOT.canvas.axes.patches
         
 
 

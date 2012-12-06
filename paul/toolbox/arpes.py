@@ -261,7 +261,77 @@ def norm_by_noise (data, dim=0, xpos=(None, None), ipos=(None, None), copy=True)
         raise ValueError ("Wrong dimension for normalizing along %d: %s" % (dim, data.shape))
 
     return data2.swapaxes(dim2, dim) if dim2 != dim else data2
-            
+
+
+def deg2k (*args, **kwargs):
+    '''
+    Converts a Wave from the natural coordinates of an ARPES
+    measurement (energy / degrees) into k-space (inverse space)
+    coordinates.
+
+    Following parametes:
+      - (unnamed parameter):    the wave in energy/degrees coordinates.
+      - energy_axis, eax:       which axis of the data is energy
+      - detector_axis, dax:     which axis of the data is the detector
+      - tilt_axis, tax:         which axis of the detector is the tilt axis
+      - energy_offset, eoff:    energy offset (default: 0)
+      - detector_offset, doff:  detector axis offset (default: 0)
+      - tilt_offset, toff:      tilt offset (default: 0)
+      - axes: tuple of three values (eax, dax, tax)
+      - offsets: tuple of three values (eoffs, doffs, toffs)
+      - inner, U:               value in eV of the inner potential known
+                                for the solid (default: 10)
+    '''
+
+    # Strategy:
+    #  . create a new data view
+    #  . tilt data such that axes configuration
+    #    is (energy, detector, tilt)
+    #  . apply corrections (offsets, and possibly increments)
+    #  . ...
+
+
+    # parameter helpers
+    _param = lambda k0, k1, d: \
+      kwargs[k0] if kwargs.has_key(k0) \
+      else (kwargs[k1] if kwargs.has_key(k1) else d)
+
+    axes = kwargs.setdefault('axes', [0, 1, 2])
+    axes[0] = _param ('energy_axis',   'eax', 0)
+    axes[1] = _param ('detector_axis', 'dax', 1)
+    axes[2] = _param ('tilt_axis',     'tax', 2)
+
+    offsets = kwargs.setdefault('offsets', [0, 0, 0])
+    offsets[0] = _param ('energy_offset',   'eoff', 0)
+    offsets[1] = _param ('detector_offset', 'doff', 0)
+    offsets[2] = _param ('tilt_offset',     'toff', 0)
+
+    # U = _param_ ('inner', 'U', 10)
+
+    # input data preparation
+    idata = np.transpose(args[0], axes)
+    for d, o in zip(idata.dim, offsets):
+        d.offset += o
+
+    
+    # transforamtion helpers
+    _d2k = lambda d, hv: 0.51232*np.sqrt(hv)*np.sin(d*np.pi/180.0)
+    
+    #_k2d_tilt = lambda (k, hv, tilt): asin(k/c)*180/pi
+    #_k2d_det  = lambda (k, hv, tilt): asin(y/(c*cos(asin(x/c))))*180/pi
+    
+    # output array, with proper scales
+    odata = idata.copy()
+    odata.dim[1].lim = _d2k (np.array(odata.dim[1].lim), max(odata.dim[0].lim))
+    odata.dim[2].lim = _d2k (np.array(odata.dim[2].lim), max(odata.dim[0].lim))
+
+    E,  kdet, ktil = [ d.range for d in odata.dim ]
+    Ei, ddet, dtil = [ d.range for d in idata.dim ]
+
+    # ...
+    
+    return odata
+    
 
 
 if __name__ == "__main__":

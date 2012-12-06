@@ -133,6 +133,14 @@ class AxisInfo:
         '''
         return (self.offset, self.end)
 
+    @lim.setter
+    def lim(self, newlim):
+        '''
+        Set the explicit limits, calculates necessary offset/delta values
+        '''
+        self.offset = newlim[0]
+        self.delta = (float(newlim[1]) - float(self.offset)) / float(self.size)
+
     #@property
     #def span(self):
     #    '''
