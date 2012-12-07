@@ -7,7 +7,7 @@ from numpy import ndarray, floor, array, arange
 import numpy as np
 import math, copy
 
-class AxisInfo:
+class AxisInfo(object):
     '''
     This class represents one axis info container.
     It needs to be constructed with a specific parent (which is
@@ -126,21 +126,24 @@ class AxisInfo:
         else:
             return self.offset
 
-    @property
-    def lim(self):
+        
+    def get_lim(self):
         '''
         Axis limits tuple (offset, end)
         '''
         return (self.offset, self.end)
 
-    @lim.setter
-    def lim(self, newlim):
+        
+    def set_lim(self, newlim):
         '''
         Set the explicit limits, calculates necessary offset/delta values
         '''
         self.offset = newlim[0]
-        self.delta = (float(newlim[1]) - float(self.offset)) / float(self.size)
+        self.delta  = ( float(newlim[1]) - float(self.offset)) / float(self.size)
 
+    lim = property (get_lim, set_lim, doc="Explicit axis limits, as an (offset, endpoint) tuple.")
+
+        
     #@property
     #def span(self):
     #    '''

@@ -5,9 +5,11 @@ log = logging.getLogger (__name__)
 
 import numpy as np
 import scipy as sp
+import scipy.interpolate as spi
 from pprint import pprint
 import paul.base.wave as w
 
+from itertools import product
 
 '''
 Module with tools for analysis of Angle Resolved Photoelectron
@@ -270,17 +272,23 @@ def deg2k (*args, **kwargs):
     coordinates.
 
     Following parametes:
-      - (unnamed parameter):    the wave in energy/degrees coordinates.
-      - energy_axis, eax:       which axis of the data is energy
-      - detector_axis, dax:     which axis of the data is the detector
-      - tilt_axis, tax:         which axis of the detector is the tilt axis
-      - energy_offset, eoff:    energy offset (default: 0)
-      - detector_offset, doff:  detector axis offset (default: 0)
-      - tilt_offset, toff:      tilt offset (default: 0)
-      - axes: tuple of three values (eax, dax, tax)
-      - offsets: tuple of three values (eoffs, doffs, toffs)
-      - inner, U:               value in eV of the inner potential known
-                                for the solid (default: 10)
+      - (unnamed):    The 3D data, either as a Wave or as an ndarray,
+                      containing the deg_tilt*deg_detector*E dependent data
+                      (i.e. the intensity in dependence of energy, the tilt
+                      angle, and the detector angle). If data is a Wave,
+                      axis information is extracted from the wave scaling.
+                      'e', 'd' and 't' parameters below override internal
+                      Wave data. If data is an ndarray, then 'e', 'd' and 't'
+                      parameters are mandatory.
+      - axes:         Combination of the letters 'e', 'd' and 't'
+                      describing the current axes layout
+                      in terms of (e)nergy, (d)etector or (t)ilt.
+                      Default is 'edt'.
+      - energy, e:    Values to go along with the energy axis.
+      - detector, d:  Values for the detector axis.
+      - tilt, t:      Values for the tilt axis.
+      - hv            The photon energy at which the data was measured.
+      
     '''
 
     # Strategy:
@@ -296,39 +304,54 @@ def deg2k (*args, **kwargs):
       kwargs[k0] if kwargs.has_key(k0) \
       else (kwargs[k1] if kwargs.has_key(k1) else d)
 
-    axes = kwargs.setdefault('axes', [0, 1, 2])
-    axes[0] = _param ('energy_axis',   'eax', 0)
-    axes[1] = _param ('detector_axis', 'dax', 1)
-    axes[2] = _param ('tilt_axis',     'tax', 2)
-
-    offsets = kwargs.setdefault('offsets', [0, 0, 0])
-    offsets[0] = _param ('energy_offset',   'eoff', 0)
-    offsets[1] = _param ('detector_offset', 'doff', 0)
-    offsets[2] = _param ('tilt_offset',     'toff', 0)
-
-    # U = _param_ ('inner', 'U', 10)
-
-    # input data preparation
-    idata = np.transpose(args[0], axes)
-    for d, o in zip(idata.dim, offsets):
-        d.offset += o
-
+    # rotate data into 'edt' axis configuration
+    axes = kwargs.setdefault('axes', 'edt')
+    idata = np.transpose(args[0], (axes.find('e'), axes.find('d'), axes.find('t')))
     
+    E     = _param ('energy',   'e', idata.dim[0].range)
+    deg_d = _param ('detector', 'd', idata.dim[1].range)
+    deg_t = _param ('tilt',     't', idata.dim[2].range)
+
+    C     = 0.51232 * np.sqrt(E)
+    dsin  = np.sin(deg_d*np.pi/180.0)
+    tsin  = np.sin(deg_t*np.pi/180.0)
+
     # transforamtion helpers
-    _d2k = lambda d, hv: 0.51232*np.sqrt(hv)*np.sin(d*np.pi/180.0)
+    _d2k = lambda d, c: c*np.sin(d*np.pi/180.0)
     
-    #_k2d_tilt = lambda (k, hv, tilt): asin(k/c)*180/pi
-    #_k2d_det  = lambda (k, hv, tilt): asin(y/(c*cos(asin(x/c))))*180/pi
+    #_d2kx = lambda d, t, hv: 0.51232*np.sqrt(hv)*np.sin(d*np.pi/180.0)
+    #_d2ky = lambda d, t, hv: 0.51232*np.sqrt(hv)*np.sin(t*np.pi/180.0)
+
     
+    # input data coordinates (degrees)
+    #icoord_d = ((e, d, t) for e, d, t in product (E, deg_d, deg_t))
+
+    # input data coordinates (k-space)
+    icoord_k = np.array([[c, d*c, t*c] for c, d, t in product (C, dsin, tsin)])
+
     # output array, with proper scales
-    odata = idata.copy()
-    odata.dim[1].lim = _d2k (np.array(odata.dim[1].lim), max(odata.dim[0].lim))
-    odata.dim[2].lim = _d2k (np.array(odata.dim[2].lim), max(odata.dim[0].lim))
+    E_lim = (min(E), max(E))
+    kx_lim = _d2k (np.array([deg_d[0], deg_d[-1]]), E_lim[1])
+    ky_lim = _d2k (np.array([deg_t[0], deg_t[-1]]), E_lim[1])
+    
+    ocoord_k = np.array([[c, kx, ky] for c, kx, ky in \
+                product (C, np.linspace(start=kx_lim[0], stop=kx_lim[1], num=len(deg_d)),
+                            np.linspace(start=ky_lim[0], stop=ky_lim[1], num=len(deg_t))
+                        )
+            ])
+               
+    
+    _out = spi.griddata(icoord_k, idata.flat, ocoord_k, method='linear')
 
-    E,  kdet, ktil = [ d.range for d in odata.dim ]
-    Ei, ddet, dtil = [ d.range for d in idata.dim ]
+    print "finished"
 
-    # ...
+    if isinstance (idata, w.Wave):
+        odata = _out.view(w.Wave)
+        odata.dim[0].lim = E_lim
+        odata.dim[1].lim = kx_lim
+        odata.dim[2].lim = ky_lim
+    else:
+        odata = _out
     
     return odata
     
