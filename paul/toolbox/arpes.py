@@ -10,6 +10,7 @@ from pprint import pprint
 import paul.base.wave as w
 
 from itertools import product
+import pprint
 
 '''
 Module with tools for analysis of Angle Resolved Photoelectron
@@ -172,8 +173,10 @@ def hybridize(wlist, V=0.0, count=1):
             for j in range(len(hlist)):
                 if i == j:
                     continue
-                h1 = 0.5 * (hlist[i] + hlist[j]) + np.sqrt( (0.5*(hlist[j]-hlist[i]))**2 + V2[i,j]**2 )
-                h2 = 0.5 * (hlist[i] + hlist[j]) - np.sqrt( (0.5*(hlist[j]-hlist[i]))**2 + V2[i,j]**2 )
+                h1 = 0.5 * (hlist[i] + hlist[j]) + \
+                    np.sqrt( (0.5*(hlist[j]-hlist[i]))**2 + V2[i,j]**2 )
+                h2 = 0.5 * (hlist[i] + hlist[j]) - \
+                    np.sqrt( (0.5*(hlist[j]-hlist[i]))**2 + V2[i,j]**2 )
                 hlist[i] = h1
                 hlist[j] = h2
 
@@ -260,7 +263,8 @@ def norm_by_noise (data, dim=0, xpos=(None, None), ipos=(None, None), copy=True)
             d /= (d[index[0]:index[1]].sum() / (index[1]-index[0]))
             
     else:
-        raise ValueError ("Wrong dimension for normalizing along %d: %s" % (dim, data.shape))
+        raise ValueError ("Wrong dimension for normalizing along %d: %s" \
+                              % (dim, data.shape))
 
     return data2.swapaxes(dim2, dim) if dim2 != dim else data2
 
@@ -308,48 +312,45 @@ def deg2k (*args, **kwargs):
     axes = kwargs.setdefault('axes', 'edt')
     idata = np.transpose(args[0], (axes.find('e'), axes.find('d'), axes.find('t')))
     
-    E     = _param ('energy',   'e', idata.dim[0].range)
-    deg_d = _param ('detector', 'd', idata.dim[1].range)
-    deg_t = _param ('tilt',     't', idata.dim[2].range)
+    E      = _param ('energy',   'e', idata.dim[0].range)
+    ideg_d = _param ('detector', 'd', idata.dim[1].range)
+    ideg_t = _param ('tilt',     't', idata.dim[2].range)
+    hv     = _param ('hv',       'hv', 0)
 
-    C     = 0.51232 * np.sqrt(E)
-    dsin  = np.sin(deg_d*np.pi/180.0)
-    tsin  = np.sin(deg_t*np.pi/180.0)
+    _out = idata.copy()
 
-    # transforamtion helpers
-    _d2k = lambda d, c: c*np.sin(d*np.pi/180.0)
+    c     = 0.51232 * np.sqrt(hv)
+    _d2k = lambda deg:  c*np.sin(deg*np.pi/180.0)
+
+    # axes limits of the k-space data
+    ik_d_lim = _d2k (np.array([ideg_d[0], ideg_d[-1]]))
+    ik_t_lim = _d2k (np.array([ideg_t[0], ideg_t[-1]]))
+
+    print ideg_d[0], _d2k(ideg_d[0]), ik_d_lim
+
+
+    # rectangular, evenly-spaced grid in k coordinates
+    ok_d = np.linspace (start=ik_d_lim[0], stop=ik_d_lim[1], num=len(ideg_d))
+    ok_t = np.linspace (start=ik_t_lim[0], stop=ik_t_lim[1], num=len(ideg_t))
+
+    # polar coordinates of the rectangular k-space grid above
+    odeg_d = np.arcsin(ok_d/c)*180.0/np.pi
+    odeg_t = np.arcsin(ok_t/(c*np.cos(np.arcsin(ok_d/c)))) * 180.0/np.pi
+
+    return odeg_t
+
+    for idat, odat in zip(idata, _out):
+        #return ideg_d, ideg_t, idat
+        #pprint.pprint (odeg_d)
+        #pprint.pprint (odeg_t)
+
+        return sp.interpolate.RectBivariateSpline (ideg_d, ideg_t, idat)(odeg_d, odeg_t)
+                            
     
-    #_d2kx = lambda d, t, hv: 0.51232*np.sqrt(hv)*np.sin(d*np.pi/180.0)
-    #_d2ky = lambda d, t, hv: 0.51232*np.sqrt(hv)*np.sin(t*np.pi/180.0)
-
-    
-    # input data coordinates (degrees)
-    #icoord_d = ((e, d, t) for e, d, t in product (E, deg_d, deg_t))
-
-    # input data coordinates (k-space)
-    icoord_k = np.array([[c, d*c, t*c] for c, d, t in product (C, dsin, tsin)])
-
-    # output array, with proper scales
-    E_lim = (min(E), max(E))
-    kx_lim = _d2k (np.array([deg_d[0], deg_d[-1]]), E_lim[1])
-    ky_lim = _d2k (np.array([deg_t[0], deg_t[-1]]), E_lim[1])
-    
-    ocoord_k = np.array([[c, kx, ky] for c, kx, ky in \
-                product (C, np.linspace(start=kx_lim[0], stop=kx_lim[1], num=len(deg_d)),
-                            np.linspace(start=ky_lim[0], stop=ky_lim[1], num=len(deg_t))
-                        )
-            ])
-               
-    
-    _out = spi.griddata(icoord_k, idata.flat, ocoord_k, method='linear')
-
-    print "finished"
-
     if isinstance (idata, w.Wave):
         odata = _out.view(w.Wave)
-        odata.dim[0].lim = E_lim
-        odata.dim[1].lim = kx_lim
-        odata.dim[2].lim = ky_lim
+        odata.dim[1].lim = ik_d_lim
+        odata.dim[2].lim = ik_t_lim
     else:
         odata = _out
     
