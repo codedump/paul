@@ -11,6 +11,7 @@ import paul.base.wave as w
 
 from itertools import product
 import pprint
+import math
 
 '''
 Module with tools for analysis of Angle Resolved Photoelectron
@@ -308,6 +309,10 @@ def deg2k (*args, **kwargs):
       kwargs[k0] if kwargs.has_key(k0) \
       else (kwargs[k1] if kwargs.has_key(k1) else d)
 
+    if args[0].ndim != 3:
+        raise ValueError ("Input has to be a 3D array of values. "
+                          "Use numpy.newaxis for proper casting of 2D arrays!")
+
     # rotate data into 'edt' axis configuration
     axes = kwargs.setdefault('axes', 'edt')
     idata = np.transpose(args[0], (axes.find('e'), axes.find('d'), axes.find('t')))
@@ -316,36 +321,50 @@ def deg2k (*args, **kwargs):
     ideg_d = _param ('detector', 'd', idata.dim[1].range)
     ideg_t = _param ('tilt',     't', idata.dim[2].range)
     hv     = _param ('hv',       'hv', 0)
-
+    fill   = _param ('fill',     'fill', np.nan)
     _out = idata.copy()
 
-    c     = 0.51232 * np.sqrt(hv)
+    c     = 0.51232 * math.sqrt(hv)
     _d2k = lambda deg:  c*np.sin(deg*np.pi/180.0)
 
     # axes limits of the k-space data
     ik_d_lim = _d2k (np.array([ideg_d[0], ideg_d[-1]]))
     ik_t_lim = _d2k (np.array([ideg_t[0], ideg_t[-1]]))
 
-    print ideg_d[0], _d2k(ideg_d[0]), ik_d_lim
-
-
     # rectangular, evenly-spaced grid in k coordinates
     ok_d = np.linspace (start=ik_d_lim[0], stop=ik_d_lim[1], num=len(ideg_d))
     ok_t = np.linspace (start=ik_t_lim[0], stop=ik_t_lim[1], num=len(ideg_t))
+    okx, oky = np.meshgrid (ok_d, ok_t) # corresponding rectangular k-space grid
 
-    # polar coordinates of the rectangular k-space grid above
-    odeg_d = np.arcsin(ok_d/c)*180.0/np.pi
-    odeg_t = np.arcsin(ok_t/(c*np.cos(np.arcsin(ok_d/c)))) * 180.0/np.pi
+    # Polar coordinates for the rectangular k-space grid.
+    # These will _not_ be rectangular, and they will not be on
+    # a grid. Basically, this is where the magic happens:
+    #   after we calculate the would-be polar coordinates
+    #   of the target rectangular k-space grid, we'll use
+    #   a fast spline interpolation to get data from the
+    #   original polar-grid onto the new,
+    #   k-space grid (represented as polar non-grid).
+    #
+    # Everything else is just house keeping. :-)
+    #
+    odeg_d = np.arcsin (okx / c) * 180.0/np.pi
+    odeg_t = np.arcsin (oky / (c*np.cos(np.arcsin(okx/c))) ) * 180.0/np.pi
 
-    return odeg_t
+    # Some of the coordinates above may end up as NaNs (depending
+    # on angle combination). As the interpolator will choke on NaN
+    # coordinates, we need to replace them by sane numbers before
+    # evaluation, and delete them again after evaluation.
+    nan_map = np.isnan(odeg_d) + np.isnan(odeg_t)    # map of the NaN values
+    odeg_d_clean = odeg_d.copy()
+    odeg_t_clean = odeg_t.copy()
+    odeg_d_clean[nan_map] = ideg_d[0] # safe polar non-grid to...
+    odeg_t_clean[nan_map] = ideg_t[0] # ...use with the interpolator.
 
     for idat, odat in zip(idata, _out):
-        #return ideg_d, ideg_t, idat
-        #pprint.pprint (odeg_d)
-        #pprint.pprint (odeg_t)
-
-        return sp.interpolate.RectBivariateSpline (ideg_d, ideg_t, idat)(odeg_d, odeg_t)
-                            
+        _inter = sp.interpolate.RectBivariateSpline (ideg_d, ideg_t, idat)
+        _tmp = _inter.ev(odeg_d_clean.flat, odeg_t_clean.flat)
+        _tmp[nan_map.flat.copy()] = fill
+        odat[:,:] = (_tmp.reshape ([odeg_d.shape[0], odeg_t.shape[1]]))[:,:]
     
     if isinstance (idata, w.Wave):
         odata = _out.view(w.Wave)
