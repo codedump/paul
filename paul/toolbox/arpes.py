@@ -315,12 +315,12 @@ def deg2k (*args, **kwargs):
 
     # rotate data into 'edt' axis configuration
     axes = kwargs.setdefault('axes', 'edt')
-    idata = np.transpose(args[0], (axes.find('e'), axes.find('d'), axes.find('t')))
+    idata = w.transpose(args[0], (axes.find('e'), axes.find('d'), axes.find('t')))
     
     E      = _param ('energy',   'e', idata.dim[0].range)
     ideg_d = _param ('detector', 'd', idata.dim[1].range)
     ideg_t = _param ('tilt',     't', idata.dim[2].range)
-    hv     = _param ('hv',       'hv', 0)
+    hv     = _param ('hv',       'hv', 1.0)
     fill   = _param ('fill',     'fill', np.nan)
     _out = idata.copy()
 
@@ -331,10 +331,12 @@ def deg2k (*args, **kwargs):
     ik_d_lim = _d2k (np.array([ideg_d[0], ideg_d[-1]]))
     ik_t_lim = _d2k (np.array([ideg_t[0], ideg_t[-1]]))
 
-    # rectangular, evenly-spaced grid in k coordinates
-    ok_d = np.linspace (start=ik_d_lim[0], stop=ik_d_lim[1], num=len(ideg_d))
-    ok_t = np.linspace (start=ik_t_lim[0], stop=ik_t_lim[1], num=len(ideg_t))
-    okx, oky = np.meshgrid (ok_d, ok_t) # corresponding rectangular k-space grid
+    # rectangular, evenly-spaced grid in k coordinates;
+    kaxis_d = np.linspace (start=ik_d_lim[0], stop=ik_d_lim[1], num=len(ideg_d))
+    kaxis_t = np.linspace (start=ik_t_lim[0], stop=ik_t_lim[1], num=len(ideg_t))
+
+    # for some funny reason, we need to invert det/tilt order here...
+    okt, okd = np.meshgrid(kaxis_t, kaxis_d)
 
     # Polar coordinates for the rectangular k-space grid.
     # These will _not_ be rectangular, and they will not be on
@@ -347,8 +349,8 @@ def deg2k (*args, **kwargs):
     #
     # Everything else is just house keeping. :-)
     #
-    odeg_d = np.arcsin (okx / c) * 180.0/np.pi
-    odeg_t = np.arcsin (oky / (c*np.cos(np.arcsin(okx/c))) ) * 180.0/np.pi
+    odeg_d = np.arcsin (okd / c) * 180.0/np.pi
+    odeg_t = np.arcsin (okt / (c*np.cos(np.arcsin(okd/c))) ) * 180.0/np.pi
 
     # Some of the coordinates above may end up as NaNs (depending
     # on angle combination). As the interpolator will choke on NaN
@@ -364,7 +366,9 @@ def deg2k (*args, **kwargs):
         _inter = sp.interpolate.RectBivariateSpline (ideg_d, ideg_t, idat)
         _tmp = _inter.ev(odeg_d_clean.flat, odeg_t_clean.flat)
         _tmp[nan_map.flat.copy()] = fill
-        odat[:,:] = (_tmp.reshape ([odeg_d.shape[0], odeg_t.shape[1]]))[:,:]
+        _tmp2 = _tmp.reshape ([odeg_d.shape[0], odeg_t.shape[1]])
+        odat[:,:] = _tmp2[:,:]
+
     
     if isinstance (idata, w.Wave):
         odata = _out.view(w.Wave)

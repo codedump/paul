@@ -437,7 +437,8 @@ class ViewerWindow(QtGui.QMainWindow):
         elif self.pscrHasMethod ('decorate'):
             self.plot.canvas.reset()
             self.plot.canvas.plot(self.plot.waves, redraw=False)
-            self.pscrCall ('decorate', can=self.plot.canvas, wav=self.plot.waves, fig=self.plot.canvas.fig)
+            self.pscrCall ('decorate', can=self.plot.canvas, wav=self.plot.waves,
+                           fig=self.plot.canvas.fig, axes=self.plot.canvas.axes)
             log.debug ("Plot decorated.")
             self.plot.canvas.draw()
         else:

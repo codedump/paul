@@ -6,6 +6,7 @@ log = logging.getLogger (__name__)
 from numpy import ndarray, floor, array, arange
 import numpy as np
 import math, copy
+import pprint
 
 class AxisInfo(object):
     '''
@@ -310,6 +311,7 @@ class Wave(ndarray):
         axes[ax1] = foo
         obj.info['axes'] = tuple(axes)
         return obj
+        
 
     def sum (self, axis=None, dtype=None, out=None):
         '''
@@ -1150,6 +1152,24 @@ def WAx(dat, ax):
 #
 # wrappers for some useful Numpy functions to make them Wave-aware
 #
+
+def transpose (src, axes=None):
+    '''
+    Override for numpy.transpose(). Takes care of transposing axes info.
+    '''
+    obj = np.transpose (src, axes)
+
+    #print "before: ", [str(d) for d in obj.dim]
+
+    # re-arrange the dimensions
+    orig_dim = [d for d in obj.dim]
+    for i in range(len(orig_dim)):
+        obj.dim[i] = orig_dim[axes[i]]
+
+    #print "after: ", [str(d) for d in obj.dim]
+
+    return obj
+
 def concatenate (waves, axis=0):
     '''
     Custom numpy.concatenate() replacement for Waves. It concatenates

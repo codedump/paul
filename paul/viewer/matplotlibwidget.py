@@ -107,9 +107,11 @@ class MatplotlibWidget(FigureCanvas):
         else:
             self.axes.clear()
             w = data.view(wave.Wave)
-            axinfo_str = ''.join([ ("axis %d: %f...%f (units: '%s')\n" % (j, i.offset, i.end, i.units))
+            axinfo_str = ''.join([ ("axis %d: %f...%f (units: '%s')\n" 
+                                    % (j, i.offset, i.end, i.units))
                                    for i,j in zip(w.dim, range(w.ndim))])
-            self.axes.text (0.05, 0.95, "Don't know how to display wave!\n\nname: %s\ndimensions: %d\n%s\n%s" % 
+            self.axes.text (0.05, 0.95, "Don't know how to display wave!\n\nname: "
+                            "%s\ndimensions: %d\n%s\n%s" % 
                             (w.infs('name'), w.ndim, axinfo_str, pprint.pformat(w.info)),
                             transform=self.axes.transAxes, va='top')
             self.draw()

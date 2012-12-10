@@ -84,7 +84,10 @@ def addWaterfall():
 def rmSlice(s):
     global GUI
     if hasattr(s, "marker_rect"):
-        i = PLOT.canvas.axes.patches.index (s.marker_rect)
+        try:
+            i = PLOT.canvas.axes.patches.index (s.marker_rect)
+        except:
+            i = -1
         if i > 0:
             del PLOT.canvas.axes.patches[i]
     GUI.slices.remove(s) 
@@ -274,12 +277,14 @@ def decorate(*args, **kwargs):
         ax.set_xlabel (r'$k_{||}$ ($^\circ$)')
         ax.set_ylabel (r'E$_{total}$ (meV)')
         ax.set_ylim (wav.dim[0].lim)
-        setColor(-1)
     elif PLOT.waves[0].ndim == 3:
         ax.set_xlabel (r'')
         ax.set_ylabel (r'')
         ax.set_ylim (PLOT.cut_wav.dim[0].lim)
-        setColor(-1)
+
+    ax.axvline (0, ls=':', color='black')
+    ax.axhline (0, ls=':', color='black')
+    setColor(-1)
     
     log.debug ("Slices: %s" % str(GUI.slices))
     for s in GUI.slices:
