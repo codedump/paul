@@ -233,19 +233,17 @@ def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None), copy=True
       - *smooth*: Smoothing factor to apply to the data.
         If specified, a bivariate spline filter will be applied
         to the distribution of the normalization factors (which
-        is 2D for a 3D input array).
+        is 2D for a 3D input array). Default is 'auto', which
+        means that *smooth* will be set to len(data.flat), which
+        should be a good estimate (check SciPy docs for reference).
+        
         Due to the nature of the smoothing, it can only be applied
         to data up to 3D, but not higher.
         If *data* is higher than 3D, *smooth* is ignored.
-    
-
     '''
 
     # rotate axes such that dim is the first
-    if axis > 0:
-        _data = data.swapaxes(0, axis)
-    else:
-        _data = data
+    _data = data.swapaxes(0, axis)
 
     # we'll be working on Waves all along -- this is
     # because we want to retain axis scaling information
@@ -268,15 +266,17 @@ def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None), copy=True
     # Later we can substract 1.0 from the data to have a well defined zero-level :-)
     _norm_field   = data2[index[0]:index[1]].sum(0) / (index[1]-index[0])
 
-    if (data2.ndim <= 3):
+    if smooth is not None and data2.ndim <= 3:
+
+        # try to auto-guess a decent "smooth" parameter.
         if smooth == 'auto':
-            smooth = len(data2.flat)
+            smooth = len(_norm_field.flat)*1000.0
 
         x = range(_norm_field.shape[0])
         y = range(_norm_field.shape[1])
         _smooth_field = spi.RectBivariateSpline (x, y, _norm_field, s=smooth)(x, y).reshape(_norm_field.shape)[np.newaxis]
         
-    else:
+    elif smooth is not None:
         # do a trick for smoothing:
         #  . compress _norm_field -> _cmp_field
         #  . interpolate _cmp_field to expand it again
@@ -285,27 +285,34 @@ def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None), copy=True
         #  -> smoothened array :-)
         #
         # However, details need to be looked upon. There's probably a bug,
-        # as this version gives funny indensity artefacts.
-        if smooth == 'auto':
-            smooth = 10
+        # as this version gives funny indensity artefacts.            
         _cmp_field = _norm_field
         for i in range(_norm_field.ndim):
-            step = smooth if smooth < _norm_field.shape[i]/5 else int(math.ceil(_norm_field.shape[i]/5))
+
+            # if nothing else specified default, pick a small number (i.e. sqrt(dim_size))
+            # of points to sustain the smoothing surface...
+            if smooth == 'auto':
+                smooth = int(math.sqrt(_norm_field.shape[i]))
+
+            # ...however, on dimensions with a small number of points,
+            # fall back to sustaining every 3rd data row.
+            step = smooth if smooth > 3 else 3
+    
             _cmp_field = ncomp(_cmp_field, axis=i, intg=step, step=step)
+            
         _smooth_field = spni.map_coordinates (_cmp_field, np.indices(_norm_field.shape),
-                                              order=3, mode='nearest')
+                                                  order=3, mode='nearest')[np.newshape]
+        ### NOT TESTED! ;-)
+        log.warn ("NOT TESTED: smoothing may be buggy for %dD arrays!" % _data2.ndim)
 
-        ###
-        ### SMOOTHING DISABLED!
-        ###
-        log.error ("Smoothing doesn't work for %dD arrays, turned off." % _data2.ndim)
-        _smooth_field = _norm_field
-
-
-    data2 /= _smooth_field
+    else:
+        _smooth_field = _norm_field[np.newaxis]
+        
+    
+    data2 /= np.abs(_smooth_field)
     data2 -= 1.0
 
-    return (data2.swapaxes(axis, 0))
+    return data2.swapaxes(axis, 0)
 
     
 def _norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None), copy=True):
@@ -370,7 +377,7 @@ def _norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None), copy=Tru
     # for more than 2 dimensions: work recursively through all dimensions
     if len(data2.shape) > 2:
         for d in data2:
-            norm_by_noise (d, axis=(dim2-1), ipos=ipos, xpos=xpos, copy=False)
+            _norm_by_noise (d, axis=(dim2-1), ipos=ipos, xpos=xpos, copy=False)
             
     elif len(data2.shape) == 2:
         # translate everything to index coordinates,

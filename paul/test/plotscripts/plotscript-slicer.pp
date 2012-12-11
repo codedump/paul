@@ -253,11 +253,12 @@ def populate (*args, **kwargs):
     elif wav.ndim == 2:
         log.debug ("2D data (image)")
         GUI.cut_dim_act.setEnabled(False)
+        PLOT.cut_wav = None
         ax.imshow (wav, extent=wav.imlim)
         
     elif wav.ndim == 3:
         log.debug ("3D data (volume)")
-        set3DDisplay (2)
+        set3DDisplay (GUI.cut_dim.value())
         GUI.cut_dim_act.setEnabled(True)
         kwargs['cut'] = PLOT.cut_wav
         

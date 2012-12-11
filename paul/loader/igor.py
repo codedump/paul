@@ -780,7 +780,7 @@ def wave_init_header5():
     return bhead, whead
 
 
-def wave_write (filename, wav, autoname=True):
+def wave_write (wav, filename, autoname=True):
     '''
     Writes a wave to a Version 5 file. If 'autoname' is True,
     then the wave name will be set to the basename of the file name.
@@ -1144,7 +1144,7 @@ def _main_test_rw(argv):
     wav = wave_read (infile)
     for i in range(len(outfiles)):
         print i, outfiles[i], "writing...",
-        wave_write (outfiles[i], wav[::i+1])
+        wave_write (wav[::i+1], outfiles[i])
         print "reading...",
         wav2 = wave_read (outfiles[i])
         print "ok."
@@ -1154,13 +1154,13 @@ def _main_test_rw(argv):
     w2_files = [tempfile.mkstemp (suffix=".ibw")[1] for i in range(3)]
 
     print "Test wave to", w2_files[0], "native byte order"
-    wave_write (w2_files[0], w2.view(Wave))
+    wave_write (w2.view(Wave), w2_files[0])
 
     print "Test wave to", w2_files[1], "little endian"
-    wave_write (w2_files[1], w2.view(Wave).newbyteorder('<'))
+    wave_write (w2.view(Wave).newbyteorder('<'), w2_files[1])
 
     print "Test wave to", w2_files[2], "swapped byte order"
-    wave_write (w2_files[2], w2.view(Wave).newbyteorder('S'))
+    wave_write (w2.view(Wave).newbyteorder('S'), w2_files[2])
                 
 
     return 0
