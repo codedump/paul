@@ -35,6 +35,9 @@ def ncomp (iwave, axis=0, step=1, intg=-1, norm=False):
     # ignore the points that don't align well with 'step'
     max_i = new_shape[axis] * step
 
+    if intg == -1:
+        intg = step
+
     nval = 1.0 / intg
     for s in range(0, intg):
         # marker:  select every N-th point ...but ignore bogus points at the end

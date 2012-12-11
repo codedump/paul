@@ -6,8 +6,10 @@ log = logging.getLogger (__name__)
 import numpy as np
 import scipy as sp
 import scipy.interpolate as spi
+import scipy.ndimage.interpolation as spni
 from pprint import pprint
 import paul.base.wave as w
+from paul.toolbox.atrix import ncomp
 
 from itertools import product
 import pprint
@@ -184,7 +186,129 @@ def hybridize(wlist, V=0.0, count=1):
     return hlist
 
 
-def norm_by_noise (data, dim=0, xpos=(None, None), ipos=(None, None), copy=True):
+def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None), copy=True, smooth='auto'):
+    '''
+    Normalizes 1D sub-arrays obtained from a N-dimensional ndarray
+    along *axis* by the values integrated along
+    *axis* in range specified by *pos*.
+    
+    In ARPES, this is a useful feature for normalizing    
+    spectra obtained in a synchrotron facility, which usually
+    have significant amount of 2nd-order intensity above
+    the Fermi level. Usually, *dim* would be set to represent
+    the energy axis, and *pos* should be set to a range
+    well above the Fermi level.
+
+    
+
+    Parameters:
+      - *data* is the (multi-dimensional) ndarray containing
+        the data. Data poins _will be modified_, so be sure to
+        operate on a copy if you wish to retain original data.
+        If the data has more than 2 dimensions, the array
+        is rotated such that *dim* becomes the last axis, and
+        norm_by_noise() iterated on all elements of data,
+        recursively until dimension is 2.
+    
+      - *ipos* is expected to be a tuple containing a
+        (from, to) value pair in 
+        If *ipos* is 'None', a background auto-detection is
+        attempted using gnd_autodetect().
+        If *ipos* is a tuple, but either of the *ipos* elements
+        is None, the element is replaced by the beginning
+        or ending index, respectively.
+
+      - *xpos* same as *ipos*, only positions are specified
+        in axis coordinates of the axis specified by *dim*.
+        If present, *xpos* takes precedent over *ipos*.
+
+      - *axis* is the axis representing the array to be, i.e.
+        the one to be normalized.
+
+      - *copy* if True (the default), then the normalization will
+        be performed on a copy of the original array, the original
+        data remaining unchanged. Otherwise the original array
+        will be modified.
+
+      - *smooth*: Smoothing factor to apply to the data.
+        If specified, a bivariate spline filter will be applied
+        to the distribution of the normalization factors (which
+        is 2D for a 3D input array).
+        Due to the nature of the smoothing, it can only be applied
+        to data up to 3D, but not higher.
+        If *data* is higher than 3D, *smooth* is ignored.
+    
+
+    '''
+
+    # rotate axes such that dim is the first
+    if axis > 0:
+        _data = data.swapaxes(0, axis)
+    else:
+        _data = data
+
+    # we'll be working on Waves all along -- this is
+    # because we want to retain axis scaling information
+    if copy == True:
+        data2 = _data.copy(w.Wave)
+    else:
+        data2 = _data.view(w.Wave)
+        data2.setflags(write=True)
+
+    # translate everything to index coordinates,
+    # xpos has precedence over ipos
+    index = [data2.dim[0].x2i_rnd(x) if x is not None
+             else i if i is not None
+             else f
+             for x, i, f in zip(xpos, ipos, (0, data2.shape[0]-1))]
+
+    # Calculate (N-1)-dim normalization values field. Note that the field
+    # itself will be normalized by the number of composing elements along
+    # axis. This way, the normalized area will be, by definition, roughly ~1.0
+    # Later we can substract 1.0 from the data to have a well defined zero-level :-)
+    _norm_field   = data2[index[0]:index[1]].sum(0) / (index[1]-index[0])
+
+    if (data2.ndim <= 3):
+        if smooth == 'auto':
+            smooth = len(data2.flat)
+
+        x = range(_norm_field.shape[0])
+        y = range(_norm_field.shape[1])
+        _smooth_field = spi.RectBivariateSpline (x, y, _norm_field, s=smooth)(x, y).reshape(_norm_field.shape)[np.newaxis]
+        
+    else:
+        # do a trick for smoothing:
+        #  . compress _norm_field -> _cmp_field
+        #  . interpolate _cmp_field to expand it again
+        #  . to the full size of _norm_field :-)
+        #
+        #  -> smoothened array :-)
+        #
+        # However, details need to be looked upon. There's probably a bug,
+        # as this version gives funny indensity artefacts.
+        if smooth == 'auto':
+            smooth = 10
+        _cmp_field = _norm_field
+        for i in range(_norm_field.ndim):
+            step = smooth if smooth < _norm_field.shape[i]/5 else int(math.ceil(_norm_field.shape[i]/5))
+            _cmp_field = ncomp(_cmp_field, axis=i, intg=step, step=step)
+        _smooth_field = spni.map_coordinates (_cmp_field, np.indices(_norm_field.shape),
+                                              order=3, mode='nearest')
+
+        ###
+        ### SMOOTHING DISABLED!
+        ###
+        log.error ("Smoothing doesn't work for %dD arrays, turned off." % _data2.ndim)
+        _smooth_field = _norm_field
+
+
+    data2 /= _smooth_field
+    data2 -= 1.0
+
+    return (data2.swapaxes(axis, 0))
+
+    
+def _norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None), copy=True):
     '''
     Normalizes 1D sub-arrays obtained from a 2D ndarray
     along axis *dim* by the values integrated along
@@ -218,7 +342,7 @@ def norm_by_noise (data, dim=0, xpos=(None, None), ipos=(None, None), copy=True)
         in axis coordinates of the axis specified by *dim*.
         If present, *xpos* takes precedent over *ipos*.
 
-      - *dim* is the axis representing the array to be, i.e.
+      - *axis* is the axis representing the array to be, i.e.
         the one to be normalized.
 
       - *copy* if True (the default), then the normalization will
@@ -230,8 +354,8 @@ def norm_by_noise (data, dim=0, xpos=(None, None), ipos=(None, None), copy=True)
 
     # rotate axes such that dim is last axis
     dim2 = len(data.shape)-1
-    if dim2 != dim:
-        _data = data.swapaxes(dim, dim2)
+    if dim2 != axis:
+        _data = data.swapaxes(axis, dim2)
     else:
         _data = data
 
@@ -240,16 +364,13 @@ def norm_by_noise (data, dim=0, xpos=(None, None), ipos=(None, None), copy=True)
     if copy == True:
         data2 = _data.copy(w.Wave)
     else:
-        #if isinstance(data, w.Wave):
-        #data2 = _data
-        #else:
         data2 = _data.view(w.Wave)
         data2.setflags(write=True)
 
     # for more than 2 dimensions: work recursively through all dimensions
     if len(data2.shape) > 2:
         for d in data2:
-            norm_by_noise (d, dim=(dim2-1), ipos=ipos, xpos=xpos, copy=False)
+            norm_by_noise (d, axis=(dim2-1), ipos=ipos, xpos=xpos, copy=False)
             
     elif len(data2.shape) == 2:
         # translate everything to index coordinates,
@@ -259,7 +380,6 @@ def norm_by_noise (data, dim=0, xpos=(None, None), ipos=(None, None), copy=True)
                  else f
                  for x, i, f in zip(xpos, ipos, (0, data2.shape[1]-1))]
 
-        #print "index: ", index, "shape: ", data2.shape
         for d in data2:
             d /= (d[index[0]:index[1]].sum() / (index[1]-index[0]))
             
@@ -267,7 +387,7 @@ def norm_by_noise (data, dim=0, xpos=(None, None), ipos=(None, None), copy=True)
         raise ValueError ("Wrong dimension for normalizing along %d: %s" \
                               % (dim, data.shape))
 
-    return data2.swapaxes(dim2, dim) if dim2 != dim else data2
+    return (data2.swapaxes(dim2, axis) if dim2 != axis else data2)
 
 
 def deg2k (*args, **kwargs):
