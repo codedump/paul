@@ -39,14 +39,14 @@ def plot_bz2d (ax, bz, repeat=(1, 1), kvec=None, rotate=0):
     
     if kvec is not None:
         comb = [r for r in itertools.product (range(-repeat[0], repeat[0]+1),
-                                              range(-repeat[0], repeat[1]+1))]
+                                              range(-repeat[1], repeat[1]+1))]
         
         for c in comb:
-            c = np.array(c)
-            rep = (kvec[0]*c + kvec[1]*c)
-            new_bz = rep + np.array(bz)
-            kspace.append (np.array(kvec[0])+bz)
-            kspace.append (np.array(kvec[1])+bz)
+            print c
+            #rep = (kvec[0]*c + kvec[1]*c)
+            #new_bz = rep + np.array(bz)
+            kspace.append (np.array(kvec[0])*c[0]+bz)
+            kspace.append (np.array(kvec[1])*c[1]+bz)
             #kspace.append(new_bz)
         
 
