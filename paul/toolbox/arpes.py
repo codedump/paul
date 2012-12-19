@@ -7,6 +7,7 @@ import numpy as np
 import scipy as sp
 import scipy.interpolate as spi
 import scipy.ndimage.interpolation as spni
+import scipy.ndimage as spimg
 from pprint import pprint
 import paul.base.wave as w
 from paul.toolbox.atrix import ncomp
@@ -199,7 +200,7 @@ def hybridize(wlist, V=0.0, count=1):
 #
 
 def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None),
-                   copy=True, smooth=None, field=False):
+                   copy=True, smooth=None, stype='gauss', field=False):
     '''
     Normalizes 1D sub-arrays obtained from a N-dimensional ndarray
     along *axis* by the values integrated along
@@ -246,18 +247,32 @@ def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None),
       - *smooth*: Smoothing factor to apply to the data. Can
         be either None (default), 'auto', a number, or an
         (N-1) long tuple of numbers. If it's a tuple, one
-        number per dimension is assumed. The number is the
-        factor by which the intensity field is down-sampled
-        for smoothing (smoothing is done by up-sampling
-        the intensity field again to its original value, once
-        it has been down-sampled).
-        If it is 'auto', for each dimension the proper factor
-        is guesst such that after downsampling, approximately
-        20 ('ish :-) data points remain.
-        None (the default) means no intensity smoothing.
-        Down- and up-sampling are performed using 3rd degree
-        splines from (scipy.ndimage.map_coordinates).
+        number per dimension is assumed.
         See also: PRO TIP below.
+
+        The meaning of *smooth* depends on the parameter *stype*
+        *stype* == 'spline':
+          The number is the factor by which the intensity field
+          is down-sampled for smoothing (smoothing is done by
+          up-sampling the intensity field again to its original value,
+          once it has been down-sampled).
+          If it is 'auto', for each dimension the proper factor
+          is guesst such that after downsampling, approximately
+          40 ('ish :-) data points remain.
+          None (the default) means no intensity smoothing.
+          Down- and up-sampling are performed using 3rd degree
+          splines from (scipy.ndimage.map_coordinates).
+          Produces polinomial artefacts if intensity distribution
+          is very uneven, or data is very noisy.
+
+        *stype* == 'gauss': Smooting is done by a convolution
+          of the intensity map with an (N-1)-dimensional Gauss
+          profile. In that case, *smooth* contains the Sigma
+          parameters of the Gaussian in each dimension.
+          Produces artefacts at the border of the image.
+
+      - *stype*: smooth type, either one of 'spline' or 'gaussian'.
+        Specifies the type of smoothing.
 
       - *field*: if True, then the smooth field in original,
         in its down-, and its up-sampled version will also be
@@ -271,6 +286,9 @@ def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None),
         smoothing -- the eye does a better job of "smoothing"
         noisy data anyway), or enable the *field* option and
         _check_ _your_ _normalization_ _fields_ _manually_! ;-)
+        In most cases, gaussian smoothing works best with
+        experimental data, i.e. produces the most predictible
+        amount of artefacts.
         
     '''
 
@@ -298,7 +316,7 @@ def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None),
     # Later we can substract 1.0 from the data to have a well defined zero-level :-)
     _norm_field   = data2[index[0]:index[1]].sum(0) / (index[1]-index[0])
 
-    if smooth is not None:
+    if smooth is not None and stype == 'spline':
         # Smoothing "hack": resample the intensity map twice:
         #  a) first to lower resolution (1/smooth), to get rid of noise
         #  b) then back to original resolution (a * smooth), to get the
@@ -306,10 +324,9 @@ def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None),
         # Use splines for down- and up-sampling, so as little information
         # gets lost as possible
 
-        # a decent estimate: use something like 10-20 (-ish) points per dimension,
+        # a decent estimate: use something like 40(-ish) points per dimension,
         if smooth == 'auto':
-            smooth = (np.array(_norm_field.shape) / 20) + 3
-            print "auto"
+            smooth = (np.array(_norm_field.shape) / 40).astype('int') + 3
 
         # smooth is interpreted as an (N-1)-dim tuple specifying for
         # each dimension the step size (in data points) of smoothing).
@@ -335,31 +352,41 @@ def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None),
         for i, s in zip (_smooth_coord, smooth):
             i /= s
         _smooth_field = spni.map_coordinates (_cmp_field[0], _smooth_coord,
-                                              order=3, mode='nearest')[np.newaxis]
+                                              order=3, mode='nearest')
 
-        # Apply correct scaling to _smooth_field and _tmp_field
-        # (this is just for debugging purposes).
-        b = _cmp_field.view(w.Wave)
-        for d1, d0, s in zip(b.dim[1:], _norm_field.dim, smooth):
-            d1.offset = d0.offset
-            d1.delta = d0.delta * float(s)
-        _cmp_field = b
-    
-        c = _smooth_field.view(w.Wave)
-        for d1,d0 in zip(c.dim[1:], _norm_field.dim):
-            d1.lim = d0.lim
-        _smooth_field = c
+        ## Apply correct scaling to _smooth_field and _tmp_field
+        ## (this is just for debugging purposes).
+        #b = _cmp_field.view(w.Wave)
+        #for d1, d0, s in zip(b.dim[1:], _norm_field.dim, smooth):
+        #    d1.offset = d0.offset
+        #    d1.delta = d0.delta * float(s)
+        #_cmp_field = b
+
+    elif smooth is not None and stype == 'gauss':
+
+        # auto-select smooth parameter:
+        # sigma somewhere close to 1%
+        # (i.e. FWHM somewhere at ~2.4%)
+        if smooth == 'auto':
+            smooth = [] 
+            for d in _norm_field.shape:
+                sigma = math.floor(float(d)/100.0)
+                smooth.append (sigma)
+        _smooth_field = spimg.filters.gaussian_filter (_norm_field, smooth)
+
 
     else:
-        _smooth_field = _norm_field[np.newaxis]
+        _smooth_field = _norm_field
         
     
-    data2 /= np.abs(_smooth_field)
+    data2 /= np.abs(_smooth_field[np.newaxis])
     data2 -= 1.0
 
     if field:         # for debugging of code and data... ;-)
-        return data2.swapaxes(axis, 0), _norm_field, _smooth_field[0], \
-            _cmp_field[0] if smooth is not None else None
+        _smooth_wave = _smooth_field.view(w.Wave)
+        for d1,d0 in zip(_smooth_wave.dim[1:], _norm_field.dim):
+            d1.lim = d0.lim
+        return data2.swapaxes(axis, 0), _norm_field, _smooth_wave
 
     else:
         return data2.swapaxes(axis, 0)

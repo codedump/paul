@@ -26,7 +26,7 @@ def populate (*args, **kwargs):
         log.debug ("Subplot %d (%dx%d): %s" % (i+1, prows, pcols, 
                                                w.info['name']))
         ax = fig.fig.add_subplot (prows, pcols, i+1)
-        ax.imshow(w, aspect='auto', extent=w.imlim)
+        ax.imshow(w, aspect='auto', extent=w.imlim, interpolation='none')
         decorate (wav=[w], axis=ax)
 
         # keep xlabels only for the bottom row
