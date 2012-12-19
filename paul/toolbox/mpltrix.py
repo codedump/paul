@@ -2,7 +2,7 @@
 
 from matplotlib.collections import LineCollection
 from matplotlib.gridspec import GridSpec
-from paul.base.wave import Wave
+from paul.base.wave import Wave, WCast
 import numpy as np
 from pprint import pprint
 
@@ -42,14 +42,16 @@ def plotwater (fig_ax, wlist, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0)):
     if isinstance(wlist, Wave):
         return imwater(fig_ax, wlist, axis, offs, xlim, ylim, autoscale=True)
 
-    xlist = [np.arange(start=w.dim[0].offset, stop=w.dim[0].end, step=w.dim[0].delta) for w in wlist]
+    xlist = [np.arange(start=WCast(w).dim[0].offset,
+                       stop=WCast(w).dim[0].end,
+                       step=WCast(w).dim[0].delta) for w in wlist]
     
     if xlim == (0, 0):
-        xlim = (min([w.dim[0].min for w in wlist]) - (offs[0]*len(wlist))*(offs[0]<0),
-                max([w.dim[0].max for w in wlist]) + (offs[0]*len(wlist))*(offs[0]>0))
+        xlim = (min([WCast(w).dim[0].min for w in wlist]) - (offs[0]*len(wlist))*(offs[0]<0),
+                max([WCast(w).dim[0].max for w in wlist]) + (offs[0]*len(wlist))*(offs[0]>0))
     if ylim == (0, 0):
-        ylim = (min([w.min() for w in wlist]) + (offs[1]*len(wlist)) * (offs[1]<0),
-                max([w.max() for w in wlist]) + (offs[1]*len(wlist)) * (offs[1]>0))
+        ylim = (min([np.nanmin(w) for w in wlist]) + (offs[1]*len(wlist)) * (offs[1]<0),
+                max([np.nanmin(w) for w in wlist]) + (offs[1]*len(wlist)) * (offs[1]>0))
 
     lines = LineCollection([zip(x, w) for x, w in zip(xlist,wlist)], offsets=offs)
 

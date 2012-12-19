@@ -56,4 +56,3 @@ def ncomp (iwave, axis=0, step=1, intg=-1, norm=False):
 
     return owave
 
-

@@ -9,7 +9,10 @@ from paul.base.wave import Wave
 
 from paul.toolbox.slicers import SingleSlicer, CompressingSlicer
 from paul.toolbox.widgets import ValueWidget
+
 import matplotlib as mp
+
+import numpy as np
 
 import math
 
@@ -39,8 +42,8 @@ def setColor(i):
       if (hasattr(PLOT, 'cut_wav') and PLOT.cut_wav is not None) \
       else PLOT.waves[0]
     
-    dmin = data.infv('FDD', 'V_min', default=data.min())
-    dmax = data.infv('FDD', 'V_max', default=data.max())
+    dmin = data.infv('FDD', 'V_min', default=np.nanmin(data))
+    dmax = data.infv('FDD', 'V_max', default=np.nanmax(data))
 
     col_min = GUI.col_min.value() * (dmax-dmin) + dmin
     col_max = GUI.col_max.value() * (dmax-dmin) + dmin

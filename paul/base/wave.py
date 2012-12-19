@@ -295,8 +295,15 @@ class Wave(ndarray):
         Overwrites the ndarray.reshape() in order to resize the axes vector.
         '''
         obj = ndarray.reshape (self, sizes)
-        obj.info['axes'].resize (len(sizes))
+        
+        while len(obj.info['axes']) < len(sizes):
+            obj.info['axes'].append (AxisInfo(self))
+
+        while len(obj.info['axes']) > len(size):
+            del obj.info['axes'][-1]
+
         return obj
+
 
     def swapaxes (self, ax0, ax1):
         '''

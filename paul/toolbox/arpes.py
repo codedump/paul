@@ -20,6 +20,13 @@ Module with tools for analysis of Angle Resolved Photoelectron
 Spectroscopy (ARPES) data.
 '''
 
+
+#
+# Some theory and simulation helpers (related to solid state
+# physics in general, or ARPES in particular: model
+# dispersions, band hybridizations etc.)
+#
+
 def e(mrel=1.0, ebind=0.0, kpos=0.0, klim=1.0, pts=100, out=None):
     '''
     Returns the parabolic dispersion of an electron bound at
@@ -44,7 +51,8 @@ def e(mrel=1.0, ebind=0.0, kpos=0.0, klim=1.0, pts=100, out=None):
     a 1D wave, then the 2nd dimension will have only 1 entry.
     '''
 
-    # Make sure 'pts' and 'klim' have sane values. We will work with full 2D pts / klim layout.
+    # Make sure 'pts' and 'klim' have sane values. We will work with
+    # full 2D pts / klim layout.
 
     dim = 2
 
@@ -186,7 +194,12 @@ def hybridize(wlist, V=0.0, count=1):
     return hlist
 
 
-def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None), copy=True, smooth='auto'):
+#
+# Data manipulation helpers (normalization, coordinate transformation etc)
+#
+
+def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None),
+                   copy=True, smooth=None, field=False):
     '''
     Normalizes 1D sub-arrays obtained from a N-dimensional ndarray
     along *axis* by the values integrated along
@@ -230,16 +243,35 @@ def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None), copy=True
         data remaining unchanged. Otherwise the original array
         will be modified.
 
-      - *smooth*: Smoothing factor to apply to the data.
-        If specified, a bivariate spline filter will be applied
-        to the distribution of the normalization factors (which
-        is 2D for a 3D input array). Default is 'auto', which
-        means that *smooth* will be set to len(data.flat), which
-        should be a good estimate (check SciPy docs for reference).
+      - *smooth*: Smoothing factor to apply to the data. Can
+        be either None (default), 'auto', a number, or an
+        (N-1) long tuple of numbers. If it's a tuple, one
+        number per dimension is assumed. The number is the
+        factor by which the intensity field is down-sampled
+        for smoothing (smoothing is done by up-sampling
+        the intensity field again to its original value, once
+        it has been down-sampled).
+        If it is 'auto', for each dimension the proper factor
+        is guesst such that after downsampling, approximately
+        20 ('ish :-) data points remain.
+        None (the default) means no intensity smoothing.
+        Down- and up-sampling are performed using 3rd degree
+        splines from (scipy.ndimage.map_coordinates).
+        See also: PRO TIP below.
+
+      - *field*: if True, then the smooth field in original,
+        in its down-, and its up-sampled version will also be
+        returned (useful for debugging and data quality
+        estimates). See also: PRO TIP below.
         
-        Due to the nature of the smoothing, it can only be applied
-        to data up to 3D, but not higher.
-        If *data* is higher than 3D, *smooth* is ignored.
+        
+        PRO TIP: intensity smoothing can create very strange
+        artefacts when dealing with low-intensity / noisy data!
+        In that case, either go with the default (i.e. no
+        smoothing -- the eye does a better job of "smoothing"
+        noisy data anyway), or enable the *field* option and
+        _check_ _your_ _normalization_ _fields_ _manually_! ;-)
+        
     '''
 
     # rotate axes such that dim is the first
@@ -266,44 +298,57 @@ def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None), copy=True
     # Later we can substract 1.0 from the data to have a well defined zero-level :-)
     _norm_field   = data2[index[0]:index[1]].sum(0) / (index[1]-index[0])
 
-    if smooth is not None and data2.ndim <= 3:
+    if smooth is not None:
+        # Smoothing "hack": resample the intensity map twice:
+        #  a) first to lower resolution (1/smooth), to get rid of noise
+        #  b) then back to original resolution (a * smooth), to get the
+        #     proper size again.
+        # Use splines for down- and up-sampling, so as little information
+        # gets lost as possible
 
-        # try to auto-guess a decent "smooth" parameter.
+        # a decent estimate: use something like 10-20 (-ish) points per dimension,
         if smooth == 'auto':
-            smooth = len(_norm_field.flat)*1000.0
+            smooth = (np.array(_norm_field.shape) / 20) + 3
+            print "auto"
 
-        x = range(_norm_field.shape[0])
-        y = range(_norm_field.shape[1])
-        _smooth_field = spi.RectBivariateSpline (x, y, _norm_field, s=smooth)(x, y).reshape(_norm_field.shape)[np.newaxis]
+        # smooth is interpreted as an (N-1)-dim tuple specifying for
+        # each dimension the step size (in data points) of smoothing).
+        if not hasattr(smooth, "__len__"):
+            smooth = np.array([smooth] * _norm_field.ndim)
+        else:
+            smooth = np.array(smooth)
+            if _norm_field.ndim != len(smooth):
+                raise ValueError ("Need a smoothing tuple of length %d for an %d-dim array." 
+                                  % (_norm_field.ndim))
+
+                
         
-    elif smooth is not None:
-        # do a trick for smoothing:
-        #  . compress _norm_field -> _cmp_field
-        #  . interpolate _cmp_field to expand it again
-        #  . to the full size of _norm_field :-)
-        #
-        #  -> smoothened array :-)
-        #
-        # However, details need to be looked upon. There's probably a bug,
-        # as this version gives funny indensity artefacts.            
-        _cmp_field = _norm_field
-        for i in range(_norm_field.ndim):
-
-            # if nothing else specified default, pick a small number (i.e. sqrt(dim_size))
-            # of points to sustain the smoothing surface...
-            if smooth == 'auto':
-                smooth = int(math.sqrt(_norm_field.shape[i]))
-
-            # ...however, on dimensions with a small number of points,
-            # fall back to sustaining every 3rd data row.
-            step = smooth if smooth > 3 else 3
-    
-            _cmp_field = ncomp(_cmp_field, axis=i, intg=step, step=step)
+        # down-sampling
+        _cmp_coord = np.indices((np.array(_norm_field.shape)/smooth) + np.ones(smooth.shape))
+        for i, s in zip (_cmp_coord, smooth):
+            i *= s
+        _cmp_field = spni.map_coordinates (_norm_field, _cmp_coord,
+                                           order=3, mode='nearest')[np.newaxis]
             
-        _smooth_field = spni.map_coordinates (_cmp_field, np.indices(_norm_field.shape),
-                                                  order=3, mode='nearest')[np.newshape]
-        ### NOT TESTED! ;-)
-        log.warn ("NOT TESTED: smoothing may be buggy for %dD arrays!" % _data2.ndim)
+        # up-sampling (expand again to original size)
+        _smooth_coord = np.indices(_norm_field.shape).astype('float32')
+        for i, s in zip (_smooth_coord, smooth):
+            i /= s
+        _smooth_field = spni.map_coordinates (_cmp_field[0], _smooth_coord,
+                                              order=3, mode='nearest')[np.newaxis]
+
+        # Apply correct scaling to _smooth_field and _tmp_field
+        # (this is just for debugging purposes).
+        b = _cmp_field.view(w.Wave)
+        for d1, d0, s in zip(b.dim[1:], _norm_field.dim, smooth):
+            d1.offset = d0.offset
+            d1.delta = d0.delta * float(s)
+        _cmp_field = b
+    
+        c = _smooth_field.view(w.Wave)
+        for d1,d0 in zip(c.dim[1:], _norm_field.dim):
+            d1.lim = d0.lim
+        _smooth_field = c
 
     else:
         _smooth_field = _norm_field[np.newaxis]
@@ -312,89 +357,79 @@ def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None), copy=True
     data2 /= np.abs(_smooth_field)
     data2 -= 1.0
 
-    return data2.swapaxes(axis, 0)
+    if field:         # for debugging of code and data... ;-)
+        return data2.swapaxes(axis, 0), _norm_field, _smooth_field[0], \
+            _cmp_field[0] if smooth is not None else None
 
-    
-def _norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None), copy=True):
+    else:
+        return data2.swapaxes(axis, 0)
+
+
+def get_ref2d_profile (refdata, axis=0, steps=None, width=None, ipos=None, xpos=None):
     '''
-    Normalizes 1D sub-arrays obtained from a 2D ndarray
-    along axis *dim* by the values integrated along
-    *dim* in range specified by *pos*.
-    
-    In ARPES, this is a useful feature for normalizing    
-    spectra obtained in a synchrotron facility, which usually
-    have significant amount of 2nd-order intensity above
-    the Fermi level. Usually, *dim* would be set to represent
-    the energy axis, and *pos* should be set to a range
-    well above the Fermi level.
+    Returns the intensity profile of the spectrum and returns a smoothened
+    version of the intensity profile.
 
     Parameters:
-      - *data* is the (multi-dimensional) ndarray containing
-        the data. Data poins _will be modified_, so be sure to
-        operate on a copy if you wish to retain original data.
-        If the data has more than 2 dimensions, the array
-        is rotated such that *dim* becomes the last axis, and
-        norm_by_noise() iterated on all elements of data,
-        recursively until dimension is 2.
+      - refdata: The 2D reference data (ndarray or Wave)
+      - axis:    Axis along which to build the profile
+                 (the resulting profile will have length=shape[axis].
+      - ipos:    Indices along (not axis) between which to integrate.
+      - xpos:    Same as *ipos*, only positions are specified in axis
+                 coordinates. Works only if input is a Wave(), takes
+                 precedence over *ipos* if both are specified.
+      - steps:   Number of steps to sustain the profile while spline-
+                 smoothing. Must be smaller than shape[axis].
+                 The smaller the number, the more drastic the smoothing.
+                 None is aequivalent to *step* of shape[axis] means no
+                 smoothing at all.
+      - width:   Alternative way of specifying the smoothing. Reduces
+                 data resolution in (not *axis*) direction by the factor
+                 1/*width* by integrating over *width* values, then
+                 interpolates the missing values using splines.
     
-      - *ipos* is expected to be a tuple containing a
-        (from, to) value pair in 
-        If *ipos* is 'None', a background auto-detection is
-        attempted using gnd_autodetect().
-        If *ipos* is a tuple, but either of the *ipos* elements
-        is None, the element is replaced by the beginning
-        or ending index, respectively.
-
-      - *xpos* same as *ipos*, only positions are specified
-        in axis coordinates of the axis specified by *dim*.
-        If present, *xpos* takes precedent over *ipos*.
-
-      - *axis* is the axis representing the array to be, i.e.
-        the one to be normalized.
-
-      - *copy* if True (the default), then the normalization will
-        be performed on a copy of the original array, the original
-        data remaining unchanged. Otherwise the original array
-        will be modified.
-
+    Retuns: an 1D 
     '''
 
-    # rotate axes such that dim is last axis
-    dim2 = len(data.shape)-1
-    if dim2 != axis:
-        _data = data.swapaxes(axis, dim2)
-    else:
-        _data = data
+    if refdata.ndim != 2:
+        raise ValueError ("Wrong dimension %d, expecting 2D data." % refdata.ndim)
 
-    # we'll be working on Waves all along -- this is
-    # because we want to retain axis scaling information
-    if copy == True:
-        data2 = _data.copy(w.Wave)
-    else:
-        data2 = _data.view(w.Wave)
-        data2.setflags(write=True)
+    ref = refdata.swapaxes(0,axis)
+    
+    if xpos is not None:
+        if not isinstance (refdata, w.Wave):
+            raise ValueError ("Expecting 'Wave' container with parameter 'xpos'.")
+        ipos = (ref.dim[0].x2i(xpos[0]), ref.dim[0].x2i(xpos[1]))
 
-    # for more than 2 dimensions: work recursively through all dimensions
-    if len(data2.shape) > 2:
-        for d in data2:
-            _norm_by_noise (d, axis=(dim2-1), ipos=ipos, xpos=xpos, copy=False)
-            
-    elif len(data2.shape) == 2:
-        # translate everything to index coordinates,
-        # xpos has precedence over ipos
-        index = [data2.dim[1].x2i_rnd(x) if x is not None
-                 else i if i is not None
-                 else f
-                 for x, i, f in zip(xpos, ipos, (0, data2.shape[1]-1))]
+    if ipos is None:
+        ipos = (0, ref.shape[1])
 
-        for d in data2:
-            d /= (d[index[0]:index[1]].sum() / (index[1]-index[0]))
-            
-    else:
-        raise ValueError ("Wrong dimension for normalizing along %d: %s" \
-                              % (dim, data.shape))
+    #
+    # smoothing will be done by reshaping the array
+    #
+    if steps is None:
+        steps = ref.shape[1]
+    width = math.floor(ref.shape[1] / steps)
 
-    return (data2.swapaxes(dim2, axis) if dim2 != axis else data2)
+    _tmp = ref[ipos[0]:ipos[1]].sum(0)[0:steps*width].view(np.ndarray)
+    _xin  = np.arange(len(_tmp))
+    _xout = np.arange(ref.shape[1])
+
+
+    # output data -- copying to retain Wave() information
+    out = ref[0].copy()
+
+    #print width, steps, width*steps, _xout.shape
+    #print _xin.reshape((width,steps)).sum(0).shape
+    #print _xin.shape, _xout.shape
+    #print _xin[::width]
+    #return  _xin[::width], _tmp.reshape((steps,width)).sum(1)/width
+
+    out[:] = spi.UnivariateSpline (_xin[::width],
+                                   _tmp.reshape((steps,width)).sum(1)/width)(_xout)[:]
+
+    return out
+    
 
 
 def deg2k (*args, **kwargs):
@@ -420,6 +455,8 @@ def deg2k (*args, **kwargs):
       - detector, d:  Values for the detector axis.
       - tilt, t:      Values for the tilt axis.
       - hv            The photon energy at which the data was measured.
+      - degree:       The spline degree to use for interpolation.
+                      Default is 3.
       
     '''
 
@@ -449,6 +486,7 @@ def deg2k (*args, **kwargs):
     ideg_t = _param ('tilt',     't', idata.dim[2].range)
     hv     = _param ('hv',       'hv', 1.0)
     fill   = _param ('fill',     'fill', np.nan)
+    degree = _param ('degree',   'deg', 3)
     _out = idata.copy()
 
     c     = 0.51232 * math.sqrt(hv)
@@ -490,8 +528,15 @@ def deg2k (*args, **kwargs):
     odeg_t_clean[nan_map] = ideg_t[0] # ...use with the interpolator.
 
     for idat, odat in zip(idata, _out):
-        _inter = sp.interpolate.RectBivariateSpline (ideg_d, ideg_t, idat)
+        #_in_masked = np.ma.masked_invalid (idat)        
+        _inter = sp.interpolate.RectBivariateSpline (ideg_d, ideg_t, idat,
+                                                     kx=degree, ky=degree)
         _tmp = _inter.ev(odeg_d_clean.flat, odeg_t_clean.flat)
+
+        #print "shapes:", ideg_d.shape, ideg_t.shape, idat.shape
+        #_inter = spi.interp2d (ideg_d, ideg_t, idat)
+        #_tmp = _inter (odeg_d_clean.flat, odeg_t_clean.flat)
+
         _tmp[nan_map.flat.copy()] = fill
         _tmp2 = _tmp.reshape ([odeg_d.shape[0], odeg_t.shape[1]])
         odat[:,:] = _tmp2[:,:]
@@ -520,10 +565,9 @@ if __name__ == "__main__":
     log.setLevel (logging.DEBUG)
 
     #foo = e(pts=(5, 4), mrel=-2)
-    foo = e()
-    pprint (foo)
-    print foo.info['axes']
-
+    #foo = e()
+    #pprint (foo)
+    #print foo.info['axes']
     #e(pts=5, klim=1.0)
     #e(pts=5, llim=(-1.0, 0.5))
     #e(pts=(4, 5), klim=((1.0), (1,0)))
