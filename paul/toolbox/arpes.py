@@ -577,8 +577,58 @@ def deg2k (*args, **kwargs):
         odata = _out
     
     return odata
-    
 
+
+def align2d (a, b, ireg=(0, -1, 0, -1), xreg=None, shift=None, steps=(1, 1)):
+    '''
+    Aligns two 2D waves (*a* and *b*) by shifting them with
+    respect to one another systematically over a region of
+    maximum *shift* units in *step* steps in either direction,
+    and checking the least error squares of (a / b - 1).
+    The parameter set which gives the smallest error squares
+    is taken as the optimal shifitng parameter.
+
+    Parameters:
+      a, b:  (Wave-like) the waves to align.
+      xreg:  (4-tuple: (left, right, top, bottom)) Specifies
+             the region in which to check for best
+             least-squares matching (axis coordinates,
+             takes precedence over *ireg* if specified)
+      ireg:  (4-tuple) the region in which to check for best
+             least-squares matching (index coordinates)
+      shift: (2-tuple) Shifting parameters (one per dimension).
+      steps: (2-tuple) Steps to use per dimension.
+
+    Region coordinates are all specified in the coordinate system
+    of *a*. The waves need not have the same number of points, as
+    long as the region of interest *xreg* or *ireg* fits well
+    within both waves.
+    The procedure does not check or care whether the waves have
+    the same granularity (i.e. axis delta parameters). The calling
+    instance needs to handle cases with different deltas on its own,
+    if required.
+
+    Returns a 3-tuple *(wav, (s0, s1), sqsum)* containing *wav*,
+    the shifted version of *b* (such that it fits best with *a*),
+    a 2-tuple *(s0, s1)* with the shifting offsets used, and
+    *sqsum*, the error squares sum.
+    '''
+
+    # prepare region indices -- working with interger index
+    # coordinates, but xreg takes precedence if specified.
+    ireg = list(reg)
+    if xreg is not None:
+        for i in len(xreg):
+            reg[i] = a.dim[i/2].x2i_rnd(xreg[i])
+
+    # slicing indexer for the region of interest
+    indexer = tuple ([slice(reg[2*i], reg[2*i+1]) for in range(0, len(reg)/2)])
+
+    ar = a[indexer]
+    br = b[indexer]
+
+    return ar, br
+    
 
 if __name__ == "__main__":
 

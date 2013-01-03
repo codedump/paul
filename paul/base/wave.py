@@ -404,6 +404,14 @@ class Wave(ndarray):
         '''
         return (self.dim[1].offset, self.dim[1].end, self.dim[0].end, self.dim[0].offset)
 
+    @propery
+    def lim(self):
+        '''
+        General N-dim limits tuple (offset/end of each axis)
+        '''
+        return tuple(np.array([[d.offset, d.end] for d in self.dim]).flat)
+        
+
     def infs(self, *args, **kwargs):
         '''
         Syntanctic sugar for *self.info[]*. Returns the first element
@@ -1168,14 +1176,15 @@ def WAx(dat, ax):
 #
 # some useful functions
 #
-def regrid (wav, *args, **kwargs):
-    '''
-    Re-samples the specified wave onto a new grid.
-    The new grid is specified by the list of optional
-    arguments *args, one argument per dimension.
-    Every single argument may be as follows:
 
-       - None, in which case the dimension will not
+def regrid (wav, *args, **kwargs):
+	'''
+	Re-samples the specified wave onto a new grid.
+	The new grid is specified by the list of optional
+	arguments *args, one argument per dimension.
+	Every single argument may be as follows:
+
+	   - None, in which case the dimension will not
          be resampled (i.e. retained as it is, instead)
          
        - A dictionary, containing keywords 'delta', 'end'
@@ -1213,84 +1222,100 @@ def regrid (wav, *args, **kwargs):
               Constant value to use with mode = 'constant'.
       cpinfo: Boolean. Specifies whether to copy wave info from
               input to output wave. Default is True.
-    '''
+	'''
     
-    units = kwargs.setdefault ('units', 'axis')
-    mode = kwargs.setdefault ('mode', 'nearest')
-    cval = kwargs.setdefault ('cval', 0.0)
-    cpinfo = kwargs.setdefault ('cpinfo', True)
+	units = kwargs.setdefault ('units', 'axis')
+	mode = kwargs.setdefault ('mode', 'nearest')
+	cval = kwargs.setdefault ('cval', 0.0)
+	cpinfo = kwargs.setdefault ('cpinfo', True)
 
-    # First, create new point coordinates for each axis
-    # (This is index units -- the whole function works
-    #  on fractional index units; only the input is accepted
-    #  in axis units, for convenience.)
+	# First, create new point coordinates for each axis
+	# (This is index units -- the whole function works
+	#  on fractional index units; only the input is accepted
+	#  in axis units, for convenience.)
 
-    axes = list(args) + [None] * (wav.ndim - len(args))
+	axes = list(args) + [None] * (wav.ndim - len(args))
     
-    oslice = [] # output slice lists to produce coord
-    axinfo = [] # axis info for the target wave
-    for a, d in zip(axes, wav.dim):
-        if a is None:
-            if units == 'axis':
-                oslice.append (slice(d.x2i(d.offset), d.x2i(d.end), 1.0))
-            elif units == 'index':
-                oslice.append (slice(d.offset, d.end, d.delta))
-            axinfo.append(AxisInfo (parent=None, copy_from=d))
+	oslice = []   # output slice lists to produce coord
+	coord = []    # output axis coordinates (one array per axis)
+	axinfo = []   # axis info for the target wave
+	axcnt = 0     # current axis counter (incremented once per loop)
+	for a, d in zip(axes, wav.dim):
+
+		shaping_index = tuple([np.newaxis] * axcnt + 
+							  [slice(None)]        + 
+							  [np.newaxis] * (wav.ndim-axcnt-1))
+        
+		if a is None:
+			coord.append (np.arange(d.size)[shaping_index])
+			axinfo.append(AxisInfo (parent=None, copy_from=d))
             
-        elif isinstance(a, dict):
+		elif isinstance(a, dict):
 
-            # parameter 'shift' has precedence over anything else
-            if a.has_key ('shift'):
-                a['offset'] = d.offset + a['shift']
-                a['end']    = d.end + a['shift']
+			# default values (in 'axis' or 'index' units, depending on user specification)
+			def_offs  = d.offset if units == 'axis' else 0
+			def_end   = d.end    if units == 'axis' else d.size
+			def_delta = d.delta  if units == 'axis' else 1
 
-            # parameter 'numpts' has precedence over others ('delta', 'offset' or 'end')
-            if a.has_key ('numpts'):
-                if a.has_key('delta'):
-                    if a.has_key ('offset'):   # ... or offset/end (from delta).
-                        a['end'] = a['offset'] + a['numpts']*a['delta']
-                    elif a.has_key ('end'):
-                        a['offset'] = a['end'] - a['numpts']*a['delta']
+			# parameter 'shift' has precedence over anything else
+			if a.has_key ('shift'):
+				a['offset'] = def_offs + a['shift']
+				a['end']    = def_end  + a['shift']
+
+			# parameter 'numpts' has precedence over others ('delta', 'offset' or 'end')
+			if a.has_key ('numpts'):
+				if a.has_key('delta'):
+					if a.has_key ('offset'):   # ... or offset/end (from delta).
+						a['end'] = a['offset'] + (a['numpts']-1)*a['delta']
+					elif a.has_key ('end'):
+						a['offset'] = a['end'] - (a['numpts']-1)*a['delta']
                         
-                # either calculate delta (from offset/end)...
-                a.setdefault ('offset', d.offset)
-                a.setdefault ('end', d.end)
-                a['delta'] = (a['end']-a['offset']) / a['numpts']
+				# either calculate delta (from offset/end)...
+				a.setdefault ('offset', def_offs)
+				a.setdefault ('end',    def_end)
+				a['delta'] = (a['end']-a['offset']) / (a['numpts'] - 1)
 
-            # catch-all: set offset, end and delta using the original axis values.
-            a.setdefault ('offset', d.offset)
-            a.setdefault ('end', d.end)
-            a.setdefault ('delta', d.delta)
+			# catch-all: set offset, end and delta using the original axis values.
+			a.setdefault ('offset', def_offs)
+			a.setdefault ('end',    def_end)
+			a.setdefault ('delta',  def_delta)
 
-            axinfo.append (AxisInfo (parent=None, copy_from=d))
+			numpts = int(round(math.fabs((a['end'] - a['offset']) / a['delta']))) + 1
+			if a.has_key ('numpts'):
+				assert (a['numpts'] == numpts)
 
-            # Need index coordinates for new slice,
-            # but axis coordinates for 'axinfo' => different
-            # treatment, depending on the units parameter.
-            if units == 'index':
-                oslice.append (slice(a['offset'], a['end'], a['delta']))
-                axinfo[-1].offset = d.i2x(a['offset'])
-                axinfo[-1].delta = a['delta'] * d.delta
-            elif units == 'axis':
-                oslice.append (slice(d.x2i(a['offset']), d.x2i(a['end']), a['delta']/d.delta))
-                axinfo[-1].offset = a['offset']
-                axinfo[-1].delta = a['delta']
-        else:
-            raise TypeError ("Expecting 'None' or SliceObject as grid info, "
+			axinfo.append (AxisInfo (parent=None, copy_from=d))
+
+			# Need index coordinates for new slice,
+			# but axis coordinates for 'axinfo' => different
+			# treatment, depending on the units parameter.
+			if units == 'index':
+				coord.append (np.arange (a['offset'], a['end'], a['delta'])[shaping_index])
+				axinfo[-1].offset = d.i2x(a['offset'])
+				axinfo[-1].delta = a['delta'] * d.delta
+			elif units == 'axis':
+				coord.append (d.x2i(np.linspace(start=a['offset'], stop=a['end'], num=numpts))[shaping_index])
+				axinfo[-1].offset = a['offset']
+				axinfo[-1].delta = a['delta']
+		else:
+			raise TypeError ("Expecting 'None' or SliceObject as grid info, "
                              "received: %s (%s)" % (str(a), str(type(a))))
 
-    coord = np.mgrid[oslice]
-    out = spn.interpolation.map_coordinates (wav, coord, mode=mode,
+        # increment current axis counter
+		axcnt += 1
+
+	vcoord = np.broadcast_arrays (*coord)
+	out = spn.interpolation.map_coordinates (wav, vcoord, mode=mode,
                                              cval=cval).view(Wave)
 
-    if cpinfo == True:
-        out._copy_info (from_wave=wav, noax=True)
+	if cpinfo == True:
+		out._copy_info (from_wave=wav, noax=True)
 
-    for d_in, d_out in zip(axinfo, out.dim):        
-        d_out.copy (d_in)
+	for d_in, d_out in zip(axinfo, out.dim):        
+		d_out.copy (d_in)
 
-    return out
-    
+	return out
+
 
 #
 # wrappers for some useful Numpy functions to make them Wave-aware
