@@ -579,7 +579,8 @@ def deg2k (*args, **kwargs):
     return odata
 
 
-def align2d (a, b, ireg=(0, -1, 0, -1), xreg=None, shift=None, steps=(1, 1)):
+def align2d (a, b, iregion=(0, -1, 0, -1), xregion=None, 
+             xshift=None, ishift=None, step=0.5):
     '''
     Aligns two 2D waves (*a* and *b*) by shifting them with
     respect to one another systematically over a region of
@@ -589,15 +590,31 @@ def align2d (a, b, ireg=(0, -1, 0, -1), xreg=None, shift=None, steps=(1, 1)):
     is taken as the optimal shifitng parameter.
 
     Parameters:
-      a, b:  (Wave-like) the waves to align.
-      xreg:  (4-tuple: (left, right, top, bottom)) Specifies
-             the region in which to check for best
-             least-squares matching (axis coordinates,
-             takes precedence over *ireg* if specified)
-      ireg:  (4-tuple) the region in which to check for best
-             least-squares matching (index coordinates)
-      shift: (2-tuple) Shifting parameters (one per dimension).
-      steps: (2-tuple) Steps to use per dimension.
+      a, b:    (Wave-like) the waves to align.
+      xregion: (4-tuple: (left, right, top, bottom)) Specifies
+               the region in which to check for best
+               least-squares matching (axis coordinates,
+               takes precedence over *ireg* if specified).
+               Any value can be specified as None, in which
+               case the corresponding axis limit (offset or end),
+               will be substituted.
+      iregion: (4-tuple) the region in which to check for best
+               least-squares matching (index coordinates)
+      xshift:  (2-tuple) Shifting parameters (one per dimension).
+               Describes the distance (specified in axis units) 
+               in x and y direction to traverse looking for a best
+               match. The shifting will take place from 
+               *-shift* to *+shift* in either direction.
+               If *shift* is None, or either of the components
+               are None, it will be replaced by the respective
+               width/height of the *region* parameter.
+               Has precedence over *ishift*.
+      ishift:  (2-tuple) Same as xshift, only in index units.               
+      steps:   (float or 2-tuple) Step to use per dimension, as a
+               factor of the respective dimension granularity (i.e.
+               dim-offset). Default is 0.5, which means checking
+               with half-index precision.
+           
 
     Region coordinates are all specified in the coordinate system
     of *a*. The waves need not have the same number of points, as
@@ -608,26 +625,153 @@ def align2d (a, b, ireg=(0, -1, 0, -1), xreg=None, shift=None, steps=(1, 1)):
     instance needs to handle cases with different deltas on its own,
     if required.
 
-    Returns a 3-tuple *(wav, (s0, s1), sqsum)* containing *wav*,
-    the shifted version of *b* (such that it fits best with *a*),
-    a 2-tuple *(s0, s1)* with the shifting offsets used, and
-    *sqsum*, the error squares sum.
+    Returns: a 3-tuple *((s0, s1), b_new, scores)* where:
+        *(s0, s1)*   is a 2-tuple with the shifting offsets used
+                     specified in index units,
+        *b_new*      is the shifted version of *b* (such that it fits
+                     best with *a*),
+        *scores*     is an ndarray of the shape [shift[0], shift[0]]
+                     containing the square-root of the scores normalized
+                     per data point (lowest score ist best match).
     '''
 
     # prepare region indices -- working with interger index
     # coordinates, but xreg takes precedence if specified.
-    ireg = list(reg)
-    if xreg is not None:
-        for i in len(xreg):
-            reg[i] = a.dim[i/2].x2i_rnd(xreg[i])
+    reg = list(iregion)
+    if xregion is not None:
+        for i in range(len(xregion)):
+            idim = i/2
+            if xregion[i] is not None:
+                reg[i] = a.dim[idim].x2i_rnd(xregion[i])
+            else:
+                reg[i] = -1 if i%2 else 0
+
+    for i in range(len(reg)):
+        if reg[i] == -1 or reg[i] is None:
+            reg[i] = a.dim[i/2].size if i%2 else 0
+
+    # calculating step size. working with a 2-tuple internally.
+    if not hasattr(step, "__len__"):
+        step = (step, step)
+
+    # calculating region size
+    if xshift is not None:
+        if not hasattr(xshift, "__len__"):
+            xshift = (xshift, xshift)
+        ishift = [ (x/d.delta if x is not None \
+                    else d.size) \
+                   for d, x in zip(a.dim, xshift) ]
+            
+    if not hasattr(ishift, "__len__"):
+        ishift = [ishift, ishift]
+        
+    for i in range(len(ishift)):
+        if ishift[i] is None:
+            ishift[i] = reg[i*2+1] - reg[i*2]
+    ishift = tuple(ishift)
 
     # slicing indexer for the region of interest
-    indexer = tuple ([slice(reg[2*i], reg[2*i+1]) for in range(0, len(reg)/2)])
+    indexer = tuple ([ slice(reg[2*i], reg[2*i+1]) \
+                       for i in range(0, len(reg)/2)])
 
+    # shifting coordinates (1D and 2D)
+    _shx = np.arange(-ishift[0], ishift[0], step=step[0])
+    _shy = np.arange(-ishift[1], ishift[1], step=step[1])
+    if (_shx.size == 0):
+        _shx = np.array([0])
+    if (_shy.size == 0):
+        _shy = np.array([0])
+    _shx_2d, _shy_2d = np.broadcast_arrays (_shx[:,np.newaxis], _shy[np.newaxis,:])
+
+    # score matrix
+    scores = np.ndarray ([_shx.size, _shy.size], dtype=np.float64)
+
+    # the hard work... :-)
     ar = a[indexer]
-    br = b[indexer]
+    for sx, sy, i in zip(_shx_2d.flat, _shy_2d.flat, range(_shx_2d.size)):
+        br = w.regrid (b, {'shift': sx}, {'shift': sy}, units='index')[indexer]
+        q = ar/br
+        score = math.sqrt( ((q-np.average(q))**2).sum() / ar.size )
+        scores.flat[i] = score
 
-    return ar, br
+    # sort out the best match
+    best_i = np.argmin(scores)    
+    best_shift = (_shx_2d.flat[best_i], _shy_2d.flat[best_i])
+
+    return best_shift, scores
+
+
+def fermi_guess_pos (data, axis=0, std_fac=3):
+    '''
+    Finds the Fermi level in an 1D or 2D set of data
+    by integrating along !axis and subsequently averaging
+    over increasing distances from one end of the data,
+    then from the other, until the standard deviation becomes
+    too large.
+
+    The ratio behind the algorithm is that data beyond the Fermi
+    level will eventually become numerically zero and stay that
+    way (with the exception of some background noise, of course).
+    Therefore, the Fermi level is found by walking the data
+    starting at one end (the one with less intensity) until
+    the current data becomes much larger than the average
+    plus a number of standard deviations.
+
+    Works best with low-temperature data.
+
+    Paremters:
+      *data*:   (array-like) the 1D or 2D data set.
+      *axis*:   (integer) the energy axis in a 2D data set.
+                I.e. 2D data will be integrated along momentum
+                (!*axis*) and treated as 1D data.
+      *std_fac* (float) How many standard deviation must a data
+                point differ from the average background in order
+                to qualify as "relevant intensity" (i.e. Fermi the
+                Fermi level).
+
+    Returns the guessed position of the Fermi level.
+    '''
+    
+    if data.ndim == 2:
+        ax = int(not axis)
+        data = data.mean(axis=ax)
+
+    data_max  = data.max()
+    data_min  = data.min()
+    data_span = data_max - data_min
+
+    # which end do we need to look at?
+    j = 0 if data[0] < data[-1] else 1
+        
+    for i in range(1,data.size):
+        # In every step, calculate two subsets of data:
+        # one from the left, one from the right.
+        # Stop the loop when following conditions are met:
+        if j == 0:
+            sub = data[0:i]
+            val = data[i]
+        else:
+            sub = data[-i:-1]
+            val = data[-i]
+        avg = np.mean(sub)
+        std = np.std(sub)
+
+        # find the thermally populated end of the data
+
+        # Stop searching when the current data point is "too large".
+        # Ideally, "too large" should mean larger than the current
+        # average plus a number of standard deviations -- say, 3
+        # or so.
+        # However, this could bring us into trouble with very noisy
+        # data, where the standard deviation in order to avoid funny
+        # situations where the data is very noisy, limit the required
+        # 
+        if (val) > (avg + std*std_fac):
+            return i if j == 0 else data.size-i
+
+    # if no Fermi edge found
+    return None
+        
     
 
 if __name__ == "__main__":

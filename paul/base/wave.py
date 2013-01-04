@@ -404,7 +404,7 @@ class Wave(ndarray):
         '''
         return (self.dim[1].offset, self.dim[1].end, self.dim[0].end, self.dim[0].offset)
 
-    @propery
+    @property
     def lim(self):
         '''
         General N-dim limits tuple (offset/end of each axis)
