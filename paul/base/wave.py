@@ -223,12 +223,28 @@ class AxisInfo(object):
         return "delta=%f, offset=%f, units='%s'" % (self.delta, self.offset, self.units)
 
 
-#
-# ndarray with some supplementary information:
-#   . per-axis scaling and unit information
-#   . notes dictionary
-#
 class Wave(ndarray):
+    '''
+    This is an numpy.ndarray sub-class with features that make
+    it a useful tool for working with experimental data:
+   
+      - intrinsic axis scaling and unit information (see `class:AxisInfo`)
+      
+      - notes dictionary (to store useful meta information
+        about measurement parameters etc)
+
+      - an overloaded __getitem__ operator that retains axis information
+        when slicing (limited support for fancy indexing)
+
+      - __call__ operator supporting indexing by axis values (instead
+        of index numbers)
+
+    Some useful numpy functions that manipulate the shape of numpy.ndarray
+    (see below) have been reimplemented (rather: wrapped :-) )
+    to be aware of the supplementary features that Wave offers. See
+    below for more details.
+    '''
+    
     def __new__ (subtype, *args, **kwargs):
         obj = ndarray.__new__ (subtype, *args, **kwargs)
         return obj
@@ -1192,14 +1208,19 @@ def regrid (wav, *args, **kwargs):
          Not all keywords need to be present; missing keywords
          will be replaced according to the following rules,
          in this order:
-           o 'shift' has precedence over anything else
-           o 'numpts' has precedence over 'delta', 'offset', 'end'
-           o 'numpts', 'delta' and either of 'offset' or 'end'
+         
+           - 'shift' has precedence over anything else
+           
+           - 'numpts' has precedence over 'delta', 'offset', 'end'
+           
+           - 'numpts', 'delta' and either of 'offset' or 'end'
              are present, the other is being calculated
-           o 'numpts' without 'delta' is present, 'delta'
+             
+           - 'numpts' without 'delta' is present, 'delta'
              is being calculated (using specified offset/end,
              or original axis values)
-           o the original axis' 'delta', 'offset' or 'end' values are
+             
+           - the original axis' 'delta', 'offset' or 'end' values are
              used as defaults, if they cannot be calculated.
 
     All axes information is specified in Axis Coordinates.
@@ -1211,17 +1232,20 @@ def regrid (wav, *args, **kwargs):
 
     Optional named parameters:
 
-      units:  'axis' or 'index', specifies whether the
-              new grid is specified in intrinsic axis
-              units or (fractional) index. Default is 'axis'.
-      mode:   (See 'mode' and 'cval' in map_coordinates()).
-              Describes behavior for points outside of the original
-              data boundaries. One of 'constant', 'nearest',
-              'reflect' or 'wrap'. Default is 'nearest'.
-      cval:   (See 'mode' and 'cval' in map_coordinates()).
-              Constant value to use with mode = 'constant'.
-      cpinfo: Boolean. Specifies whether to copy wave info from
-              input to output wave. Default is True.
+      * `units`:  'axis' or 'index', specifies whether the
+        new grid is specified in intrinsic axis
+        units or (fractional) index. Default is 'axis'.
+        
+      * `mode`:   (See 'mode' and 'cval' in map_coordinates()).
+        Describes behavior for points outside of the original
+        data boundaries. One of 'constant', 'nearest',
+        'reflect' or 'wrap'. Default is 'nearest'.
+        
+      * `cval`:   (See 'mode' and 'cval' in map_coordinates()).
+        Constant value to use with mode = 'constant'.
+                
+      * `cpinfo`: Boolean. Specifies whether to copy wave info from
+        input to output wave. Default is True.
 	'''
     
 	units = kwargs.setdefault ('units', 'axis')
@@ -1240,6 +1264,7 @@ def regrid (wav, *args, **kwargs):
 	coord = []    # output axis coordinates (one array per axis)
 	axinfo = []   # axis info for the target wave
 	axcnt = 0     # current axis counter (incremented once per loop)
+    
 	for a, d in zip(axes, wav.dim):
 
 		shaping_index = tuple([np.newaxis] * axcnt + 
@@ -1305,8 +1330,8 @@ def regrid (wav, *args, **kwargs):
 		axcnt += 1
 
 	vcoord = np.broadcast_arrays (*coord)
-	out = spn.interpolation.map_coordinates (wav, vcoord, mode=mode,
-                                             cval=cval).view(Wave)
+	out = spn.interpolation.map_coordinates (wav.view(np.ndarray), vcoord,
+                                             mode=mode, cval=cval).view(Wave)
 
 	if cpinfo == True:
 		out._copy_info (from_wave=wav, noax=True)
