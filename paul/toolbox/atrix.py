@@ -28,6 +28,7 @@ def ncomp (iwave, axis=0, step=1, intg=-1, norm=False):
     # create a new wave, same as input wave, but with a reduced
     # size in dimention 'axis'. retain axis info, alter it
     # to match the new dimension.
+    
     new_shape = list(iwave.shape)
     new_shape[axis] = iwave.shape[axis] / step
     owave = None
@@ -53,6 +54,12 @@ def ncomp (iwave, axis=0, step=1, intg=-1, norm=False):
     if norm:
         for s in owave.swapaxes(0,axis):    # scaling and normalizing
             s /= s.sum()
+
+    ## if we're working on waves, set scaling information
+    ## on the output wave.
+    #if isinstance (owave, Wave):
+    #    for din, dout in zip (iwave.dim, owave.dim):
+    #        dout.lim = din.lim
 
     return owave
 

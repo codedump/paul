@@ -4,50 +4,70 @@
 Simple script to display a 2D wave as a waterfall diagram.
 '''
 
-from paul.toolbox.mpltrix import imwater
-from paul.toolbox.atrix import ncomp
-
+import paul.toolbox.atrix as atrix
+import paul.base.wave as wave
+import paul.toolbox.mpltrix as mpltrix
+import numpy as np
 import matplotlib as mpl
+import pprint as pp
 
 import logging
 log = logging.getLogger (__name__)
+
+#reload(mpltrix)
+#reload(wave)
+#reload(atrix)
 
 def populate(*args, **kwargs):
     can = kwargs['can']
     can.reset()
 
     comp_ax = 0
-    comp_step = 5
+    comp_step = 10
     comp_norm = False
 
-    offs = (0, 0.1)
-    xlim = (0, 0)
-    ylim = (0, 0)
+    offs = (0, 0.04)
+    xlim = (11.625, 11.66)
+    ylim = (-10, 12)
 
-    # create waterwall compression
-    wav = [ ncomp (w/w.infv('FDD', 'V_max', default=w.max()),
-                   axis=comp_ax,
-                   step=comp_step,
-                   intg=comp_step,
-                   norm=comp_norm) 
-            for w in kwargs['wav']]
+    _wav = kwargs['wav'][0].swapaxes(0,1)
+
+    can.axes.axvline (11.6485, ls=':')
+
+    #print "First input element:"
+    #pp.pprint (_wav)
     
-    kwargs['wav'] = wav
+    # create waterwall compression
+    wav = atrix.ncomp (_wav/_wav.infv('FDD', 'V_max', default=_wav.max()),
+                       axis=comp_ax,
+                       step=comp_step,
+                       intg=comp_step,
+                       norm=comp_norm) 
+    
+    kwargs['wav'] = [wav]
 
     # surpress data above Ef+5*kT if sample was FDD normalized
-    if ('FDD' in wav[0].info):
-        w = wav[0](slice(wav[0].dim[0].offset,
-                         wav[0].infv('FDD', 'kT', default=0)*5),
-                   slice(None))
-    else:
-        w = wav[0]
+    if ('FDD' in wav.info):
+        wav = wav(slice(wav.dim[0].offset, wav.infv('FDD', 'kT', default=0)*5), slice(None))
+
+
+
+    print "Compressed element:"
+    pp.pprint (wav)
+    print "Is array:", isinstance(wav, np.ndarray)
+    print "Is wave:", isinstance(wav, wave.Wave)
+    print "Limits:", wav.lim, _wav.lim
 
     # plot the data
-    kwargs['lines'] = imwater (can.axes, w,
-                               axis=comp_ax, 
-                               offs=offs, 
-                               xlim=xlim, 
-                               ylim=ylim)
+    kwargs['lines'] = mpltrix.imwater (can.axes, wav,
+                                       axis=comp_ax, 
+                                       offs=offs, 
+                                       xlim=xlim, 
+                                       ylim=ylim)
+
+    #print "axis limits:", w.dim[comp_ax].lim
+    #can.axes.set_ylim (11.15, 11.35)
+    #can.axes.set_ylim (w.dim[0].lim)
 
     decorate (*args, **kwargs)
     can.draw()

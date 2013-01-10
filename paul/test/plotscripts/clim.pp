@@ -25,7 +25,7 @@ def decorate (*args, **kwargs):
     ax = kwargs['axes'].axes
     w = kwargs['wav']
     
-    clim = (w.min()+(w.max()-w.min())*0.00, w.min()+(w.max()-w.min())*0.99)
+    clim = (w.min()+(w.max()-w.min())*0.00, w.min()+(w.max()-w.min())*0.80)
 
     ax.images[0].set_clim (clim)
     ax.set_ylim (w.dim[0].min, w.dim[0].max)

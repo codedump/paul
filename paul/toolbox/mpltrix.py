@@ -2,7 +2,7 @@
 
 from matplotlib.collections import LineCollection
 from matplotlib.gridspec import GridSpec
-from paul.base.wave import Wave, WCast
+import paul.base.wave as wave
 import numpy as np
 from pprint import pprint
 
@@ -39,16 +39,16 @@ def plotwater (fig_ax, wlist, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0)):
     manipulate the waterfall plot appearance.
     '''
     
-    if isinstance(wlist, Wave):
+    if isinstance(wlist, wave.Wave):
         return imwater(fig_ax, wlist, axis, offs, xlim, ylim, autoscale=True)
 
-    xlist = [np.arange(start=WCast(w).dim[0].offset,
-                       stop=WCast(w).dim[0].end,
-                       step=WCast(w).dim[0].delta) for w in wlist]
+    xlist = [np.arange(start=wave.WCast(w).dim[0].offset,
+                       stop=wave.WCast(w).dim[0].end,
+                       step=wave.WCast(w).dim[0].delta) for w in wlist]
     
     if xlim == (0, 0):
-        xlim = (min([WCast(w).dim[0].min for w in wlist]) - (offs[0]*len(wlist))*(offs[0]<0),
-                max([WCast(w).dim[0].max for w in wlist]) + (offs[0]*len(wlist))*(offs[0]>0))
+        xlim = (min([wave.WCast(w).dim[0].min for w in wlist]) - (offs[0]*len(wlist))*(offs[0]<0),
+                max([wave.WCast(w).dim[0].max for w in wlist]) + (offs[0]*len(wlist))*(offs[0]>0))
     if ylim == (0, 0):
         ylim = (min([np.nanmin(w) for w in wlist]) + (offs[1]*len(wlist)) * (offs[1]<0),
                 max([np.nanmin(w) for w in wlist]) + (offs[1]*len(wlist)) * (offs[1]>0))
@@ -91,14 +91,16 @@ def imwater (fig_ax, wlist, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0), autosca
         return
 
     if len(ignore) > 0:
-        log.error ("NOT IMPLEMENTED: 'ignore' parameter!  (Hint: You should rather preselect input wave range.)")
+        log.error ("NOT IMPLEMENTED: 'ignore' parameter!  "
+                   "(Hint: You should rather preselect input wave range.)")
 
 
-    if not isinstance(wlist, Wave):
+    if not isinstance(wlist, wave.Wave):
         new_wlist = np.vstack (wlist)  # this only works if waves have
                                        # the same number of points
         wlist = new_wlist
-        
+
+    #wlist.swapaxes(0, axis)
 
     if len(wlist.shape) != 2:
         err = "Only 2D waves can be plotted as waterfalls (dim = %d here)" % len(wlist.shape)

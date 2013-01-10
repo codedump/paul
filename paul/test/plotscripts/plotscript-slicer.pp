@@ -7,15 +7,15 @@ from PyQt4 import QtGui, QtCore
 from paul.viewer.viewerwindow import ViewerWindow
 from paul.base.wave import Wave
 
-from paul.toolbox.slicers import SingleSlicer, CompressingSlicer
+import paul.toolbox.slicers as slicers
 from paul.toolbox.widgets import ValueWidget
 
 import matplotlib as mp
-
 import numpy as np
 
 import math
 
+#reload(slicers)
 
 class UiElements(QtCore.QObject):
     pass
@@ -56,7 +56,7 @@ def setColor(i):
 @QtCore.pyqtSlot()
 def addSlice():
     global GUI, PLOT
-    GUI.slices.append(SingleSlicer(axis=0, viewer=ViewerWindow()))
+    GUI.slices.append(slicers.SingleSlicer(axis=0, viewer=ViewerWindow()))
     GUI.slices[-1].viewer.resize (400, 350)
     GUI.slices[-1].slice(wave=PLOT.waves[0])
     GUI.slices[-1].viewer.show()
@@ -79,7 +79,7 @@ def addSlice():
 @QtCore.pyqtSlot()
 def addWaterfall():
     global GUI, PLOT
-    GUI.slices.append(CompressingSlicer(axis=0, viewer=ViewerWindow()))
+    GUI.slices.append(slicers.CompressingSlicer(axis=0, viewer=ViewerWindow()))
     GUI.slices[-1].viewer.resize (500, 350)
     GUI.slices[-1].slice(wave=PLOT.waves[0])
     GUI.slices[-1].viewer.show()

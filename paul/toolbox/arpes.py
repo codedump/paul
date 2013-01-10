@@ -9,7 +9,7 @@ import scipy.interpolate as spi
 import scipy.ndimage.interpolation as spni
 import scipy.ndimage as spimg
 from pprint import pprint
-import paul.base.wave as w
+import paul.base.wave as wave
 from paul.toolbox.atrix import ncomp
 
 from itertools import product
@@ -100,10 +100,10 @@ def e(mrel=1.0, ebind=0.0, kpos=0.0, klim=1.0, pts=100, out=None):
 
     out = ebind + 1.0/eV * (( (kx**2+ky**2) - (kpos**2))*1.0e20) * (hbar**2.0) / (2.0*mrel*me)
 
-    if type(out) is w.Wave:
+    if type(out) is wave.Wave:
         wav = out
     else:
-        wav = out.view(w.Wave)
+        wav = out.view(wave.Wave)
 
     for i in range(len(wav.shape)):
        wav.setLimits (i, klim[i][0], klim[i][1])
@@ -216,7 +216,7 @@ def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None),
     
 
     Parameters:
-      - *data* is the (multi-dimensional) ndarray containing
+      - `data`:  the (multi-dimensional) ndarray containing
         the data. Data poins _will be modified_, so be sure to
         operate on a copy if you wish to retain original data.
         If the data has more than 2 dimensions, the array
@@ -224,7 +224,7 @@ def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None),
         norm_by_noise() iterated on all elements of data,
         recursively until dimension is 2.
     
-      - *ipos* is expected to be a tuple containing a
+      - `ipos`: expected to be a tuple containing a
         (from, to) value pair in 
         If *ipos* is 'None', a background auto-detection is
         attempted using gnd_autodetect().
@@ -232,19 +232,19 @@ def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None),
         is None, the element is replaced by the beginning
         or ending index, respectively.
 
-      - *xpos* same as *ipos*, only positions are specified
+      - `xpos`: same as *ipos*, only positions are specified
         in axis coordinates of the axis specified by *dim*.
         If present, *xpos* takes precedent over *ipos*.
 
-      - *axis* is the axis representing the array to be, i.e.
+      - `axis`: is the axis representing the array to be, i.e.
         the one to be normalized.
 
-      - *copy* if True (the default), then the normalization will
+      - `copy`: if True (the default), then the normalization will
         be performed on a copy of the original array, the original
         data remaining unchanged. Otherwise the original array
         will be modified.
 
-      - *smooth*: Smoothing factor to apply to the data. Can
+      - `smooth`: Smoothing factor to apply to the data. Can
         be either None (default), 'auto', a number, or an
         (N-1) long tuple of numbers. If it's a tuple, one
         number per dimension is assumed.
@@ -271,10 +271,10 @@ def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None),
           parameters of the Gaussian in each dimension.
           Produces artefacts at the border of the image.
 
-      - *stype*: smooth type, either one of 'spline' or 'gaussian'.
+      - `stype`: smooth type, either one of 'spline' or 'gaussian'.
         Specifies the type of smoothing.
 
-      - *field*: if True, then the smooth field in original,
+      - `field`: if True, then the smooth field in original,
         in its down-, and its up-sampled version will also be
         returned (useful for debugging and data quality
         estimates). See also: PRO TIP below.
@@ -298,9 +298,9 @@ def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None),
     # we'll be working on Waves all along -- this is
     # because we want to retain axis scaling information
     if copy == True:
-        data2 = _data.copy(w.Wave)
+        data2 = _data.copy(wave.Wave)
     else:
-        data2 = _data.view(w.Wave)
+        data2 = _data.view(wave.Wave)
         data2.setflags(write=True)
 
     # translate everything to index coordinates,
@@ -356,7 +356,7 @@ def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None),
 
         ## Apply correct scaling to _smooth_field and _tmp_field
         ## (this is just for debugging purposes).
-        #b = _cmp_field.view(w.Wave)
+        #b = _cmp_field.view(wave.Wave)
         #for d1, d0, s in zip(b.dim[1:], _norm_field.dim, smooth):
         #    d1.offset = d0.offset
         #    d1.delta = d0.delta * float(s)
@@ -383,7 +383,7 @@ def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None),
     data2 -= 1.0
 
     if field:         # for debugging of code and data... ;-)
-        _smooth_wave = _smooth_field.view(w.Wave)
+        _smooth_wave = _smooth_field.view(wave.Wave)
         for d1,d0 in zip(_smooth_wave.dim[1:], _norm_field.dim):
             d1.lim = d0.lim
         return data2.swapaxes(axis, 0), _norm_field, _smooth_wave
@@ -424,7 +424,7 @@ def get_ref2d_profile (refdata, axis=0, steps=None, width=None, ipos=None, xpos=
     ref = refdata.swapaxes(0,axis)
     
     if xpos is not None:
-        if not isinstance (refdata, w.Wave):
+        if not isinstance (refdata, wave.Wave):
             raise ValueError ("Expecting 'Wave' container with parameter 'xpos'.")
         ipos = (ref.dim[0].x2i(xpos[0]), ref.dim[0].x2i(xpos[1]))
 
@@ -506,7 +506,7 @@ def deg2k (*args, **kwargs):
 
     # rotate data into 'edt' axis configuration
     axes = kwargs.setdefault('axes', 'edt')
-    idata = w.transpose(args[0], (axes.find('e'), axes.find('d'), axes.find('t')))
+    idata = wave.transpose(args[0], (axes.find('e'), axes.find('d'), axes.find('t')))
     
     E      = _param ('energy',   'e', idata.dim[0].range)
     ideg_d = _param ('detector', 'd', idata.dim[1].range)
@@ -569,8 +569,8 @@ def deg2k (*args, **kwargs):
         odat[:,:] = _tmp2[:,:]
 
     
-    if isinstance (idata, w.Wave):
-        odata = _out.view(w.Wave)
+    if isinstance (idata, wave.Wave):
+        odata = _out.view(wave.Wave)
         odata.dim[1].lim = ik_d_lim
         odata.dim[2].lim = ik_t_lim
     else:
@@ -580,14 +580,20 @@ def deg2k (*args, **kwargs):
 
 
 def align2d (a, b, iregion=(0, -1, 0, -1), xregion=None, 
-             xshift=None, ishift=None, step=0.5, offset=0, stretch=None):
+             xshift=None, ishift=None, step=0.5, offset=0,
+             stretch=None, weighted=False, fitmode='lsq'):
     '''
     Aligns two 2D waves (*a* and *b*) by shifting them with
     respect to one another systematically over a region of
     maximum *shift* units in *step* steps in either direction,
-    and checking the least error squares of (a / b - 1).
-    The parameter set which gives the smallest error squares
-    is taken as the optimal shifitng parameter.
+    and checking the least error squares of the intensity
+    quotient field, i.e. optimizes *(a/b' - avg(a/b'))^2*
+    for various versions of *b'*, where *b'* is *b* shifted
+    in either direction by a certain amount.
+    The shifting parameter set which delivers the
+    best-matching *b'* (i.e. the one with the smallest error
+    squares as specified above) is returned as the optimal
+    shifting parameter.
 
     **Note:** This is a brute-force aligning method, it will compute
               all options and return the best there is within the
@@ -597,9 +603,9 @@ def align2d (a, b, iregion=(0, -1, 0, -1), xregion=None,
 
     Parameters:
 
-      * `a`:       (Wave-like) the wave to align to. 
+      * `a`: (Wave-like) the wave to align to.
 
-      * `b`:       (Wave-like) the wave to align.
+      * `b`: (Wave-like) the wave to align.
 
       * `xregion`: (4-tuple: (left, right, top, bottom)) Specifies
         the region in which to check for best
@@ -643,7 +649,32 @@ def align2d (a, b, iregion=(0, -1, 0, -1), xregion=None,
         array. With "decent" data, this should gain a fairly
         precise estimate of the shift even with a relatively coarse
         step size.
+
+      * `weighted`: (boolean) If True, the error square for each
+        data point will be weighted by the data point intensity
+        at the respective position. The idea is to have more
+        intense data points carry more influence. Use with care,
+        it often gives worse results if activated.
+
+      * `fitmode`: (one of 'lsq', 'para-lsq' or 'perp-lsq')
+        The mode in which the fitness of a particular shift
+        combination is calculated, meaning as follows:
         
+          - 'lsq': (the default) means that a least-squares
+            sill be calculated over the quotient field of
+            all points, minimizing the overall jitter of the
+            intensity quotient
+            
+          - 'para-lsq': the quotient field will be integrated
+            parallel to axis 0 (i.e. along axis 1)
+            
+          - 'perp-lsq': the quotient field will be integrated
+            perpendicular to axis 0 (i.e. along axis 0)
+            prior to LSQ calculations
+
+        Default is 'lsq', which should be best for most cases.
+        'para-lst' and 'perp-lsq' may give better results when
+        data is to be aligned only along one direction.
 
     Region coordinates are all specified in the coordinate system
     of *a*. The waves need not have the same number of points, as
@@ -654,13 +685,12 @@ def align2d (a, b, iregion=(0, -1, 0, -1), xregion=None,
     instance needs to handle cases with different deltas on its own,
     if required.
 
-    Returns: a 3-tuple *((s0, s1), b_new, scores)* where:
+    Returns: a 3-tuple *((s0, s1), scores)* where:
         * *(s0, s1)*:  is a 2-tuple with the shifting offsets used
           specified in index units, not including what was specified
           in *offset*. (I.e. if *offset* was (1, 1), and the
           algorithm resulted in a shfting offset of (3, 3), this part
           of the return value will read (3, 3), and *not* (4, 4)! )
-          
         
         * *scores*:    is an numpy.ndarray of the shape [shift[0], shift[0]]
           containing the square-root of the scores normalized
@@ -722,15 +752,26 @@ def align2d (a, b, iregion=(0, -1, 0, -1), xregion=None,
     scores = np.ndarray ([_shx.size, _shy.size], dtype=np.float64)
 
     # Speed improvement by stripping the info[] block? Probably not much...
-    ##b = b.view(np.ndarray).view(w.Wave)
+    ##b = b.view(np.ndarray).view(wave.Wave)
 
     # the hard work... :-)
     ar = a[indexer]
     for sx, sy, i in zip(_shx_2d.flat, _shy_2d.flat, range(_shx_2d.size)):
-        br = w.regrid(b, {'shift': sx+offset[0]}, {'shift': sy+offset[1]},
+        br = wave.regrid(b, {'shift': sx+offset[0]}, {'shift': sy+offset[1]},
                       units='index').view(np.ndarray)[indexer]
         q = ar/br
-        score = math.sqrt( ((q-np.average(q))**2).sum() / ar.size )
+        err = q-np.average(q)
+        if weighted:
+            err /= np.abs(ar)
+
+        if fitmode == 'para-lsq':
+            err = err.sum(1)
+        elif fitmode == 'perp-lsq':
+            err = err.sum(0)
+            
+        sq_err = err**2
+        
+        score = math.sqrt( sq_err.sum() / ar.size )
         scores.flat[i] = score
 
     # sort out the best match;
@@ -746,14 +787,14 @@ def align2d (a, b, iregion=(0, -1, 0, -1), xregion=None,
     # interpolation approach:
     if stretch is not None:
         stretch_factor = stretch
-        scores_w = scores.view(w.Wave)
+        scores_w = scores.view(wave.Wave)
         scores_w.dim[0].lim = (-ishift[0], ishift[0])
         scores_w.dim[1].lim = (-ishift[1], ishift[1])
         new_shape = (scores.shape[0]*stretch_factor if scores.shape[0] > 1 else 1,
                      scores.shape[1]*stretch_factor if scores.shape[1] > 1 else 1)
-        scores_stretch = w.regrid (scores_w,
-                                   {'numpts': new_shape[0]} if new_shape[0] > 1 else None,
-                                   {'numpts': new_shape[1]} if new_shape[1] > 1 else None)
+        scores_stretch = wave.regrid (scores_w,
+                                      {'numpts': new_shape[0]} if new_shape[0] > 1 else None,
+                                      {'numpts': new_shape[1]} if new_shape[1] > 1 else None)
         best_i = np.argmin(scores_stretch.view(np.ndarray))
         ix = int(best_i % scores_stretch.shape[0])
         iy = int(best_i / scores_stretch.shape[0])
@@ -763,13 +804,14 @@ def align2d (a, b, iregion=(0, -1, 0, -1), xregion=None,
     return best_shift, scores
 
 
-def fermi_guess_efi (data, axis=0, std_fac=5):
+def fermi_guess_efi (data, axis=0, fac=5, cnt=3):
     '''
     Finds the Fermi level in an 1D or 2D set of data
     by integrating along !axis and subsequently averaging
     over increasing distances from one end of the data,
-    then from the other, until the standard deviation becomes
-    too large.
+    then from the other, until the current point is 
+    larger than the average plus *fac* times the
+    standard deviation for at leat *cnt* points.
 
     The ratio behind the algorithm is that data beyond the Fermi
     level will eventually become numerically zero and stay that
@@ -789,49 +831,58 @@ def fermi_guess_efi (data, axis=0, std_fac=5):
         I.e. 2D data will be integrated along momentum
         (!*axis*) and treated as 1D data.
         
-      - `std_fac` (float) How many standard deviation must a data
+      - `fac`: (float) How many standard deviation must a data
         point differ from the average background in order
         to qualify as "relevant intensity" (i.e. Fermi the
         Fermi level).
+
+      - `cnt`: (integer) For how many points to differ. Default is 3.
 
     Returns the guessed position of the Fermi level.
     '''
     
     if data.ndim == 2:
         ax = int(not axis)
-        data = data.mean(axis=ax)
-
-    ndata = data.view(np.ndarray)
+        ndata = data.mean(axis=ax).view(np.ndarray)
+    else:
+        ndata = data.view(np.ndarray)
 
     data_max  = ndata.max()
     data_min  = ndata.min()
     data_span = data_max - data_min
 
     # which end do we need to look at?
-    j = 0 if data[0] < data[-1] else 1
+    if ndata[0] < ndata[-1]:
+        revert = False
+    else:
+        revert = True
+        ndata = ndata[::-1]
         
-    for i in range(1,data.size):
-        if j == 0:
-            sub = ndata[0:i]
-            val = ndata[i]
-        else:
-            sub = ndata[-i:-1]
-            val = ndata[-i]
+    found = 0
+
+    # to avoid initial triggering (i.e. at the very first points)
+    # by a too small a standard deviation because of too few points,
+    # we start by summing up over a certain number of points. *cnt*
+    # sounds like a good estimate here...
+    for i in range(cnt,ndata.size):
+        sub = ndata[0:i]
+        val = ndata[i]
         avg = np.mean(sub)
         std = np.std(sub)
+ 
+        # Find the thermally populated end of the data, i.e. where
+        # values start significantly increasing.
+        if (val) > (avg + std*fac):
+            found += 1
+            ##print "found", i, found, cnt, val, avg, std
+        else:
+            found = 0
 
-        # find the thermally populated end of the data
-
-        # Stop searching when the current data point is "too large".
-        # Ideally, "too large" should mean larger than the current
-        # average plus a number of standard deviations -- say, 3
-        # or so.
-        # However, this could bring us into trouble with very noisy
-        # data, where the standard deviation in order to avoid funny
-        # situations where the data is very noisy, limit the required
-        # 
-        if (val) > (avg + std*std_fac):
-            return i if j == 0 else data.size-i
+        # If values have been juming standard deviation for a number
+        # of consecutive points, then this must be the Fermi level :-)
+        if found >= cnt:
+            return i if not revert else ndata.size-i
+            
 
     return None
 
@@ -841,15 +892,22 @@ def fermi_guess_ef (*args, **kwargs):
     Wrapper for *fermi_guess_efi()* which returns axis units
     instead of index.
     '''
-    axis = kwargs['axis'] if kwargs.has_key('axis') else args[1]
+    if len(args) <= 1:
+        axis = 0
+    elif kwargs.has_key('axis'):
+        axis = kwargs['axis']
+    else:
+        axis = args[1]
     return args[0].dim[axis].i2x(fermi_guess_efi(*args, **kwargs))
 
 
-def align_stack (dlist, axis=0, xcheck=None, xsearch=None, step=0.25,
-                 xcenter=None, icenter=None, debug=False, maxtries=5):
+def align_stack_ax (dlist, axis=0,
+                    xcheck=None, xsearch=None, xcenter=None,
+                    icheck=None, isearch=None, icenter=None,
+                    step=0.25, debug=False, maxerr=5, fitmode='para-lsq'):
     '''
     Calls **align2d()** on a stack of waves to align them to
-    along a given axis. Useful to align a bunch of 2D ARPES
+    along a specified axis. Useful to align a bunch of 2D ARPES
     waves to their Fermi level by assuming that they change
     only slightly from scan to scan.
     
@@ -870,8 +928,10 @@ def align_stack (dlist, axis=0, xcheck=None, xsearch=None, step=0.25,
 
     
     Parameters:
+     - `dlist`: (sequence of length N) List of waves to align.
 
-     - `axis`: (integer) the energy axis. Defaults to 0.
+     - `axis`: (integer) the axis along which to search in every
+       element (wave) within dlist. Defaults to 0.
 
      - `xcheck`: (float) Width of the area in which
        the function should verify if data is matching, in
@@ -882,29 +942,38 @@ def align_stack (dlist, axis=0, xcheck=None, xsearch=None, step=0.25,
        axis coordinates (number of data points).
        Default is 10.
 
+     - `xcenter`: (number or 1D array-like, length same as *dlist*)
+       The position at which the identification feature is to be
+       expected each wave, in axis units. (In the case of a Fermi
+       level align, for example, it could be the approximate position
+       of the Fermi level).
+       Specifying a single value will use that value for all input
+       waves.
+       However, specifying a sequence has the advantage that
+       known differences in alignment can used to reduce the *xsearch*
+       area. A multi-pass use of *align_stack()*, with a coarse step
+       over a large area at first, and with subsequently smaller steps
+       over smaller areas later, could thus significantly reduce
+       computing time ;-)
+
+     - `icenter`: Same as *icenter*, only in axis coordinates.
+        If specified, *xcenter* has precedence.
+
+     - `icheck`: Same as *icheck*, only in axis coordinates.
+        If specified, *xcheck* has precedence.
+
+     - `isearch`: Same as *isearch*, only in axis coordinates.
+        If specified, *xsearch* has precedence.
+
      - `step`: (floating point) Granularity with which
        to perform the search, as a factor of dimension
-       granularity.
-
-     - `icenter`: (integer or callable) If it is an integer,
-       it is interpreted as the position at which the identification
-       feature is to be expected in *all* waves in index units.
-       (In the case of a Fermi level align, for example, it could be
-       the approximate position of the Fermi level).
-       If it is a callable, it should represent a function
-       *func(wav, axis)*, which, when called, returns the approximate
-       position of the *feature* for each wave.
-       Default is None, in which case the middle point of the
-       respective axis will be used.
-
-     - `xcenter`: (number or callable) Same as *icenter*, only
-       in axis coordinates. If both are specified, *xcenter*
-       has precedence.
+       granularity (i.e. as a fraction of the index, or the
+       dimension delta, which has the same meaning).
 
      - `debug`: (boolean) If True, the shift amounts (in index
        coordinates) and the scorings will be returned, too.
 
-     - `maxtries`: (integer) Maximum number of iterations to try and
+     - `maxerr`: (integer) Maximum number of iterations to try and
        work around MemoryError exceptions of scipy :-(
        For some reason, scipy.ndimage.interpolation seems to raise
        MemoryErrors at random points within the computation. Since
@@ -913,96 +982,204 @@ def align_stack (dlist, axis=0, xcheck=None, xsearch=None, step=0.25,
        retrying a step if it fails with MemoryError until it
        succeeds, up to a maximum number of counts. Default is 5.
 
-    Returns a sequence of aligned waves (if *debug==False*),
-    or a tuple *(waves, shifts, scorings)* if *debug==True*.
-    '''
-    
-    data0 = dlist[0].swapaxes (0, axis)
+     - `fitmode`: *fitmode* to pass to align2d(). Default is
+       'para-lsq' (different from the align2d() default).
 
-    # calculate searching and checking region coordinates;
-    # internally, we work with index coordinates all over
-    # this function.
-    
-    if xcenter is None and icenter is None:
-        # no center specified -- take the center
-        # of the first wave and keep it for all waves.
-        icenter = data0.shape[0] / 2
-    elif icenter is None and not hasattr(xcenter, "__call__"):
-        # explicit center axis coordinate (constant across all waves)
-        icenter = data0.dim[0].x2i(xcenter)
-    elif xcenter is None and not hasattr(icenter, "__call__"):
-        # explicit center index coordinate (constant across all waves)
-        pass
-    else:
-        # everything else means that we have a callable xcenter or icenter
-        pass
+    Returns: a tuple *(shifts, scores)*, where:
+      - *shifts*: is an array of length *len(dlist)*
+        containing the shift of every image to its previous image,
+        without accounting for differences specified in *icenter*.
+        By definition, *shifts[0]* is 0, since the first image
+        does not have any shift.
+        If *icenter* was specified as a sequence, then the difference
+        between images *i* and *j* should be calculated as:
         
-    isearch = xsearch / data0.dim[0].delta \
-      if xsearch is not None \
-      else data0.shape[0]/2
-    icheck = xcheck / data0.dim[0].delta \
-      if xcheck is not None \
-      else isearch
+          *(icenter[j]-icenter[i])+(shifts[j]-shifts[i])*
 
-    new_list = [data0]
-    shifts = []
-    scores = []
+      - *scores*: an array of length *len(dlist)* with the scoring
+        values for all shifts. The first element has scoring 0, by
+        definition.
+    '''
+
+    # calculate known offsets in 'icenter'
+    if xcenter is not None:
+        if not hasattr(xcenter, "__len__"):
+            xcenter = [xcenter] * len(dlist)            
+        icenter = np.array([w.dim[axis].x2i(x) for w, x in zip(dlist, xcenter)])
+    else:
+        if icenter is None:
+            icenter = [dlist[0].shape[axis] / 2] * len(dlist)
+        elif not hasattr(icenter, "__len__"):
+            icenter = [icenter] * len(dlist)
+
+    if xsearch is not None:
+        isearch = xsearch / dlist[0].dim[axis].delta
+    elif isearch is None:
+        isearch = dlist[0].shape[0]/2
+
+    if xcheck is not None:
+        icheck = xcheck / dlist[0].dim[axis].delta
+    elif icheck is None:
+        icheck = isearch
+
+    # List of shifts for every image to the previous one,
+    # without accounting for the the offets specified
+    # in 'icenter'. By definition, the first image has no
+    # shift.
+    shifts = [0.0]
+    scores = [0.0]
     
-    for item in dlist[1:]:
+    for d0, d1, pos0, pos1 in zip(dlist, dlist[1:], icenter, icenter[1:]):
 
+        if (axis != 0):
+            d0 = d0.swapaxes(0,axis)
+            d1 = d1.swapaxes(0,axis)
+        
         success = False
         trycnt = 0
-        while not success and trycnt < maxtries:
+        while not success and trycnt < maxerr:
             try:
-                tmp = item.swapaxes(0, axis)
-                data1 = tmp
-
-                # get the feature position (data0) and position-offset (data1)
-                if hasattr (xcenter, "__call__"):
-                    pos = data0.dim[0].x2i(xcenter(data0,0))
-                    offs = data1.dim[0].x2i(xcenter(data1,0)) - pos
-                elif hasattr (icenter, "__call__"):
-                    pos = icenter(data0, 0)
-                    offs = icenter (data1, 0) - pos
-                else:
-                    pos = icenter
-                    offs = 0
-
-                #print "%s: offset %f" % (data1.infs("name"), offs)
-                #continue
-        
-                shift, score = align2d(data0, data1,
-                                       iregion=(pos-icheck, pos+icheck, None, None),
+                offs = pos1 - pos0
+                shift, score = align2d(d0, d1,
+                                       iregion=(pos0-icheck, pos0+icheck, None, None),
                                        ishift=(isearch, 0),
                                        step=(step, None),
-                                       offset=(offs, 0),
-                                       stretch=10)
+                                       offset=(pos1-pos0, 0),
+                                       stretch=10, fitmode=fitmode)
 
                 score_min = score.min()
 
-                print "%s: shift %f (rough offset %f, score=%f, isearch=%f, icheck=%f..%f)" \
-                % (data1.infs("name"), shift[0], offs, score_min, isearch, pos-icheck, pos+icheck)
+                msg =  "%s: shift %f (input offset %f, score=%f, isearch=%f, icheck=%f..%f)"  \
+                        % (d1.infs("name"), shift[0], offs, score_min, 
+                           isearch, pos0-icheck, pos0+icheck)
 
-                new_data1 = w.regrid (data1, {'offset': shift[0]+offs})
-
+                if debug:
+                    print msg
+                log.info (msg)
+                
+                #new_data1 = wave.regrid (d1, {'offset': shift[0]+offs}, units='index')
                 success = True
                 
             except MemoryError:
+                msg = "MemoryError, retry %d/%d..." % (trycnt, maxtries)
+                log.error ("MemoryError, retry %d/%d..." % (trycnt, maxtries))
+                print msg
                 success = False
                 trycnt += 1
-                pass
 
-        data0 = new_data1
-        new_list.append (new_data1)
-        shifts.append (shift[0]+offs)
+        #print "shapes:", data1.shape, new_data1.shape
+        #new_list.append (new_data1)
+        
+        shifts.append (shift[0])
         scores.append (score_min)
 
-    if debug:
-        return new_list, shifts, scores
-    else:
-        return new_list
+        
+    return np.array(shifts), np.array(scores)
     
         
+def align_to_ef (dlist, axis=0, step=0.25, search=0.005, check=None,
+                 passes=1, guess_opts={}, regrid_opts={}):
+    '''
+    Aligns a stack of ARPES images to their Fermi levels.
+    Uses align_stack(), align2d(), fermi_guess_ef() and
+    paul.base.wave.regrid() to do this.
+    Basic idea is as follows:
+    
+      1. Caculate a rough position of the Fermi level
+         using fermi_guess_ef().
+         
+      2. Calculate a fine-grained alignment offset using
+         align_stack() (which, itself, uses align2d()).
+
+      3. Remove a systematic offset that will have been
+         induced in step 2. (Remember that after step 1,
+         usually any shiting intrinsic to the data should
+         have been removed, leaving only systematic algorithmic
+         drifts.)
+
+      4. Subsequently add all offsets calculated in 1 and 2
+         to align the complete stack of data to the same Ef
+         level.
+
+    Parameters:
+
+      - `dlist`: (sequence) The waves to align.
+      
+      - `axis`': (integer) The energy axis in each wave.
+      
+      - `step`: (number) Fraction of the dimension granularity with
+        which to search using align_stack()
+        
+      - `search`: (number) Search region around Ef in eV, defaults to 5 meV.
+      
+      - `check`: (number) Checking region around Ef in eV, defaults to *search*x4.
+        See align_stack() for a meaning of *search* and *check*
+
+      - `passes`: (number) Number of passes. The 1-pass version represents
+        the algorithm as above. On each additional pass, steps (2) and (3)
+        are repeated, using the offsets of the previous pass
+        as an estimate starting position. On each supplementary pass,
+        step size and search distance is being halvened. Sometimes this
+        increases accuracy. Use with care.
+        
+      - `guess_opts`: (dictionary) Optional parameters to pass to fermi_guess_efi().
+      
+      - `regrid_opts`: (dictionary) Optional parameers to pass to regrid(),
+        when doing the final shift of the wave.
+
+    Returns: tuple *(aligned, offsets)* with:
+    
+      - *aligned*: sequence of length *len(dlist)* containing the
+        shifted waves
+        
+      - *offsets*: the offsets by which the waves were shifted
+    '''
+    
+    # step 1: calculate rough offsets
+    guess_opts.update({'axis': axis})
+    efi = [fermi_guess_efi(w, **guess_opts) for w in dlist]
+
+    if check is None:
+        check = search * 4.0
+    
+    # 
+    fac = 1.0
+    while passes > 0:
+        log.info ("Calculating offsets (%d pass%s to go). This may take a looong while..." 
+                  % (passes, "es" if passes > 1 else ""))
+
+        # step 2: calculate fine-grained offsets
+        shifts, scores = align_stack (dlist, axis=0, icenter=efi, xsearch=search*fac,
+                                      xcheck=check, step=step*fac)
+
+        # step 3: remove drift
+        drift = shifts[1:].mean()
+        shifts[1:] -= drift
+
+        # step 4: caculate cumulative offset to first wave
+        offs_sum = 0.0
+        offsets = [0.0]
+        for e0, e1, s0, s1 in zip(efi[0:-1], efi[1:], shifts[0:-1], shifts[1:]):
+            offs_prev = (e1-e0) + (s1-s0)  # local offset, to previous wave
+            offs_sum += offs_prev          # global offset, to the first wave
+            offsets.append (offs_sum)
+
+        efi += offsets
+        passes -= 1
+        fac *= 0.5
+
+
+
+    # (step 5: calculate output waves :-) )
+    log.info ("Regridding waves...")
+    out = []
+    for iw, offs in zip(dlist, offsets):
+        log.info ("%s: offset %f" % (iw.infs("name"), offs))
+        regrid_opts.update ({'units': 'index'})
+        ow = wave.regrid (iw.swapaxes(0, axis), {'shift': offs}, **regrid_opts)
+        out.append (ow)
+
+    return out, np.array(offsets)
     
 
 if __name__ == "__main__":

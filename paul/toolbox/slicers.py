@@ -42,7 +42,7 @@ class BaseSlicer(QtCore.QObject):
     # Typically, it is used by external viewers to display
     # the slice_wave.
 
-    sliced = QtCore.pyqtSignal(Wave)
+    sliced = QtCore.pyqtSignal(list)
 
     def __init__(self, parent=None, master=None, tparent=None, viewer=None):
         QtCore.QObject.__init__(self, parent)
@@ -219,7 +219,7 @@ class SingleSlicer (AxisSlicer):
                                  % (self.slice_axis,
                                     self.master_wave.dim[self.slice_axis].i2x (xfrom),
                                     self.master_wave.dim[self.slice_axis].i2x (xto)))
-        self.sliced.emit (self.slice_wave)
+        self.sliced.emit ([self.slice_wave])
 
 
 class CompressingSlicer (AxisSlicer):
@@ -288,4 +288,4 @@ class CompressingSlicer (AxisSlicer):
             intg = 1
         
         self.slice_wave = ncomp(self.master_wave, ax, step, intg, self.chk_norm.isChecked())
-        self.sliced.emit (self.slice_wave)
+        self.sliced.emit ([self.slice_wave])
