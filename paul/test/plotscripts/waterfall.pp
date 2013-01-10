@@ -26,11 +26,17 @@ def populate(*args, **kwargs):
     comp_step = 10
     comp_norm = False
 
-    offs = (0, 0.04)
+    offs = (0, 0.02)
+    xlim = (0, 0)
+    ylim = (0, 0)
+    
     xlim = (11.625, 11.66)
     ylim = (-10, 12)
 
-    _wav = kwargs['wav'][0].swapaxes(0,1)
+    if comp_ax:
+        _wav = kwargs['wav'][0]
+    else:
+        _wav = kwargs['wav'][0].swapaxes(0,1)
 
     can.axes.axvline (11.6485, ls=':')
 
@@ -52,11 +58,11 @@ def populate(*args, **kwargs):
 
 
 
-    print "Compressed element:"
-    pp.pprint (wav)
-    print "Is array:", isinstance(wav, np.ndarray)
-    print "Is wave:", isinstance(wav, wave.Wave)
-    print "Limits:", wav.lim, _wav.lim
+    #print "Compressed element:"
+    #pp.pprint (wav)
+    #print "Is array:", isinstance(wav, np.ndarray)
+    #print "Is wave:", isinstance(wav, wave.Wave)
+    #print "Limits:", wav.lim, _wav.lim
 
     # plot the data
     kwargs['lines'] = mpltrix.imwater (can.axes, wav,

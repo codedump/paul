@@ -904,7 +904,8 @@ def fermi_guess_ef (*args, **kwargs):
 def align_stack_ax (dlist, axis=0,
                     xcheck=None, xsearch=None, xcenter=None,
                     icheck=None, isearch=None, icenter=None,
-                    step=0.25, debug=False, maxerr=5, fitmode='para-lsq'):
+                    step=0.25, debug=False, maxerr=5,
+                    fitmode='lsq'):
     '''
     Calls **align2d()** on a stack of waves to align them to
     along a specified axis. Useful to align a bunch of 2D ARPES
@@ -1078,7 +1079,7 @@ def align_stack_ax (dlist, axis=0,
     
         
 def align_to_ef (dlist, axis=0, step=0.25, search=0.005, check=None,
-                 passes=1, guess_opts={}, regrid_opts={}):
+                 passes=1, guess_opts={}, regrid_opts={}, symmetric=False):
     '''
     Aligns a stack of ARPES images to their Fermi levels.
     Uses align_stack(), align2d(), fermi_guess_ef() and
@@ -1127,6 +1128,11 @@ def align_to_ef (dlist, axis=0, step=0.25, search=0.005, check=None,
       - `regrid_opts`: (dictionary) Optional parameers to pass to regrid(),
         when doing the final shift of the wave.
 
+      - `symmetric`: (boolean) If True, each step (2) will be performed
+        twice: once with the regular order of waves, once with the order
+        reversed. Depending on the data, this may improve quality and/or
+        counteract the average algorithmical drift.
+
     Returns: tuple *(aligned, offsets)* with:
     
       - *aligned*: sequence of length *len(dlist)* containing the
@@ -1145,16 +1151,25 @@ def align_to_ef (dlist, axis=0, step=0.25, search=0.005, check=None,
     # 
     fac = 1.0
     while passes > 0:
-        log.info ("Calculating offsets (%d pass%s to go). This may take a looong while..." 
+        log.info ("Calculating offsets for image sequence (%d pass%s to go). This may take a looong while..." 
                   % (passes, "es" if passes > 1 else ""))
 
         # step 2: calculate fine-grained offsets
         shifts, scores = align_stack (dlist, axis=0, icenter=efi, xsearch=search*fac,
                                       xcheck=check, step=step*fac)
+        if symmetric:
+            log.info ("Calculating offsets for reverse image sequence...")
+            shifts2, scores2 = align_stack (dlist[::-1], axis=0, icenter=efi[::-1],
+                                            xsearch=search*fac,
+                                            xcheck=check, step=step*fac)
+            shifts[1:] -= (shifts2[1:])[::-1]
+            shifts /= 2
 
         # step 3: remove drift
         drift = shifts[1:].mean()
         shifts[1:] -= drift
+
+        log.info ("Average drift: %f per scan." % drift)
 
         # step 4: caculate cumulative offset to first wave
         offs_sum = 0.0
