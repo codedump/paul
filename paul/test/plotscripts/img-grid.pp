@@ -54,6 +54,7 @@ def decorate(*args, **kwargs):
     
     ax.set_title (r'%s   T=%.0f K' % (w.infs('name'), w.infv('T')))
     ax.axhline(ls=':', color=(1, 1, 1, 0.8))
+    ax.axvline(ls=':', color=(1, 1, 1, 0.8))
     ax.set_ylim (w.dim[0].lim) # make graph correct side up
 
     ax.set_xlabel (r'$k_{\parallel} (\AA^{-1})$')

@@ -1194,7 +1194,7 @@ def WAx(dat, ax):
 #
 
 def regrid (wav, *args, **kwargs):
-	'''
+    '''
 	Re-samples the specified wave onto a new grid.
 	The new grid is specified by the list of optional
 	arguments *args, one argument per dimension.
@@ -1240,42 +1240,51 @@ def regrid (wav, *args, **kwargs):
         Describes behavior for points outside of the original
         data boundaries. One of 'constant', 'nearest',
         'reflect' or 'wrap'. Default is 'nearest'.
+
+      * `indexer`: If specified, the N-dimensional tuple of
+        slice() objects specifies the points of the output
+        array that we would be interested in.
+        It will reduce computation time, as only the points
+        specified by *indexer* will be calculated then.
+        Defaults to None, in which case the complete array
+        will be returned.
         
       * `cval`:   (See 'mode' and 'cval' in map_coordinates()).
         Constant value to use with mode = 'constant'.
                 
       * `cpinfo`: Boolean. Specifies whether to copy wave info from
         input to output wave. Default is True.
-	'''
+    '''
     
-	units = kwargs.setdefault ('units', 'axis')
-	mode = kwargs.setdefault ('mode', 'nearest')
-	cval = kwargs.setdefault ('cval', 0.0)
-	cpinfo = kwargs.setdefault ('cpinfo', True)
+    units = kwargs.setdefault ('units', 'axis')
+    mode = kwargs.setdefault ('mode', 'nearest')
+    cval = kwargs.setdefault ('cval', 0.0)
+    cpinfo = kwargs.setdefault ('cpinfo', True)
+    indexer = kwargs.setdefault ('indexer', None)
 
 	# First, create new point coordinates for each axis
 	# (This is index units -- the whole function works
 	#  on fractional index units; only the input is accepted
 	#  in axis units, for convenience.)
 
-	axes = list(args) + [None] * (wav.ndim - len(args))
+    axes = list(args) + [None] * (wav.ndim - len(args))
     
-	oslice = []   # output slice lists to produce coord
-	coord = []    # output axis coordinates (one array per axis)
-	axinfo = []   # axis info for the target wave
-	axcnt = 0     # current axis counter (incremented once per loop)
+    oslice = []   # output slice lists to produce coord
+    coord = []    # output axis coordinates (one array per axis)
+    axinfo = []   # axis info for the target wave
+    axcnt = 0     # current axis counter (incremented once per loop)
     
-	for a, d in zip(axes, wav.dim):
+    for a, d in zip(axes, wav.dim):
 
-		shaping_index = tuple([np.newaxis] * axcnt + 
-							  [slice(None)]        + 
-							  [np.newaxis] * (wav.ndim-axcnt-1))
+        shaping_index = tuple([np.newaxis] * axcnt + 
+                              [slice(None)]        + 
+                              [np.newaxis] * (wav.ndim-axcnt-1))
         
-		if a is None:
-			coord.append (np.arange(d.size)[shaping_index])
-			axinfo.append(AxisInfo (parent=None, copy_from=d))
+        if a is None:
+            coord.append (np.arange(d.size)[shaping_index])
+            axinfo.append(AxisInfo (parent=None, copy_from=d))
             
-		elif isinstance(a, dict):
+        elif isinstance(a, dict):
 
 			# default values (in 'axis' or 'index' units, depending on user specification)
 			def_offs  = d.offset if units == 'axis' else 0
@@ -1322,24 +1331,32 @@ def regrid (wav, *args, **kwargs):
 				coord.append (d.x2i(np.linspace(start=a['offset'], stop=a['end'], num=numpts))[shaping_index])
 				axinfo[-1].offset = a['offset']
 				axinfo[-1].delta = a['delta']
-		else:
-			raise TypeError ("Expecting 'None' or SliceObject as grid info, "
+        else:
+            raise TypeError ("Expecting 'None' or SliceObject as grid info, "
                              "received: %s (%s)" % (str(a), str(type(a))))
 
         # increment current axis counter
-		axcnt += 1
+        axcnt += 1
 
-	vcoord = np.broadcast_arrays (*coord)
-	out = spn.interpolation.map_coordinates (wav.view(np.ndarray), vcoord,
+    vcoord = np.broadcast_arrays (*coord)
+
+    if indexer is not None:
+        vcoord = [c[indexer] for c in vcoord]
+    
+    out = spn.interpolation.map_coordinates (wav.view(np.ndarray), vcoord,
                                              mode=mode, cval=cval).view(Wave)
 
-	if cpinfo == True:
-		out._copy_info (from_wave=wav, noax=True)
+    if cpinfo == True:
+        if indexer is None:
+            out._copy_info (from_wave=wav, noax=True)
+        else:
+            out.info['axes'] = wav._get_sliced_axinfo(indexer, source=wav, parent=out)
+            #log.warn ("'cpinfo' may misbehave with with a custom indexer!")
 
-	for d_in, d_out in zip(axinfo, out.dim):        
-		d_out.copy (d_in)
+    for d_in, d_out in zip(axinfo, out.dim):        
+        d_out.copy (d_in)
 
-	return out
+    return out
 
 
 #

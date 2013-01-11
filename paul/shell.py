@@ -13,7 +13,10 @@ import numpy as np
 import scipy as sp
 import matplotlib as mpl
 import paul.loader.igor as ig
-import paul.base.wave as w
+import paul.base.wave as wave
+import paul.toolbox.arpes as arpes
+import paul.toolbox.arplot as arplot
+import paul.toolbox.atrix as atrix
 import paul.toolbox as tools
 
 import logging, sys

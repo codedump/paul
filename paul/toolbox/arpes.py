@@ -648,7 +648,7 @@ def align2d (a, b, iregion=(0, -1, 0, -1), xregion=None,
         and the ideal shift will be computed from the resulting
         array. With "decent" data, this should gain a fairly
         precise estimate of the shift even with a relatively coarse
-        step size.
+        step size. Default (*stretch*=None) disables this feature.
 
       * `weighted`: (boolean) If True, the error square for each
         data point will be weighted by the data point intensity
@@ -757,8 +757,10 @@ def align2d (a, b, iregion=(0, -1, 0, -1), xregion=None,
     # the hard work... :-)
     ar = a[indexer]
     for sx, sy, i in zip(_shx_2d.flat, _shy_2d.flat, range(_shx_2d.size)):
+        ##br = wave.regrid(b, {'shift': sx+offset[0]}, {'shift': sy+offset[1]},
+        ##                 units='index').view(np.ndarray)[indexer]
         br = wave.regrid(b, {'shift': sx+offset[0]}, {'shift': sy+offset[1]},
-                      units='index').view(np.ndarray)[indexer]
+                         indexer=indexer, units='index').view(np.ndarray)
         q = ar/br
         err = q-np.average(q)
         if weighted:
@@ -905,7 +907,7 @@ def align_stack_ax (dlist, axis=0,
                     xcheck=None, xsearch=None, xcenter=None,
                     icheck=None, isearch=None, icenter=None,
                     step=0.25, debug=False, maxerr=5,
-                    fitmode='lsq'):
+                    fitmode='lsq', stretch=10):
     '''
     Calls **align2d()** on a stack of waves to align them to
     along a specified axis. Useful to align a bunch of 2D ARPES
@@ -986,6 +988,8 @@ def align_stack_ax (dlist, axis=0,
      - `fitmode`: *fitmode* to pass to align2d(). Default is
        'para-lsq' (different from the align2d() default).
 
+     - `stretch`: Passed to *align2d()*.
+
     Returns: a tuple *(shifts, scores)*, where:
       - *shifts*: is an array of length *len(dlist)*
         containing the shift of every image to its previous image,
@@ -1046,7 +1050,7 @@ def align_stack_ax (dlist, axis=0,
                                        ishift=(isearch, 0),
                                        step=(step, None),
                                        offset=(pos1-pos0, 0),
-                                       stretch=10, fitmode=fitmode)
+                                       stretch=stretch, fitmode=fitmode)
 
                 score_min = score.min()
 
@@ -1079,7 +1083,8 @@ def align_stack_ax (dlist, axis=0,
     
         
 def align_to_ef (dlist, axis=0, step=0.25, search=0.005, check=None,
-                 passes=1, guess_opts={}, regrid_opts={}, symmetric=False):
+                 passes=1, guess_opts={}, regrid_opts={}, symrun=False,
+                 fitmode='lsq', stretch=10):
     '''
     Aligns a stack of ARPES images to their Fermi levels.
     Uses align_stack(), align2d(), fermi_guess_ef() and
@@ -1128,10 +1133,13 @@ def align_to_ef (dlist, axis=0, step=0.25, search=0.005, check=None,
       - `regrid_opts`: (dictionary) Optional parameers to pass to regrid(),
         when doing the final shift of the wave.
 
-      - `symmetric`: (boolean) If True, each step (2) will be performed
+      - `symrun`: (boolean) If True, each step (2) will be performed
         twice: once with the regular order of waves, once with the order
         reversed. Depending on the data, this may improve quality and/or
         counteract the average algorithmical drift.
+
+      - `fitmode`: (string) *fitmode* parameter for *align2d()*, default
+        is 'lsq'.
 
     Returns: tuple *(aligned, offsets)* with:
     
@@ -1155,13 +1163,15 @@ def align_to_ef (dlist, axis=0, step=0.25, search=0.005, check=None,
                   % (passes, "es" if passes > 1 else ""))
 
         # step 2: calculate fine-grained offsets
-        shifts, scores = align_stack (dlist, axis=0, icenter=efi, xsearch=search*fac,
-                                      xcheck=check, step=step*fac)
-        if symmetric:
+        shifts, scores = align_stack_ax (dlist, axis=0, icenter=efi, xsearch=search*fac,
+                                      xcheck=check, step=step*fac, fitmode=fitmode,
+                                      stretch=stretch)
+        if symrun:
             log.info ("Calculating offsets for reverse image sequence...")
-            shifts2, scores2 = align_stack (dlist[::-1], axis=0, icenter=efi[::-1],
-                                            xsearch=search*fac,
-                                            xcheck=check, step=step*fac)
+            shifts2, scores2 = align_stack_ax (dlist[::-1], axis=0, icenter=efi[::-1],
+                                               xsearch=search*fac,
+                                               xcheck=check, step=step*fac,
+                                               fitmode=fitmode, stretch=stretch)
             shifts[1:] -= (shifts2[1:])[::-1]
             shifts /= 2
 

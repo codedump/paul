@@ -229,7 +229,7 @@ def set3DDisplay (dim):
 
     PLOT.cut_wav = wav[index]
         
-    ax.imshow (PLOT.cut_wav, extent=PLOT.cut_wav.imlim)
+    ax.imshow (PLOT.cut_wav, extent=PLOT.cut_wav.imlim, interpolation='none')
     ax.text (0, 1.05, "3D wave: representative cut at %d%% axis %d"
              % (PLOT.cut_fac*100, PLOT.cut_dim), transform=ax.transAxes)
 

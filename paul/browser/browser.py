@@ -52,8 +52,13 @@ def create(path='~', args=[], log=None, shell=False):
         import numpy as np
         import scipy as sp
         import matplotlib as mpl
-        import paul.loader.igor as ig
-        import paul.base.wave as w
+        import paul.loader.igor as igor
+        import paul.loader.elmitec as elmitec
+        import paul.base.wave as wave
+        import paul.base.wave as wave
+        import paul.toolbox.arpes as arpes
+        import paul.toolbox.arplot as arplot
+        import paul.toolbox.atrix as atrix
         import paul.toolbox as tools
         import paul.shell as psh
         

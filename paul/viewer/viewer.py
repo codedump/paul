@@ -3,18 +3,6 @@
 import logging
 import IPython.lib.guisupport as gui
 
-log = logging.getLogger ('paul')
-log.setLevel (logging.DEBUG)
-
-ch = logging.StreamHandler()
-ch.setLevel (logging.DEBUG)
-log.addHandler (ch)
-
-fmt = logging.Formatter('%(asctime)s %(levelname)s: %(name)s: %(module)s.%(funcName)s: %(message)s')
-ch.setFormatter(fmt)
-
-log.debug ("Starting...")
-
 from paul.viewer.viewerwindow import ViewerWindow
 from paul.base.wave import Wave
 import paul.loader.igor as igor
@@ -82,8 +70,22 @@ def create (data=[], args=[]):
 
 
 if __name__ == "__main__":
-   if len(sys.argv) <= 1:
-       log.error ("Usage: %s <file.ibw>" % sys.argv[0])
-       create(args=sys.argv)
-   else:
-       create(sys.argv[1:], args=sys.argv)
+
+    log = logging.getLogger ('paul')
+    log.setLevel (logging.DEBUG)
+    
+    ch = logging.StreamHandler()
+    ch.setLevel (logging.DEBUG)
+    log.addHandler (ch)
+
+    fmt = logging.Formatter('%(asctime)s %(levelname)s: %(name)s: %(module)s.%(funcName)s: %(message)s')
+    ch.setFormatter(fmt)
+
+    log.debug ("Starting...")
+
+    
+    if len(sys.argv) <= 1:
+        log.error ("Usage: %s <file.ibw>" % sys.argv[0])
+        create(args=sys.argv)
+    else:
+        create(sys.argv[1:], args=sys.argv)
