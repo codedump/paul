@@ -1164,8 +1164,8 @@ def align_to_ef (dlist, axis=0, step=0.25, search=0.005, check=None,
 
         # step 2: calculate fine-grained offsets
         shifts, scores = align_stack_ax (dlist, axis=0, icenter=efi, xsearch=search*fac,
-                                      xcheck=check, step=step*fac, fitmode=fitmode,
-                                      stretch=stretch)
+                                         xcheck=check, step=step*fac, fitmode=fitmode,
+                                         stretch=stretch)
         if symrun:
             log.info ("Calculating offsets for reverse image sequence...")
             shifts2, scores2 = align_stack_ax (dlist[::-1], axis=0, icenter=efi[::-1],
@@ -1205,6 +1205,86 @@ def align_to_ef (dlist, axis=0, step=0.25, search=0.005, check=None,
         out.append (ow)
 
     return out, np.array(offsets)
+
+
+def align_uru2si2_kz (data, ss_index='auto', ef_index='auto',
+                      deg_search=5.0, e_search=0.005,
+                      reverse_energy='auto', e_axis=0):
+    '''
+    Convenience function to align a stack of URu2Si2 scans in
+    taken with a kz succession in both angle and energy direction.
+    This is a highly specialized function, possibly not useful
+    for another situation.
+
+    The recipe is the following:
+
+      1. Perform an intensity normalization based on nose above Ef
+      2. Align make a rough Ef alignment
+      3. Make an angle alignment (symmetric run)
+      4. Make a fine-grained Ef alignment (symmetric run)
+
+    Returns as a tuple: (aligned stack, energy shifts, momentum shifts).
+    Shifts are cumulative (i.e. absolute), relative to the first wave.
+    '''
+
+    deg_axis = int (not e_axis)
+
+    if ef_index == 'auto':
+        ef_index = fermi_guess_efi (data[0], axis=e_axis)
+
+    if reverse_energy == 'auto':
+        foo = data[0].swapaxes(e_axis, 0)
+        reverse_energy == data[0][0] > data[0][-1]
+
+    norm_pos = (0, ef_index/2) if not reverse_energy \
+      else (ef_index + (data[0].shape[e_axis] - ef_index)/2, data[0].shape[e_axis]-1)
+
+
+    # intensity profile normalization along the momentum axis
+    # (i.e. integrate along energy axis).
+    # this function will substact -1 from the overall intensity
+    # to get rid of the noise above Ef. however, various steps
+    # in align2d() misbehave if intensity is too close to 0,
+    # so we'll add back the 1 and remove it later.
+    log.info ("Step 1: Intensity normalization at indices %d...%d" % norm_pos)
+    norm = [norm_by_noise(w, axis=e_axis, ipos=norm_pos)+1 for w in data]
+
+    
+    log.info ("Step 2: First Ef alignemnt (this will take a while)")
+    alg1, shf1 = align_to_ef (norm, axis=e_axis, step=0.5, search=e_search)
+
+    
+    if ss_index == 'auto':
+        ss_index = np.argmax(alg1[0], axis=deg_axis)[0]
+    log.info ("Step 3: Angle alignment using SS at %d "\
+              "(this will also take a while)" % ss_index)
+    ss_width = round(float(deg_search) / alg1[0].dim[deg_axis].delta)
+    
+    log.info ("Step 3a: (normal sequence aligment)")
+    shf1_deg, sc1_deg = align_stack_ax (alg1, axis=deg_axis, icenter=ss_index,
+                                        isearch=ss_width, icheck=ss_width, step=1)
+    
+    log.info ("Step 3b: (reverse sequence alignment)")
+    shf2_deg, sc2_deg = align_stack_ax (alg1[::-1], axis=deg_axis, icenter=ss_index,
+                                        isearch=ss_width, icheck=ss_width, step=1)
+    shf_deg = np.cumsum(np.array([0.0] + (shf1_deg[1:] + shf2_deg[1:][::-1])/2 ))
+    
+    if deg_axis == 1:
+        log.info ("Step 3c: (re-gridding 2nd dimension)")
+        deg = [wave.regrid(w, None, {'shift': s}) for w, s in zip(alg1, shf_deg)]
+    else:
+        log.info ("Step 3c: (re-gridding 1st dimension)")
+        deg = [wave.regrid(w, {'shift': s}, none) for w, s in zip(alg1, shf_deg)]
+
+        
+    log.info ("Step 4: Fine-grained Ef alignment (this will take even longer)")
+    alg2, shf2 = align_to_ef (deg, axis=e_axis, step=0.25, symrun=True)
+
+
+    # return the aligned samples -- but don't forget to remove
+    # the "1" that was added in the normalization step :-)
+    return [w-1 for w in alg2], shf1+shf2, shf_deg, norm, alg1, shf1_deg, shf2_deg
+    
     
 
 if __name__ == "__main__":

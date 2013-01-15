@@ -23,15 +23,16 @@ def populate(*args, **kwargs):
     can.reset()
 
     comp_ax = 0
-    comp_step = 10
+    comp_step = 1
     comp_norm = False
 
-    offs = (0, 0.02)
+    offs = (0, 0.03)
     xlim = (0, 0)
     ylim = (0, 0)
     
     xlim = (11.625, 11.66)
     ylim = (-10, 12)
+    ylim = (2, 38)
 
     if comp_ax:
         _wav = kwargs['wav'][0]
