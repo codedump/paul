@@ -23,16 +23,18 @@ def populate(*args, **kwargs):
     can.reset()
 
     comp_ax = 0
-    comp_step = 1
+    comp_step = 10
     comp_norm = False
 
     offs = (0, 0.03)
     xlim = (0, 0)
     ylim = (0, 0)
     
-    xlim = (11.625, 11.66)
-    ylim = (-10, 12)
-    ylim = (2, 38)
+    #xlim = (11.625, 11.66)
+    #xlim = (27.60, 27.66)
+    
+    #ylim = (-10, 12)
+    #ylim = (2, 38)
 
     if comp_ax:
         _wav = kwargs['wav'][0]
@@ -40,6 +42,7 @@ def populate(*args, **kwargs):
         _wav = kwargs['wav'][0].swapaxes(0,1)
 
     can.axes.axvline (11.6485, ls=':')
+    can.axes.axvline (12.648, ls=':')
 
     #print "First input element:"
     #pp.pprint (_wav)

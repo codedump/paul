@@ -481,7 +481,8 @@ def deg2k (*args, **kwargs):
       - energy, e:    Values to go along with the energy axis.
       - detector, d:  Values for the detector axis.
       - tilt, t:      Values for the tilt axis.
-      - hv            The photon energy at which the data was measured.
+      - Emax          The maximum kinetic energy (E_beam - work_function,
+                      usually E_beam - 4.352 eV)
       - degree:       The spline degree to use for interpolation.
                       Default is 3.
       
@@ -511,7 +512,7 @@ def deg2k (*args, **kwargs):
     E      = _param ('energy',   'e', idata.dim[0].range)
     ideg_d = _param ('detector', 'd', idata.dim[1].range)
     ideg_t = _param ('tilt',     't', idata.dim[2].range)
-    hv     = _param ('hv',       'hv', 1.0)
+    hv     = _param ('Emax',     'Emax', 1.0)
     fill   = _param ('fill',     'fill', np.nan)
     degree = _param ('degree',   'deg', 3)
     _out = idata.copy()
@@ -554,10 +555,15 @@ def deg2k (*args, **kwargs):
     odeg_d_clean[nan_map] = ideg_d[0] # safe polar non-grid to...
     odeg_t_clean[nan_map] = ideg_t[0] # ...use with the interpolator.
 
+    kx_degree = degree
+    ky_degree = degree if len(kaxis_t) >= degree else 1
+
+    #print kx_degree, ky_degree
+
     for idat, odat in zip(idata, _out):
-        #_in_masked = np.ma.masked_invalid (idat)        
+        #_in_masked = np.ma.masked_invalid (idat)
         _inter = sp.interpolate.RectBivariateSpline (ideg_d, ideg_t, idat,
-                                                     kx=degree, ky=degree)
+                                                     kx=kx_degree, ky=ky_degree)
         _tmp = _inter.ev(odeg_d_clean.flat, odeg_t_clean.flat)
 
         #print "shapes:", ideg_d.shape, ideg_t.shape, idat.shape
@@ -577,6 +583,14 @@ def deg2k (*args, **kwargs):
         odata = _out
     
     return odata
+
+
+def _deg2ky (wav, **kwargs):
+    '''
+    Quick'n'dirty wrapper around deg2k() that convers a
+    single 2D wave by re-packing it into a 3D wave.
+    '''
+    return deg2k (wave.dstack([wav, wav]), **kwargs)[:,:,0]
 
 
 def align2d (a, b, iregion=(0, -1, 0, -1), xregion=None, 
@@ -1207,7 +1221,7 @@ def align_to_ef (dlist, axis=0, step=0.25, search=0.005, check=None,
     return out, np.array(offsets)
 
 
-def align_uru2si2_kz (data, ss_index='auto', ef_index='auto',
+def align_kz_uru2si2 (data, ss_index='auto', ef_index='auto',
                       deg_search=5.0, e_search=0.005,
                       reverse_energy='auto', e_axis=0):
     '''
@@ -1248,33 +1262,43 @@ def align_uru2si2_kz (data, ss_index='auto', ef_index='auto',
     # so we'll add back the 1 and remove it later.
     log.info ("Step 1: Intensity normalization at indices %d...%d" % norm_pos)
     norm = [norm_by_noise(w, axis=e_axis, ipos=norm_pos)+1 for w in data]
-
     
     log.info ("Step 2: First Ef alignemnt (this will take a while)")
     alg1, shf1 = align_to_ef (norm, axis=e_axis, step=0.5, search=e_search)
-
     
+     
     if ss_index == 'auto':
-        ss_index = np.argmax(alg1[0], axis=deg_axis)[0]
+        ss_index = np.argmax(alg1[0]) % alg1[0].shape[deg_axis]
     log.info ("Step 3: Angle alignment using SS at %d "\
               "(this will also take a while)" % ss_index)
     ss_width = round(float(deg_search) / alg1[0].dim[deg_axis].delta)
-    
+     
     log.info ("Step 3a: (normal sequence aligment)")
     shf1_deg, sc1_deg = align_stack_ax (alg1, axis=deg_axis, icenter=ss_index,
                                         isearch=ss_width, icheck=ss_width, step=1)
-    
+    #print shf1_deg
+     
     log.info ("Step 3b: (reverse sequence alignment)")
     shf2_deg, sc2_deg = align_stack_ax (alg1[::-1], axis=deg_axis, icenter=ss_index,
                                         isearch=ss_width, icheck=ss_width, step=1)
-    shf_deg = np.cumsum(np.array([0.0] + (shf1_deg[1:] + shf2_deg[1:][::-1])/2 ))
+    #print shf2_deg
+     
+    _rel_shf = (shf1_deg[1:] - shf2_deg[1:][::-1]) / 2.0
+    shf_deg = np.cumsum(np.insert(_rel_shf, obj=0, values=np.array([0]), axis=0))
+    
+    #print shf_deg, shf_deg.shape
+
+    #shf_deg = np.zeros (len(data))  # DEBUG
+    #alg1 = data                     # DEBUG
     
     if deg_axis == 1:
         log.info ("Step 3c: (re-gridding 2nd dimension)")
-        deg = [wave.regrid(w, None, {'shift': s}) for w, s in zip(alg1, shf_deg)]
+        deg = [wave.regrid(w, None, {'shift': s}, units='index')
+               for w, s in zip(alg1, shf_deg)]
     else:
         log.info ("Step 3c: (re-gridding 1st dimension)")
-        deg = [wave.regrid(w, {'shift': s}, none) for w, s in zip(alg1, shf_deg)]
+        deg = [wave.regrid(w, {'shift': s}, None, units='index') 
+               for w, s in zip(alg1, shf_deg)]
 
         
     log.info ("Step 4: Fine-grained Ef alignment (this will take even longer)")

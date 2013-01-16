@@ -1074,15 +1074,16 @@ def pack_make_uxp (path, out=None, _prefix=''):
     
     for entry in os.listdir(full_path):
         entry_fullpath = os.path.join(full_path, entry)
-        if stat.S_ISDIR(os.stat(entry_fullpath).st_mode):
-            pack_make_uxp (entry, out=out, _prefix=full_path)
-        elif entry_fullpath.lower().rfind(".ibw") == len(entry_fullpath)-4:
+        if entry_fullpath.lower().rfind(".ibw") == len(entry_fullpath)-4:
             out.write ('LoadWave /P=home "%s"\r' % (entry))
+        elif stat.S_ISDIR(os.stat(entry_fullpath).st_mode):
+            pack_make_uxp (entry, out=out, _prefix=full_path)
 
     if len(_prefix) == 0:
         out.write ("SetDataFolder root:\r")
     else:
-        out.write ('SetDataFolder ::  // current dir: %s\r\r' % (_prefix))
+        #out.write ('SetDataFolder "%s::"  // current dir: %s\r\r' % (full_path_igor, _prefix))
+        out.write ('SetDataFolder ::  // data folder is now: %s\r\r' % (_prefix))
 
 #
 # standalone application functionality
