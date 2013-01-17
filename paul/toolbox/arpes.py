@@ -459,32 +459,48 @@ def get_ref2d_profile (refdata, axis=0, steps=None, width=None, ipos=None, xpos=
     
 
 
-def deg2k (*args, **kwargs):
+def deg2ky (*args, **kwargs):
     '''
-    Converts a Wave from the natural coordinates of an ARPES
-    measurement (energy / degrees) into k-space (inverse space)
-    coordinates.
+    Converts a 3D wave from the natural coordinates of an ARPES
+    measurement (energy / degrees / tilt) into k-space (inverse space)
+    coordinates. The 3D wave is assumed to be put together by stacking
+    2D waves (ARPES scans in energy x detector coordinates) measured
+    at the same photon energy but different tilt angles along
+    the 3rd dimension (tilt coordinate).
+
+    It is useful for transforming a kx*ky Fermi Surface maps (single-slices or
+    multi-slices, extending into the energy direction).
+
+    For a similar function to be applied to a single 2D arpes slice,
+    see *deg2ky_single()*.
+
+    For a similar function to be applied to 2D scans measured
+    at different photon energies, resulting in ky*kz scans, see *deg2kz()*.
 
     Following parametes:
-      - (unnamed):    The 3D data, either as a Wave or as an ndarray,
-                      containing the deg_tilt*deg_detector*E dependent data
-                      (i.e. the intensity in dependence of energy, the tilt
-                      angle, and the detector angle). If data is a Wave,
-                      axis information is extracted from the wave scaling.
-                      'e', 'd' and 't' parameters below override internal
-                      Wave data. If data is an ndarray, then 'e', 'd' and 't'
-                      parameters are mandatory.
-      - axes:         Combination of the letters 'e', 'd' and 't'
-                      describing the current axes layout
-                      in terms of (e)nergy, (d)etector or (t)ilt.
-                      Default is 'edt'.
-      - energy, e:    Values to go along with the energy axis.
-      - detector, d:  Values for the detector axis.
-      - tilt, t:      Values for the tilt axis.
-      - Emax          The maximum kinetic energy (E_beam - work_function,
-                      usually E_beam - 4.352 eV)
-      - degree:       The spline degree to use for interpolation.
-                      Default is 3.
+      - `(unnamed)`:    The 3D data, either as a Wave or as an ndarray,
+                        containing the deg_tilt*deg_detector*E dependent data
+                        (i.e. the intensity in dependence of energy, the tilt
+                        angle, and the detector angle). If data is a Wave,
+                        axis information is extracted from the wave scaling.
+                        'e', 'd' and 't' parameters below override internal
+                        Wave data. If data is an ndarray, then 'e', 'd' and 't'
+                        parameters are mandatory.
+      - `Ekin`:         The maximum kinetic energy
+                        (*E_beam - E_bind - work_function*,
+                        same as *E_f - work_function*). For a Scienta R4000 analyzer
+                        it is usually E_beam - 4.352 eV.
+                        This is a required parameter!
+      - `axes`:         Combination of the letters 'e', 'd' and 't'
+                        describing the current axes layout
+                        in terms of (e)nergy, (d)etector or (t)ilt.
+                        Default is 'edt'.
+      - `energy, e`:    Values to go along with the energy axis.
+      - `detector, d`:  Values for the detector axis.
+      - `tilt, t`:      Values for the tilt axis.
+      - `degree`:       The spline degree to use for interpolation.
+                        Default is 3.
+      - `fill`:         Value to fill invalid data points. Defaults to min(data).
       
     '''
 
@@ -512,8 +528,8 @@ def deg2k (*args, **kwargs):
     E      = _param ('energy',   'e', idata.dim[0].range)
     ideg_d = _param ('detector', 'd', idata.dim[1].range)
     ideg_t = _param ('tilt',     't', idata.dim[2].range)
-    hv     = _param ('Emax',     'Emax', 1.0)
-    fill   = _param ('fill',     'fill', np.nan)
+    hv     = _param ('Ekin',     'Ekin', np.nan)
+    fill   = _param ('fill',     'fill', idata.min())
     degree = _param ('degree',   'deg', 3)
     _out = idata.copy()
 
@@ -585,12 +601,176 @@ def deg2k (*args, **kwargs):
     return odata
 
 
-def _deg2ky (wav, **kwargs):
+def deg2ky_single (wav, **kwargs):
     '''
-    Quick'n'dirty wrapper around deg2k() that convers a
+    Quick'n'dirty wrapper around *deg2ky()* that convers a
     single 2D wave by re-packing it into a 3D wave.
+    A proper dedicated algorithm could be written for the
+    2D case at normal emission (which is easier to do than the
+    3D case). But the speed improvement would be marginal, at
+    the expense of having to maintain two different
+    code paths for the same work.
+
+    Parameters:
+       - `wav`: The 2D wave to transform.
+       - `axes`: one of 'ed' or 'de', showing the order of the
+                 (e)nergy and (d)etector axes.
+
+    For valid *kwargs*, see *deg2ky()*.
     '''
-    return deg2k (wave.dstack([wav, wav]), **kwargs)[:,:,0]
+    if kwargs.has_key('axes'):
+        kwargs['axes'] += "t"
+    return deg2ky (wave.dstack([wav, wav]), **kwargs).sum(2)
+
+
+def deg2kz (*args, **kwargs):
+    '''
+    Converts a 3D wave from the natural coordinates of an ARPES
+    measurement (energy / degrees / Ekin-scan) into k-space
+    (inverse space) coordinates.The 3D wave is assumed to be put
+    together by stacking 2D waves (ARPES scans in
+    energy x detector coordinates) measured at different photon
+    energies at normal emission (tilt = 0) angles along
+    the 3rd dimension (photon energy coordinate).
+
+    It is useful for transforming 2D scans measured at different
+    photon energies, resulting in ky*kz Fermi Surface maps. 
+        
+    For a similar function to be applied to  kx*ky Fermi Surface maps
+    see *deg2kz()*. For a similar function to be applied to a single
+    2D arpes slice, see *deg2ky_single()*.
+    
+
+    Following parametes:
+      - `(unnamed)`:   The 3D data, either as a Wave or as an ndarray,
+                       containing the deg_tilt*deg_detector*E dependent data
+                       (i.e. the intensity in dependence of energy, the tilt
+                       angle, and the detector angle). If data is a Wave,
+                       axis information is extracted from the wave scaling.
+                       'e', 'd' and 't' parameters below override internal
+                       Wave data. If data is an ndarray, then 'e', 'd' and 't'
+                       parameters are mandatory.
+      - `axes`:        Combination of the letters 'e', 'd' and 'x'
+                       describing the current axes layout
+                       in terms of (e)nergy, (d)etector or e(x)citation energy
+                       (i.e. beam energy E=hv of the excitation beam).
+                       Default is 'edx'.
+      - `energy, e`:   Values to go along with the energy axis.
+      - `detector, d`: Values for the detector axis.
+      - `exbeam, x`:   Values for the excitation energy axis.
+      - `Phi`:         The work function defined as
+                       *E_hv = E_F - Phi = E_kin - |E_bind| - Phi*.
+                       This is usually a material specific constant, in most
+                       ARPES applications depending on the measurement device.
+                       Defaults to Phi=4.352(1) eV, which is ok for a
+                       Scienta R4000 analyzer.
+      - `v0`:          The inner potential of the crystal V0 in eV, usually
+                       somewhere between 8 and 15 eV. Defaults to 12.5 eV.
+      - `degree`:      The spline degree to use for interpolation.
+                       Default is 3.
+      - `fill`:        Value to fill invalid data points. Defaults to min(data).
+
+      
+    '''
+
+    # Strategy:
+    #  . create a new data view
+    #  . tilt data such that axes configuration
+    #    is (energy, detector, tilt)
+    #  . apply corrections (offsets, and possibly increments)
+    #  . ...
+
+
+    # parameter helpers
+    _param = lambda k0, k1, d: \
+      kwargs[k0] if kwargs.has_key(k0) \
+      else (kwargs[k1] if kwargs.has_key(k1) else d)
+
+    if args[0].ndim != 3:
+        raise ValueError ("Input has to be a 3D array of values. "
+                          "Use numpy.newaxis for proper casting of 2D arrays!")
+
+    # rotate data into 'edt' axis configuration
+    axes = kwargs.setdefault('axes', 'edt')
+    idata = wave.transpose(args[0], (axes.find('e'), axes.find('d'), axes.find('x')))
+    
+    E      = _param ('energy',   'e', idata.dim[0].range)
+    ideg   = _param ('detector', 'd', idata.dim[1].range)
+    iex    = _param ('exbeam',   'x', idata.dim[2].range)
+    Phi    = _param ('Phi',      'Phi', 4.352)
+    V0     = _param ('V0',       'v0', 12.5)
+    fill   = _param ('fill',     'fill', np.nan)
+    degree = _param ('degree',   'deg', 3)
+    
+    _out = idata.copy()
+
+    hbar_2m = 0.51232  # hbar^2 / 2m = 0.51232
+    _dx2ky = lambda deg, ekin:  hbar_2m * math.sqrt(ekin) * np.sin(deg*np.pi/180.0)
+    #_dx2kz = lambda deg, ekin:  
+
+    # axes limits of the k-space data
+    ik_d_lim = _d2k (np.array([ideg_d[0], ideg_d[-1]]))
+    ik_t_lim = _d2k (np.array([ideg_t[0], ideg_t[-1]]))
+
+    # rectangular, evenly-spaced grid in k coordinates;
+    kaxis_d = np.linspace (start=ik_d_lim[0], stop=ik_d_lim[1], num=len(ideg_d))
+    kaxis_t = np.linspace (start=ik_t_lim[0], stop=ik_t_lim[1], num=len(ideg_t))
+
+    # for some funny reason, we need to invert det/tilt order here...
+    okt, okd = np.meshgrid(kaxis_t, kaxis_d)
+
+    # Polar coordinates for the rectangular k-space grid.
+    # These will _not_ be rectangular, and they will not be on
+    # a grid. Basically, this is where the magic happens:
+    #   after we calculate the would-be polar coordinates
+    #   of the target rectangular k-space grid, we'll use
+    #   a fast spline interpolation to get data from the
+    #   original polar-grid onto the new,
+    #   k-space grid (represented as polar non-grid).
+    #
+    # Everything else is just house keeping. :-)
+    #
+    odeg_d = np.arcsin (okd / c) * 180.0/np.pi
+    odeg_t = np.arcsin (okt / (c*np.cos(np.arcsin(okd/c))) ) * 180.0/np.pi
+
+    # Some of the coordinates above may end up as NaNs (depending
+    # on angle combination). As the interpolator will choke on NaN
+    # coordinates, we need to replace them by sane numbers before
+    # evaluation, and delete them again after evaluation.
+    nan_map = np.isnan(odeg_d) + np.isnan(odeg_t)    # map of the NaN values
+    odeg_d_clean = odeg_d.copy()
+    odeg_t_clean = odeg_t.copy()
+    odeg_d_clean[nan_map] = ideg_d[0] # safe polar non-grid to...
+    odeg_t_clean[nan_map] = ideg_t[0] # ...use with the interpolator.
+
+    kx_degree = degree
+    ky_degree = degree if len(kaxis_t) >= degree else 1
+
+    #print kx_degree, ky_degree
+
+    for idat, odat in zip(idata, _out):
+        #_in_masked = np.ma.masked_invalid (idat)
+        _inter = sp.interpolate.RectBivariateSpline (ideg_d, ideg_t, idat,
+                                                     kx=kx_degree, ky=ky_degree)
+        _tmp = _inter.ev(odeg_d_clean.flat, odeg_t_clean.flat)
+
+        #print "shapes:", ideg_d.shape, ideg_t.shape, idat.shape
+        #_inter = spi.interp2d (ideg_d, ideg_t, idat)
+        #_tmp = _inter (odeg_d_clean.flat, odeg_t_clean.flat)
+
+        _tmp[nan_map.flat.copy()] = fill
+        _tmp2 = _tmp.reshape ([odeg_d.shape[0], odeg_t.shape[1]])
+        odat[:,:] = _tmp2[:,:]
+
+    
+    if isinstance (idata, wave.Wave):
+        odata = _out.view(wave.Wave)
+        odata.dim[1].lim = ik_d_lim
+        odata.dim[2].lim = ik_t_lim
+    else:
+        odata = _out
+    
+    return odata
 
 
 def align2d (a, b, iregion=(0, -1, 0, -1), xregion=None, 
