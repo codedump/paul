@@ -704,69 +704,116 @@ def deg2kz (*args, **kwargs):
     
     _out = idata.copy()
 
-    hbar_2m = 0.51232  # hbar^2 / 2m = 0.51232
-    _dx2ky = lambda deg, ekin:  hbar_2m * math.sqrt(ekin) * np.sin(deg*np.pi/180.0)
-    #_dx2kz = lambda deg, ekin:  
+    #
+    # Some useful constants:
+    #
+    # hbar = 1.054571726*10^-34 Js     [kg m^2 s^-1]
+    #      = 6.58211928*10^-16 eVs
+    # m_e  = 9.10938291*10^-31  kg     [kg]
+    #
+    # Unit conversion factors
+    # eV_J = 1.602176565*10^-19 J/eV (eV <-> Joule conversion factor)
+    # m_A  = 10^-10 m/A              (meter <-> Angstroem conversion factor)
+    #
+    # => hbar^2 / 2m = hbar**2 / 2*m_e        * (1/eV_J)  * (1/m_A^2)
+    #                = [kg m^4 s^-2]  [kg^-2] * [eV J^-1] * [m^-2 A^2]
+    #                = [kg m^2 s^-2  * m^2]   * [eV J^-1] * [m^-2 A^2]
+    #                = [ J * m^2 ]            * [eV J^-1] * [m^-2 A^2]
+    #                = [ eV * A^-2 ]
+    #                = 3.80998194907763662131527 eV * A^-2
+    #
+    # Testing: in conjunction with a k calculation:
+    #
+    #     k = sqrt (2m*E / hbar^2  * sin(...)) 
+    #       = sqrt ([eV * A^-2] * eV) = 1/A^-1    :-)
+    #
+    # Useful constants in the transformation formulae:
+    #
+    hsq_2m = 3.80998194907763662131527 # hbar^2 / 2me
+    m2_hsq = 0.26246843511741342307750 # 2me / hbar^2
+    sqfac  = 0.51231673320067676965494 # sqrt ( 2m / hbar^2)
+
+    _rad   = lambda deg: deg * np.pi / 180.0
+    _deg   = lambda rad: rad * 180.0 / np.pi
+    
+    _dx2ky = lambda deg, hv:  np.sqrt( m2_hsq * (hv-Phi) ) * np.sin(_rad(deg))
+    _dx2kz = lambda deg, hv:  np.sqrt( m2_hsq * ( 
+                                                  (hv-Phi) * (1-np.sin(_rad(deg))**2) - V0 
+                                                )
+                                     )
 
     # axes limits of the k-space data
-    ik_d_lim = _d2k (np.array([ideg_d[0], ideg_d[-1]]))
-    ik_t_lim = _d2k (np.array([ideg_t[0], ideg_t[-1]]))
+    ik_d_lim = tuple( _dx2ky (np.array([ideg[0], ideg[-1]]), max(iex)))
+    ik_x_lim = (_dx2kz ( max(ideg[0], ideg[-1]), min(iex[0], iex[-1])),
+                _dx2kz ( 0,                      max(iex[0], iex[-1])) )
+
+    ##print "excitation energy limits:", iex[0], iex[-1]
+    ##print "angle limits:", ideg[0], ideg[-1]
+    ##print "some k values:", _dx2kz (ideg[0], iex[0]),  _dx2kz (ideg[-1], iex[0])
+    ##print "some k values:", _dx2kz (ideg[0], iex[-1]), _dx2kz (ideg[-1], iex[-1])
+    ##hv = iex[0]
+    ##deg = ideg[-1]
+    ##print "debug:", (hv-Phi) * (1-np.sin(_rad(deg))**2), m2_hsq *  ( (hv-Phi) * (1-np.sin(_rad(deg))**2) - V0 )
+    ##print "Axis limits:", ik_d_lim, ik_x_lim
 
     # rectangular, evenly-spaced grid in k coordinates;
-    kaxis_d = np.linspace (start=ik_d_lim[0], stop=ik_d_lim[1], num=len(ideg_d))
-    kaxis_t = np.linspace (start=ik_t_lim[0], stop=ik_t_lim[1], num=len(ideg_t))
+    kaxis_d = np.linspace (start=ik_d_lim[0], stop=ik_d_lim[1], num=len(ideg))
+    kaxis_x = np.linspace (start=ik_x_lim[0], stop=ik_x_lim[1], num=len(iex))
 
-    # for some funny reason, we need to invert det/tilt order here...
-    okt, okd = np.meshgrid(kaxis_t, kaxis_d)
+    # for some funny reason, we need to invert det/exb order here...
+    okx, okd = np.meshgrid(kaxis_x, kaxis_d)
+
+    ##print "Output k axes:", (kaxis_d[0], kaxis_d[-1], len(kaxis_d)), (kaxis_x[0], kaxis_x[-1], len(kaxis_x))
 
     # Polar coordinates for the rectangular k-space grid.
     # These will _not_ be rectangular, and they will not be on
-    # a grid. Basically, this is where the magic happens:
-    #   after we calculate the would-be polar coordinates
-    #   of the target rectangular k-space grid, we'll use
-    #   a fast spline interpolation to get data from the
-    #   original polar-grid onto the new,
-    #   k-space grid (represented as polar non-grid).
+    # a grid. Basically, the following two code lines
+    # is where the magic happens:
+    # after we calculate the would-be polar coordinates
+    # of the target rectangular k-space grid, we'll use
+    # a fast spline interpolation to get data from the
+    # original polar-grid onto the new,
+    # k-space grid (represented as polar non-grid).
     #
     # Everything else is just house keeping. :-)
-    #
-    odeg_d = np.arcsin (okd / c) * 180.0/np.pi
-    odeg_t = np.arcsin (okt / (c*np.cos(np.arcsin(okd/c))) ) * 180.0/np.pi
+    
+    #odeg = okd
+    #oex  = okx
+    oex, odeg   = np.meshgrid (iex, ideg)
+    oex  = V0 + hsq_2m*(okx**2 + okd**2)
+    odeg = _deg( np.arcsin (np.sign(okd)*np.sqrt (hsq_2m * okd**2 / oex)) )
+
+    #print "Output excitation coordinates:"
+    #pprint.pprint (oex)
 
     # Some of the coordinates above may end up as NaNs (depending
     # on angle combination). As the interpolator will choke on NaN
     # coordinates, we need to replace them by sane numbers before
     # evaluation, and delete them again after evaluation.
-    nan_map = np.isnan(odeg_d) + np.isnan(odeg_t)    # map of the NaN values
-    odeg_d_clean = odeg_d.copy()
-    odeg_t_clean = odeg_t.copy()
-    odeg_d_clean[nan_map] = ideg_d[0] # safe polar non-grid to...
-    odeg_t_clean[nan_map] = ideg_t[0] # ...use with the interpolator.
-
-    kx_degree = degree
-    ky_degree = degree if len(kaxis_t) >= degree else 1
-
-    #print kx_degree, ky_degree
+    nan_map = np.isnan(odeg) + np.isnan(oex)    # map of the NaN values
+    odeg_clean = odeg.copy()
+    oex_clean  = oex.copy()
+    odeg_clean[nan_map] = ideg[0] # safe polar non-grid to...
+    oex_clean[nan_map]  = iex[0]  # ...use with the interpolator.
 
     for idat, odat in zip(idata, _out):
-        #_in_masked = np.ma.masked_invalid (idat)
-        _inter = sp.interpolate.RectBivariateSpline (ideg_d, ideg_t, idat,
-                                                     kx=kx_degree, ky=ky_degree)
-        _tmp = _inter.ev(odeg_d_clean.flat, odeg_t_clean.flat)
-
+        _inter = sp.interpolate.RectBivariateSpline (ideg, iex, idat,
+                                                     kx=degree, ky=degree)
+        _tmp = _inter.ev(odeg_clean.flat, oex_clean.flat)
+        
         #print "shapes:", ideg_d.shape, ideg_t.shape, idat.shape
         #_inter = spi.interp2d (ideg_d, ideg_t, idat)
         #_tmp = _inter (odeg_d_clean.flat, odeg_t_clean.flat)
 
         _tmp[nan_map.flat.copy()] = fill
-        _tmp2 = _tmp.reshape ([odeg_d.shape[0], odeg_t.shape[1]])
+        _tmp2 = _tmp.reshape ([odeg.shape[0], oex.shape[1]])
         odat[:,:] = _tmp2[:,:]
 
-    
+
     if isinstance (idata, wave.Wave):
         odata = _out.view(wave.Wave)
         odata.dim[1].lim = ik_d_lim
-        odata.dim[2].lim = ik_t_lim
+        odata.dim[2].lim = ik_x_lim
     else:
         odata = _out
     
