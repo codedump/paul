@@ -280,10 +280,12 @@ def decorate(*args, **kwargs):
     if wav.ndim == 2:
         ax.set_xlabel (r'$k_{||}$ ($^\circ$)')
         ax.set_ylabel (r'E$_{total}$ (meV)')
+        ax.set_xlim (wav.dim[1].lim)
         ax.set_ylim (wav.dim[0].lim)
     elif PLOT.waves[0].ndim == 3:
         ax.set_xlabel (r'')
         ax.set_ylabel (r'')
+        ax.set_xlim (PLOT.cut_wav.dim[1].lim)
         ax.set_ylim (PLOT.cut_wav.dim[0].lim)
 
     ax.axvline (0, ls=':', color='black')

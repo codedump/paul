@@ -289,7 +289,6 @@ def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None),
         In most cases, gaussian smoothing works best with
         experimental data, i.e. produces the most predictible
         amount of artefacts.
-        
     '''
 
     # rotate axes such that dim is the first
@@ -477,31 +476,42 @@ def deg2ky (*args, **kwargs):
     For a similar function to be applied to 2D scans measured
     at different photon energies, resulting in ky*kz scans, see *deg2kz()*.
 
-    Following parametes:
-      - `(unnamed)`:    The 3D data, either as a Wave or as an ndarray,
-                        containing the deg_tilt*deg_detector*E dependent data
-                        (i.e. the intensity in dependence of energy, the tilt
-                        angle, and the detector angle). If data is a Wave,
-                        axis information is extracted from the wave scaling.
-                        'e', 'd' and 't' parameters below override internal
-                        Wave data. If data is an ndarray, then 'e', 'd' and 't'
-                        parameters are mandatory.
-      - `Ekin`:         The maximum kinetic energy
-                        (*E_beam - E_bind - work_function*,
-                        same as *E_f - work_function*). For a Scienta R4000 analyzer
-                        it is usually E_beam - 4.352 eV.
-                        This is a required parameter!
-      - `axes`:         Combination of the letters 'e', 'd' and 't'
-                        describing the current axes layout
-                        in terms of (e)nergy, (d)etector or (t)ilt.
-                        Default is 'edt'.
-      - `energy, e`:    Values to go along with the energy axis.
-      - `detector, d`:  Values for the detector axis.
-      - `tilt, t`:      Values for the tilt axis.
-      - `degree`:       The spline degree to use for interpolation.
-                        Default is 3.
-      - `fill`:         Value to fill invalid data points. Defaults to min(data).
+    Parametes to go with *kwargs*:
+    
+    - `(unnamed)`:    The 3D data, either as a Wave or as an ndarray,
+      containing the deg_tilt*deg_detector*E dependent data
+      (i.e. the intensity in dependence of energy, the tilt
+      angle, and the detector angle). If data is a Wave,
+      axis information is extracted from the wave scaling.
+      'e', 'd' and 't' parameters below override internal
+      Wave data. If data is an ndarray, then 'e', 'd' and 't'
+      parameters are mandatory.
       
+    - `Ekin`:         The maximum kinetic energy
+      (*E_beam - E_bind - work_function*,
+      same as *E_f - work_function*). For a Scienta R4000 analyzer
+      it is usually E_beam - 4.352 eV.
+      This is a required parameter!
+      
+    - `axes`:         Combination of the letters 'e', 'd' and 't'
+      describing the current axes layout
+      in terms of (e)nergy, (d)etector or (t)ilt.
+      Default is 'edt'.
+      
+    - `energy, e`:    Values to go along with the energy axis.
+    
+    - `detector, d`:  Values for the detector axis.
+    
+    - `tilt, t`:      Values for the tilt axis.
+    
+    - `degree`:       The spline degree to use for interpolation.
+      Default is 3.
+      
+    - `fill`:         Value to fill invalid data points. Defaults to min(data).
+
+
+    See notes for **deg2kz()** for supplementary information
+    and implementation details.      
     '''
 
     # Strategy:
@@ -642,35 +652,105 @@ def deg2kz (*args, **kwargs):
     
 
     Following parametes:
-      - `(unnamed)`:   The 3D data, either as a Wave or as an ndarray,
-                       containing the deg_tilt*deg_detector*E dependent data
-                       (i.e. the intensity in dependence of energy, the tilt
-                       angle, and the detector angle). If data is a Wave,
-                       axis information is extracted from the wave scaling.
-                       'e', 'd' and 't' parameters below override internal
-                       Wave data. If data is an ndarray, then 'e', 'd' and 't'
-                       parameters are mandatory.
-      - `axes`:        Combination of the letters 'e', 'd' and 'x'
-                       describing the current axes layout
-                       in terms of (e)nergy, (d)etector or e(x)citation energy
-                       (i.e. beam energy E=hv of the excitation beam).
-                       Default is 'edx'.
-      - `energy, e`:   Values to go along with the energy axis.
-      - `detector, d`: Values for the detector axis.
-      - `exbeam, x`:   Values for the excitation energy axis.
-      - `Phi`:         The work function defined as
-                       *E_hv = E_F - Phi = E_kin - |E_bind| - Phi*.
-                       This is usually a material specific constant, in most
-                       ARPES applications depending on the measurement device.
-                       Defaults to Phi=4.352(1) eV, which is ok for a
-                       Scienta R4000 analyzer.
-      - `v0`:          The inner potential of the crystal V0 in eV, usually
-                       somewhere between 8 and 15 eV. Defaults to 12.5 eV.
-      - `degree`:      The spline degree to use for interpolation.
-                       Default is 3.
-      - `fill`:        Value to fill invalid data points. Defaults to min(data).
-
+    - `(unnamed)`:   The 3D data, either as a Wave or as an ndarray,
+      containing the deg_tilt*deg_detector*E dependent data
+      (i.e. the intensity in dependence of energy, the tilt
+      angle, and the detector angle). If data is a Wave,
+      axis information is extracted from the wave scaling.
+      'e', 'd' and 't' parameters below override internal
+      Wave data. If data is an ndarray, then 'e', 'd' and 't'
+      parameters are mandatory.
       
+    - `axes`:        Combination of the letters 'e', 'd' and 'x'
+      describing the current axes layout
+      in terms of (e)nergy, (d)etector or e(x)citation energy
+      (i.e. beam energy E=hv of the excitation beam).
+      Default is 'edx'.
+      
+    - `energy, e`:   Values to go along with the energy axis.
+    
+    - `detector, d`: Values for the detector axis.
+    
+    - `exbeam, x`:   Values for the excitation energy axis.
+    
+    - `Phi`:         The work function defined as
+      *E_hv = E_F - Phi = E_kin - |E_bind| - Phi*.
+      This is usually a material specific constant, in most
+      ARPES applications depending on the measurement device.
+      Defaults to Phi=4.352(1) eV, which is ok for a
+      Scienta R4000 analyzer.
+      
+    - `v0`: The inner potential of the crystal V0 in eV, usually
+      somewhere between 8 and 15 eV. Defaults to 12.5 eV.
+      
+    - `degree`: The spline degree to use for interpolation. Default is 3.
+    
+    - `fill`:        Value to fill invalid data points. Defaults to min(data).
+
+
+    Notes on implementation
+    =======================
+    
+          Conversion from polar coordinates to k-space is performed from the
+          input data, which usually lies on a rectangular, regularly spaced
+          grid, onto another rectangular, regularly spaced grid in k-space.
+          Now, the shape of a rectangular data surface in polar coordinates
+          is, usually, non-rectangular in k-space, and vice versa. This
+          means that some kind interpolation has to take place at one point
+          or another.
+          
+          Here, two fundamentally different strategies can be employed:
+          
+             (a) Forward transformation method
+             ---------------------------------
+             To each input data point in the original, rectangular
+             polar coordinate system, the corresponding coordinate
+             in k-space is calculated; this yields an "intermediate
+             data set", which consists of the original data values
+             arranged on an usually non-rectangular grid.
+             From the intermediate non-rectangular data set, an
+             the final, rectangular k-space grid is obtained by
+             interpolation.
+             In other words, the input data re-interpreted as being in
+             in k-space coordinates, albeit on a non-rectangular
+             "random" grid, on which an interpolation to a rectangular,
+             regular grid is to be applied using the polar -> k-space
+             transformation rules.
+             
+             An interpolation algorithm from a *random grid* to a
+             *regular rectangular grid* is required.
+
+    
+             (b) Reverse transformation method
+             ---------------------------------
+             For every output point in the final, rectangular k-space
+             grid the corresponding would-be coordinate in a
+             non-rectangular, intermediate polar grid is calculated
+             using a *reverse* (i.e. k-space -> polar) transformation.
+             Then the input data is interpolated from a rectangular
+             regular polar grid to the non-rectangular intermediate
+             grid, the latter ultimately corresponding point-by-point
+             with the final k-space system.
+             In other words, the input data is regarded as regular
+             polar-space data, and a non-rectantular polar-space
+             (identical to a regular k-space) version of that data
+             is obtined by interpolation.
+             
+             An interpolation algorithm from a *regular rectangular grid*
+             to a *random grid* is required.
+
+          Downside of method (a) is the fact that interpolation methods
+          from random grids tend to be numerically less efficient and
+          more difficult to implement, while method (b) has the downside
+          of requiring a closed expression for the reverse transformation.
+          Also, sometimes, the reverse coordinate transformation may be
+          computationally more expensive than the forward transformation.
+          
+          However, since in our case the reverse transformation is easy
+          to calculate (although computationally slightly more expensive
+          than the forward transformation), we're using method (b)
+          for **deg2ky()** and **deg2kz()** to gain advantage of the
+          numerical stability that comes with it.
     '''
 
     # Strategy:
@@ -796,17 +876,33 @@ def deg2kz (*args, **kwargs):
     odeg_clean[nan_map] = ideg[0] # safe polar non-grid to...
     oex_clean[nan_map]  = iex[0]  # ...use with the interpolator.
 
-    for idat, odat in zip(idata, _out):
-        _inter = sp.interpolate.RectBivariateSpline (ideg, iex, idat,
-                                                     kx=degree, ky=degree)
-        _tmp = _inter.ev(odeg_clean.flat, oex_clean.flat)
-        
-        #print "shapes:", ideg_d.shape, ideg_t.shape, idat.shape
-        #_inter = spi.interp2d (ideg_d, ideg_t, idat)
-        #_tmp = _inter (odeg_d_clean.flat, odeg_t_clean.flat)
+    ocoord_index = [idata.dim[1].x2i(odeg), idata.dim[2].x2i(oex)]
 
-        _tmp[nan_map.flat.copy()] = fill
-        _tmp2 = _tmp.reshape ([odeg.shape[0], oex.shape[1]])
+    print "output detector tilt:", odeg.shape
+    pprint.pprint (odeg)
+    pprint.pprint (idata.dim[1].x2i(odeg))
+
+    print "output excitation energy:", oex.shape
+    pprint.pprint (oex)
+    pprint.pprint (idata.dim[2].x2i(oex))
+
+    #return odeg, oex
+
+    #print "output grid:"
+    #pprint.pprint (ocoord_index)
+
+    for idat, odat in zip(idata, _out):
+        #_inter = sp.interpolate.RectBivariateSpline (ideg, iex, idat,
+        #                                            kx=degree, ky=degree)
+        #_tmp = _inter.ev(odeg_clean.flat, oex_clean.flat)
+        #_tmp[nan_map.flat.copy()] = fill
+        #_tmp2 = _tmp.reshape ([odeg.shape[0], oex.shape[1]])
+
+        #print idat.shape, icoord_index.shape
+        
+        _tmp2 = spni.map_coordinates (idat, ocoord_index, mode='constant', cval=fill)
+        _tmp2[nan_map] = fill
+
         odat[:,:] = _tmp2[:,:]
 
 
