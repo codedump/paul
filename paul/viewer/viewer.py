@@ -53,7 +53,7 @@ def plot (data, win):
         log.error ("Don't know what to do with %s." % wavs)
 
 
-def create (data=[], args=[]):
+def create (data=[], args=[], log=None):
     '''
     Starts a viewer instance.
     '''
@@ -61,11 +61,10 @@ def create (data=[], args=[]):
     main_win = ViewerWindow()
     plot (data, win=main_win)
     main_win.show()
+        
     if not gui.is_event_loop_running_qt4():
-        log.debug ("Starting main event loop")
         app.exec_()
-    else:
-        log.debug ("Event loop is already running")
+        
     return main_win
 
 

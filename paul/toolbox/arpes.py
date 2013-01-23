@@ -538,75 +538,81 @@ def deg2ky (*args, **kwargs):
     E      = _param ('energy',   'e', idata.dim[0].range)
     ideg_d = _param ('detector', 'd', idata.dim[1].range)
     ideg_t = _param ('tilt',     't', idata.dim[2].range)
-    hv     = _param ('Ekin',     'Ekin', np.nan)
+    hv     = _param ('hv',       'hv', None)
     fill   = _param ('fill',     'fill', idata.min())
     degree = _param ('degree',   'deg', 3)
-    _out = idata.copy()
+    Phi    = _param ('Phi',      'phi', 4.3523)
+    odata  = idata.copy()
 
-    c     = 0.51232 * math.sqrt(hv)
-    _d2k = lambda deg:  c*np.sin(deg*np.pi/180.0)
+    # This is the maximum kinetic energy available *in* *the* *data*
+    # (which is usually larger than the Fermi level :-) )
+    if hv is None:
+        Ekin_max = E.max()
+        hv = Ekin_max + Phi
+    else:
+        Ekin_max = hv - Phi
+
+    # some constants (see deg2kz() for details)
+    hsq_2m = 3.80998194907763662131527 # hbar^2 / 2me
+    m2_hsq = 0.26246843511741342307750 # 2me / hbar^2
+    sqfac  = 0.51231673320067676965494 # sqrt ( 2m / hbar^2)
+
+    #c     = sqfac * math.sqrt(hv)
+    
+    _d2k = lambda deg, Ekin:  sqfac * np.sqrt(Ekin_max)*np.sin(deg*np.pi/180.0)
 
     # axes limits of the k-space data
-    ik_d_lim = _d2k (np.array([ideg_d[0], ideg_d[-1]]))
-    ik_t_lim = _d2k (np.array([ideg_t[0], ideg_t[-1]]))
+    ik_d_lim = _d2k (np.array([ideg_d[0], ideg_d[-1]]), Ekin_max)
+    ik_t_lim = _d2k (np.array([ideg_t[0], ideg_t[-1]]), Ekin_max)
 
     # rectangular, evenly-spaced grid in k coordinates;
-    kaxis_d = np.linspace (start=ik_d_lim[0], stop=ik_d_lim[1], num=len(ideg_d))
-    kaxis_t = np.linspace (start=ik_t_lim[0], stop=ik_t_lim[1], num=len(ideg_t))
-
     # for some funny reason, we need to invert det/tilt order here...
-    okt, okd = np.meshgrid(kaxis_t, kaxis_d)
+    okt, okd = np.meshgrid(np.linspace (start=ik_t_lim[0], stop=ik_t_lim[1], num=len(ideg_t)),
+                           np.linspace (start=ik_d_lim[0], stop=ik_d_lim[1], num=len(ideg_d)))
 
-    # Polar coordinates for the rectangular k-space grid.
-    # These will _not_ be rectangular, and they will not be on
-    # a grid. Basically, this is where the magic happens:
-    #   after we calculate the would-be polar coordinates
-    #   of the target rectangular k-space grid, we'll use
-    #   a fast spline interpolation to get data from the
-    #   original polar-grid onto the new,
-    #   k-space grid (represented as polar non-grid).
-    #
-    # Everything else is just house keeping. :-)
-    #
-    odeg_d = np.arcsin (okd / c) * 180.0/np.pi
-    odeg_t = np.arcsin (okt / (c*np.cos(np.arcsin(okd/c))) ) * 180.0/np.pi
+    # Reverse transformations: this is where the magic happens
+    # (see notes above). Everything else is just house keeping. :-)
+    odeg_d = np.arcsin (okd / (sqfac * np.sqrt(Ekin_max) )) * 180.0/np.pi
+    odeg_t = np.arcsin (okt / (c*np.cos(np.arcsin(okd/ (sqfac*np.sqrt(Ekin_max)) ))) ) * 180.0/np.pi
 
-    # Some of the coordinates above may end up as NaNs (depending
-    # on angle combination). As the interpolator will choke on NaN
-    # coordinates, we need to replace them by sane numbers before
-    # evaluation, and delete them again after evaluation.
-    nan_map = np.isnan(odeg_d) + np.isnan(odeg_t)    # map of the NaN values
-    odeg_d_clean = odeg_d.copy()
-    odeg_t_clean = odeg_t.copy()
-    odeg_d_clean[nan_map] = ideg_d[0] # safe polar non-grid to...
-    odeg_t_clean[nan_map] = ideg_t[0] # ...use with the interpolator.
+    # Some of the coordinates above may end up as NaNs and choke the
+    # interpolator. Map the positions and clean-up the data later.
+    nan_map = np.isnan(odeg_d) + np.isnan(odeg_t)
+    odeg_d[nan_map] = ideg_d[0] # safe polar coordinates to...
+    odeg_t[nan_map] = ideg_t[0] # ...use with the interpolator.
 
-    kx_degree = degree
-    ky_degree = degree if len(kaxis_t) >= degree else 1
+    
+    # The following loop is the old RectBivariateSpline-based
+    # implementation. If everything above this point remains
+    # unchanged, the block below should still work as expected.
+    # (I'm keeping it here for debug purposes, should be removed soon...)
+    ##kx_degree = degree
+    ##ky_degree = degree if len(kaxis_t) >= degree else 1
+    ##for idat, odat in zip(idata, odata):
+    ##    _inter = sp.interpolate.RectBivariateSpline (ideg_d, ideg_t, idat,
+    ##                                                 kx=kx_degree, ky=ky_degree)
+    ##    _tmp = _inter.ev(odeg_d.flat, odeg_t.flat)
+    ##    #_tmp[nan_map.flat.copy()] = fill
+    ##    _tmp2 = _tmp.reshape ([odeg_d.shape[0], odeg_t.shape[1]])
+    ##    odat[:,:] = _tmp2[:,:]
 
-    #print kx_degree, ky_degree
 
-    for idat, odat in zip(idata, _out):
-        #_in_masked = np.ma.masked_invalid (idat)
-        _inter = sp.interpolate.RectBivariateSpline (ideg_d, ideg_t, idat,
-                                                     kx=kx_degree, ky=ky_degree)
-        _tmp = _inter.ev(odeg_d_clean.flat, odeg_t_clean.flat)
+    # The following loop is the new, map_coordinates() implementation.
+    # For a full 3D interpolation version (slower), see deg2kz().
+    ocoord_index = [idata.dim[1].x2i(odeg_d), idata.dim[2].x2i(odeg_t)]
+    for idat, odat in zip(idata, odata):
+        spni.map_coordinates (idat, ocoord_index, output=odat,
+                              order=degree, mode='constant', cval=fill)
 
-        #print "shapes:", ideg_d.shape, ideg_t.shape, idat.shape
-        #_inter = spi.interp2d (ideg_d, ideg_t, idat)
-        #_tmp = _inter (odeg_d_clean.flat, odeg_t_clean.flat)
 
-        _tmp[nan_map.flat.copy()] = fill
-        _tmp2 = _tmp.reshape ([odeg_d.shape[0], odeg_t.shape[1]])
-        odat[:,:] = _tmp2[:,:]
+    # Clean up points that previously had NaN coordinates.
+    odata[:,nan_map] = fill
 
     
     if isinstance (idata, wave.Wave):
-        odata = _out.view(wave.Wave)
+        odata = odata.view(wave.Wave)
         odata.dim[1].lim = ik_d_lim
         odata.dim[2].lim = ik_t_lim
-    else:
-        odata = _out
     
     return odata
 
@@ -779,10 +785,10 @@ def deg2kz (*args, **kwargs):
     iex    = _param ('exbeam',   'x', idata.dim[2].range)
     Phi    = _param ('Phi',      'Phi', 4.352)
     V0     = _param ('V0',       'v0', 12.5)
-    fill   = _param ('fill',     'fill', np.nan)
+    fill   = _param ('fill',     'fill', idata.min())
     degree = _param ('degree',   'deg', 3)
     
-    _out = idata.copy()
+    odata = idata.copy()
 
     #
     # Some useful constants:
@@ -815,7 +821,8 @@ def deg2kz (*args, **kwargs):
 
     _rad   = lambda deg: deg * np.pi / 180.0
     _deg   = lambda rad: rad * 180.0 / np.pi
-    
+
+    # forward transformations (needed for boundary calculations)
     _dx2ky = lambda deg, hv:  np.sqrt( m2_hsq * (hv-Phi) ) * np.sin(_rad(deg))
     _dx2kz = lambda deg, hv:  np.sqrt( m2_hsq * ( 
                                                   (hv-Phi) * (1-np.sin(_rad(deg))**2) - V0 
@@ -827,15 +834,6 @@ def deg2kz (*args, **kwargs):
     ik_x_lim = (_dx2kz ( max(ideg[0], ideg[-1]), min(iex[0], iex[-1])),
                 _dx2kz ( 0,                      max(iex[0], iex[-1])) )
 
-    ##print "excitation energy limits:", iex[0], iex[-1]
-    ##print "angle limits:", ideg[0], ideg[-1]
-    ##print "some k values:", _dx2kz (ideg[0], iex[0]),  _dx2kz (ideg[-1], iex[0])
-    ##print "some k values:", _dx2kz (ideg[0], iex[-1]), _dx2kz (ideg[-1], iex[-1])
-    ##hv = iex[0]
-    ##deg = ideg[-1]
-    ##print "debug:", (hv-Phi) * (1-np.sin(_rad(deg))**2), m2_hsq *  ( (hv-Phi) * (1-np.sin(_rad(deg))**2) - V0 )
-    ##print "Axis limits:", ik_d_lim, ik_x_lim
-
     # rectangular, evenly-spaced grid in k coordinates;
     kaxis_d = np.linspace (start=ik_d_lim[0], stop=ik_d_lim[1], num=len(ideg))
     kaxis_x = np.linspace (start=ik_x_lim[0], stop=ik_x_lim[1], num=len(iex))
@@ -843,75 +841,41 @@ def deg2kz (*args, **kwargs):
     # for some funny reason, we need to invert det/exb order here...
     okx, okd = np.meshgrid(kaxis_x, kaxis_d)
 
-    ##print "Output k axes:", (kaxis_d[0], kaxis_d[-1], len(kaxis_d)), (kaxis_x[0], kaxis_x[-1], len(kaxis_x))
-
-    # Polar coordinates for the rectangular k-space grid.
-    # These will _not_ be rectangular, and they will not be on
-    # a grid. Basically, the following two code lines
-    # is where the magic happens:
-    # after we calculate the would-be polar coordinates
-    # of the target rectangular k-space grid, we'll use
-    # a fast spline interpolation to get data from the
-    # original polar-grid onto the new,
-    # k-space grid (represented as polar non-grid).
-    #
-    # Everything else is just house keeping. :-)
-    
-    #odeg = okd
-    #oex  = okx
+    # Reverse transformations: this is where the magic happens
+    # (see notes above). Everything else is just house keeping. :-)
     oex, odeg   = np.meshgrid (iex, ideg)
     oex  = V0 + hsq_2m*(okx**2 + okd**2)
     odeg = _deg( np.arcsin (np.sign(okd)*np.sqrt (hsq_2m * okd**2 / oex)) )
 
-    #print "Output excitation coordinates:"
-    #pprint.pprint (oex)
-
-    # Some of the coordinates above may end up as NaNs (depending
-    # on angle combination). As the interpolator will choke on NaN
-    # coordinates, we need to replace them by sane numbers before
-    # evaluation, and delete them again after evaluation.
-    nan_map = np.isnan(odeg) + np.isnan(oex)    # map of the NaN values
-    odeg_clean = odeg.copy()
-    oex_clean  = oex.copy()
-    odeg_clean[nan_map] = ideg[0] # safe polar non-grid to...
-    oex_clean[nan_map]  = iex[0]  # ...use with the interpolator.
-
+    # Some of the coordinates above may end up as NaNs. Filter them out
+    # before interpolation, and replace the points with 'fill' values later.
+    nan_map = np.isnan(odeg) + np.isnan(oex)
+    odeg[nan_map] = ideg[0]
+    oex[nan_map]  = iex[0]
+    
     ocoord_index = [idata.dim[1].x2i(odeg), idata.dim[2].x2i(oex)]
 
-    print "output detector tilt:", odeg.shape
-    pprint.pprint (odeg)
-    pprint.pprint (idata.dim[1].x2i(odeg))
+    #
+    # Here's another version, commented out. It has the advantage of being
+    # easier to read and calculates all points in one single map_coordinates
+    # call. However it's slower, it unesessarily interpolates in the 0-th dim.
+    #
+    ##ocoord_index = np.broadcast_arrays(np.arange(idata.dim[0].size)[:,None,None],
+    ##                                   idata.dim[1].x2i(odeg)[None,:,:],
+    ##                                   idata.dim[2].x2i(oex)[None,:,:])
+    ##odata = spni.map_coordinates (idata, ocoord_index, mode='constant', cval=fill)
 
-    print "output excitation energy:", oex.shape
-    pprint.pprint (oex)
-    pprint.pprint (idata.dim[2].x2i(oex))
+    for idat, odat in zip(idata, odata):
+        spni.map_coordinates (idat, ocoord_index, output=odat,
+                              order=degree, mode='constant', cval=fill)
 
-    #return odeg, oex
-
-    #print "output grid:"
-    #pprint.pprint (ocoord_index)
-
-    for idat, odat in zip(idata, _out):
-        #_inter = sp.interpolate.RectBivariateSpline (ideg, iex, idat,
-        #                                            kx=degree, ky=degree)
-        #_tmp = _inter.ev(odeg_clean.flat, oex_clean.flat)
-        #_tmp[nan_map.flat.copy()] = fill
-        #_tmp2 = _tmp.reshape ([odeg.shape[0], oex.shape[1]])
-
-        #print idat.shape, icoord_index.shape
-        
-        _tmp2 = spni.map_coordinates (idat, ocoord_index, mode='constant', cval=fill)
-        _tmp2[nan_map] = fill
-
-        odat[:,:] = _tmp2[:,:]
-
+    # erase values at coordinates that were originally NaNs
+    odata[:,nan_map] = fill
 
     if isinstance (idata, wave.Wave):
-        odata = _out.view(wave.Wave)
+        odata = odata.view(wave.Wave)
         odata.dim[1].lim = ik_d_lim
         odata.dim[2].lim = ik_x_lim
-    else:
-        odata = _out
     
     return odata
 
