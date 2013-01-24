@@ -675,14 +675,15 @@ def deg2kz (*args, **kwargs):
       (i.e. beam energy E=hv of the excitation beam).
       Default is 'edx'.
       
-    - `energy, e`:   Values to go along with the energy axis.
+    - `energy, e`:   Values to go along with the (kinetic or binding)
+      energy axis.
     
     - `detector, d`: Values for the detector axis.
     
     - `exbeam, x`:   Values for the excitation energy axis.
     
     - `Phi`:         The work function defined as
-      *E_hv = E_F - Phi = E_kin - |E_bind| - Phi*.
+      *E_hv = E_final - Phi = E_kin - |E_bind| - Phi*.
       This is usually a material specific constant, in most
       ARPES applications depending on the measurement device.
       Defaults to Phi=4.352(1) eV, which is ok for a
@@ -696,8 +697,58 @@ def deg2kz (*args, **kwargs):
     - `fill`:        Value to fill invalid data points. Defaults to min(data).
 
 
-    Notes on implementation
-    =======================
+    Notes on energy dependence for *polar* -> *kz* transformations
+    ==============================================================
+    The transformation *polar* -> *kz* depends strongy on the excitation
+    energy, as follows:
+    
+       . *kx* transformation (i.e. detector angle transformation)
+         depend on the kinetic energy of the electrons, defined
+         as *E_kin = E_beam - |E_bind| - Phi*, where
+         *E_beam* is the energy of the excitation beam, *Phi* is
+         the work function and *E_bind* is the binding energy
+         within the solid, usually related to the Fermi level.
+         (For ARPES, this is energy is negative.)
+         
+       . Additionally, *kz* transformations depend on the excitation
+         energy directly via... (here comes V0 etc. need some more
+         reading.)
+
+    The input wave, usually, will have two energy axes: the kinetic
+    energy axis and the excitation energy axis. The kinetic energy
+    axis is usually wrong for all but one single slice, as all
+    scans in a *kz* series are performed at different excitation
+    energies, and thus their electrons have different kinetic
+    energy ranges. The "kinetic energy axis" therefore is interpreted
+    more like a "renormalized binding energy". *deg2kz()* makes
+    use of it in the following fashion:
+    
+      a) to determine energy steps from one kx*kz slice to the next.
+         Hereby the energy is treated as "kinetic", i.e. stronger
+         bound states below E_F are expected to receive _smaller_ 
+         energies. Note that this is in contrast some binding
+         energy definitions of ARPES, but consistent with energy
+         definitions where Inverse PES or a combination of IPES and
+         ARPES is employed.
+
+      b) to determine the offset between the excitation energy
+         specified by the *z* axis and the kinetic energy axis.
+         This offset is calculated once, for the first wave,
+         and then retained for the rest of the slices.
+
+    In other words, energy determination for the i-th
+    ARPES slice (i.e. data set measured as a *E_kin* x *detector_angle*
+    image) is performed as follows:
+    
+      1) The offset *eoffs* = *E_beam[0]* - *max(E_kin)* is calculated
+         once, for the 0-th  ARPES slice.
+
+      2) For all subsequent slices i, *max(E_kin)* = *E_beam[i]* - *offs*
+         is used.
+    
+
+    Notes on coordinate transformation, also valid for *deg2ky()*
+    =============================================================
     
           Conversion from polar coordinates to k-space is performed from the
           input data, which usually lies on a rectangular, regularly spaced
