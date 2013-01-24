@@ -487,22 +487,23 @@ def deg2ky (*args, **kwargs):
       Wave data. If data is an ndarray, then 'e', 'd' and 't'
       parameters are mandatory.
       
-    - `Ekin`:         The maximum kinetic energy
-      (*E_beam - E_bind - work_function*,
-      same as *E_f - work_function*). For a Scienta R4000 analyzer
-      it is usually E_beam - 4.352 eV.
-      This is a required parameter!
+    - `eoffs`: Offset to be added to the specified energy axis.
+      Typically, if the energy axis is specified with respect to
+      EF=0 (Fermi level), then *eoffs* is the value of the Fermi 
+      level.
       
     - `axes`:         Combination of the letters 'e', 'd' and 't'
       describing the current axes layout
       in terms of (e)nergy, (d)etector or (t)ilt.
       Default is 'edt'.
       
-    - `energy, e`:    Values to go along with the energy axis.
+    - `energy`, `e`: Values to go along with the energy axis.
+      If *eoffs* is also specified, it will be added to the
+      values of this parameter.
     
-    - `detector, d`:  Values for the detector axis.
+    - `detector`, `d`: Values for the detector axis.
     
-    - `tilt, t`:      Values for the tilt axis.
+    - `tilt`, `t`: Values for the tilt axis.
     
     - `degree`:       The spline degree to use for interpolation.
       Default is 3.
@@ -521,7 +522,6 @@ def deg2ky (*args, **kwargs):
     #  . apply corrections (offsets, and possibly increments)
     #  . ...
 
-
     # parameter helpers
     _param = lambda k0, k1, d: \
       kwargs[k0] if kwargs.has_key(k0) \
@@ -538,82 +538,84 @@ def deg2ky (*args, **kwargs):
     E      = _param ('energy',   'e', idata.dim[0].range)
     ideg_d = _param ('detector', 'd', idata.dim[1].range)
     ideg_t = _param ('tilt',     't', idata.dim[2].range)
-    hv     = _param ('hv',       'hv', None)
+    eoffs  = _param ('eoffs',    'Ef', 0.0)
     fill   = _param ('fill',     'fill', idata.min())
     degree = _param ('degree',   'deg', 3)
     Phi    = _param ('Phi',      'phi', 4.3523)
+
+    print "Preparing grid... ",
+    
     odata  = idata.copy()
 
+    # Energy offset -- usually the value of the Fermi level,
+    # if E is specified with respect to the Fermi level Ef.
+    # From here, the E axis will show use absolute energies
+    # (without the work function Phi)
+    E += eoffs
+    
     # This is the maximum kinetic energy available *in* *the* *data*
     # (which is usually larger than the Fermi level :-) )
-    if hv is None:
-        Ekin_max = E.max()
-        hv = Ekin_max + Phi
-    else:
-        Ekin_max = hv - Phi
+    Ekin_max = E.max()
 
     # some constants (see deg2kz() for details)
     hsq_2m = 3.80998194907763662131527 # hbar^2 / 2me
     m2_hsq = 0.26246843511741342307750 # 2me / hbar^2
     sqfac  = 0.51231673320067676965494 # sqrt ( 2m / hbar^2)
-
-    #c     = sqfac * math.sqrt(hv)
     
     _d2k = lambda deg, Ekin:  sqfac * np.sqrt(Ekin_max)*np.sin(deg*np.pi/180.0)
 
     # axes limits of the k-space data
     ik_d_lim = _d2k (np.array([ideg_d[0], ideg_d[-1]]), Ekin_max)
     ik_t_lim = _d2k (np.array([ideg_t[0], ideg_t[-1]]), Ekin_max)
+    if isinstance (idata, wave.Wave):
+        odata.dim[1].lim = ik_d_lim
+        odata.dim[2].lim = ik_t_lim
+        
 
-    # rectangular, evenly-spaced grid in k coordinates;
-    # for some funny reason, we need to invert det/tilt order here...
-    okt, okd = np.meshgrid(np.linspace (start=ik_t_lim[0], stop=ik_t_lim[1], num=len(ideg_t)),
-                           np.linspace (start=ik_d_lim[0], stop=ik_d_lim[1], num=len(ideg_d)))
+    # rectangular, evenly-spaced grid in k coordinates
+    oe, okd, okt = np.broadcast_arrays (E[:,None,None],
+                                        np.linspace (start = ik_d_lim[0],
+                                                     stop  = ik_d_lim[1],
+                                                     num   = len(ideg_d))[None,:,None],
+                                        np.linspace (start = ik_t_lim[0], 
+                                                     stop  = ik_t_lim[1],
+                                                     num   = len(ideg_t))[None,None,:])
 
+
+    print "done."
+
+    print "Calculating reverse coordinates... ",
+    log.info ("Calculating reverse coordinates")
+    
     # Reverse transformations: this is where the magic happens
     # (see notes above). Everything else is just house keeping. :-)
-    odeg_d = np.arcsin (okd / (sqfac * np.sqrt(Ekin_max) )) * 180.0/np.pi
-    odeg_t = np.arcsin (okt / (c*np.cos(np.arcsin(okd/ (sqfac*np.sqrt(Ekin_max)) ))) ) * 180.0/np.pi
+    odeg_d = np.arcsin (okd / (sqfac*np.sqrt(oe)) )  # !!! here, this is still in rad
+    odeg_t = np.arcsin (okt / (sqfac*np.sqrt(oe)*np.cos(odeg_d )) ) * 180.0/np.pi # deg
+    odeg_d *= (180.0 / 3.1415926535)  # conversion rad->deg
 
     # Some of the coordinates above may end up as NaNs and choke the
     # interpolator. Map the positions and clean-up the data later.
     nan_map = np.isnan(odeg_d) + np.isnan(odeg_t)
     odeg_d[nan_map] = ideg_d[0] # safe polar coordinates to...
     odeg_t[nan_map] = ideg_t[0] # ...use with the interpolator.
+    print "done."
 
     
-    # The following loop is the old RectBivariateSpline-based
-    # implementation. If everything above this point remains
-    # unchanged, the block below should still work as expected.
-    # (I'm keeping it here for debug purposes, should be removed soon...)
-    ##kx_degree = degree
-    ##ky_degree = degree if len(kaxis_t) >= degree else 1
-    ##for idat, odat in zip(idata, odata):
-    ##    _inter = sp.interpolate.RectBivariateSpline (ideg_d, ideg_t, idat,
-    ##                                                 kx=kx_degree, ky=ky_degree)
-    ##    _tmp = _inter.ev(odeg_d.flat, odeg_t.flat)
-    ##    #_tmp[nan_map.flat.copy()] = fill
-    ##    _tmp2 = _tmp.reshape ([odeg_d.shape[0], odeg_t.shape[1]])
-    ##    odat[:,:] = _tmp2[:,:]
+    print "Interpolating data... ",
+    log.info ("Interpolating")
+    
+    # map_coordinates() takes index coordinates.
+    ocoord_index = np.broadcast_arrays (np.arange(idata.dim[0].size)[:,None,None],
+                                        idata.dim[1].x2i(odeg_d),
+                                        idata.dim[2].x2i(odeg_t))
+    spni.map_coordinates (idata, ocoord_index, output=odata.view(np.ndarray),
+                          order=degree, mode='constant', cval=fill)
 
-
-    # The following loop is the new, map_coordinates() implementation.
-    # For a full 3D interpolation version (slower), see deg2kz().
-    ocoord_index = [idata.dim[1].x2i(odeg_d), idata.dim[2].x2i(odeg_t)]
-    for idat, odat in zip(idata, odata):
-        spni.map_coordinates (idat, ocoord_index, output=odat,
-                              order=degree, mode='constant', cval=fill)
-
-
+    print "done."
+    
     # Clean up points that previously had NaN coordinates.
-    odata[:,nan_map] = fill
+    odata[nan_map] = fill
 
-    
-    if isinstance (idata, wave.Wave):
-        odata = odata.view(wave.Wave)
-        odata.dim[1].lim = ik_d_lim
-        odata.dim[2].lim = ik_t_lim
-    
     return odata
 
 

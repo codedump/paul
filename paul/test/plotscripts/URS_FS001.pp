@@ -66,7 +66,7 @@ def populate (*args, **kwargs):
                             ],
                   }
     cmap = matplotlib.colors.LinearSegmentedColormap ('URS-BZ', cmap_nodes)
-    ax.imshow (wav, extent=wav.imlim, interpolation='none', cmap=cmap)
+    ax.imshow (wav[0], extent=wav[0].imlim, interpolation='none', cmap=cmap)
 
     decorate (*args, axes=ax, wav=wav)
 
