@@ -570,7 +570,7 @@ def deg2ky (*args, **kwargs):
     if isinstance (idata, wave.Wave):
         odata.dim[1].lim = ik_d_lim
         odata.dim[2].lim = ik_t_lim
-        
+    
 
     # rectangular, evenly-spaced grid in k coordinates
     oe, okd, okt = np.broadcast_arrays (E[:,None,None],
@@ -638,7 +638,7 @@ def deg2ky_single (wav, **kwargs):
     '''
     if kwargs.has_key('axes'):
         kwargs['axes'] += "t"
-    return deg2ky (wave.dstack([wav, wav]), **kwargs).sum(2)
+    return deg2ky (wave.dstack([wav, wav, wav]), **kwargs)[0]
 
 
 def deg2kz (*args, **kwargs):
