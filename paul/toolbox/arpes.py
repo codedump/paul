@@ -881,64 +881,100 @@ def deg2kz (*args, **kwargs):
     _dx2ky = lambda deg, ekin:  np.sin(_rad(deg)) * np.sqrt( m2_hsq *  ekin )
     _dx2kz = lambda deg, ekin:                      np.sqrt( m2_hsq * (ekin*(1-np.sin(_rad(deg))**2) + V0 ) )
 
-    print "Preparing grid...",
+    print "Preparing grid... ",
+    log.info ("Preparing grid")
 
-    # axes limits of the k-space data and the
-    # rectangular, evenly-spaced grid in k coordinates
-    ik_d_lim = tuple( _dx2ky (np.array([ideg[0], ideg[-1]]), max(iex)-Phi) )
-    
-    ik_x_lim = ( _dx2kz ( max(ideg[0], ideg[-1]), min(iex[0], iex[-1])-Phi),
-                 _dx2kz ( 0,                      max(iex[0], iex[-1])-Phi))
+    # Basically, the kinetic energy scale (one per slice) was lost
+    # when the 3D volume was built: in the volume, the Ekin-axis
+    # contains only kinetic energy of _one_ specific slice.
+    # We assume that it is the kinetic energy of the first slice
+    # (i.e. the one measured at excitation energy iex[0]), 
+    # and that all subsequent slices have a kinetic energy scale
+    # which is merely shifted by iex[i]-iex[0].
+    # On this basis, we rebuild the kinetic energies of all slices
+    # in a (E_kin * E_ex) 2D plane:
+    Ekin_plane = np.vstack([E+offs for offs in [ x-iex[0] for x in iex ] ]).swapaxes(0,1)
+
+    # axes limits of the k-space data and the rectangular, evenly-spaced grid in k space
+    ik_d_lim = tuple( _dx2ky (np.array([ideg[0], ideg[-1]]), Ekin_plane.max()) )
+    ik_x_lim = ( _dx2kz ( max(abs(ideg[0]), abs(ideg[-1])),  Ekin_plane.min()),
+                 _dx2kz ( 0,                                 Ekin_plane.max()) )
+    if isinstance (idata, wave.Wave):
+        odata.dim[1].lim = ik_d_lim
+        odata.dim[2].lim = ik_x_lim
+
     
     kaxis_d = np.linspace (start=ik_d_lim[0], stop=ik_d_lim[1], num=len(ideg))
     kaxis_x = np.linspace (start=ik_x_lim[0], stop=ik_x_lim[1], num=len(iex))
-    
-    # for some funny reason, we need to invert det/exb order here...
-    okx, okd = np.meshgrid(kaxis_x, kaxis_d)
+
+    # full output grid, k-space coordinates
+    oekin, okd, okx = np.broadcast_arrays (Ekin_plane[:,None,:],
+                                           kaxis_d[None,:,None],
+                                           kaxis_x[None,None,:])
     print "done."
     
-    print "Calculating reverse coordinates...",
-    # Reverse transformations: this is where the magic happens
-    # (see notes above). Everything else is just house keeping. :-)
-    oex, odeg   = np.meshgrid (iex, ideg)
-    oex  = hsq_2m*(okx**2 + okd**2) - V0 + Phi
-    odeg = _deg( np.arcsin (  np.sign(okd) * np.sqrt ( (okd**2) / ((okd**2 + okx**2) - m2_hsq*V0))   ) )
+    print "Calculating reverse coordinates... ",
+    log.info ("Calculating reverse coordinates")
+
+    #
+    # Reverse transformations: this is where the magic happens.
+    #
+    
+    # Something's wrong here. The formualae, as they stand,
+    # give correct results for one specific  kpara*kperp  plane
+    # (which one?). However, the result seems to be independent
+    # on the binding energy axis of the 3D data block
+    # (i.e. _every_ excitation energy is treated the same).
+    # This cannot be, as the 'deg' axis should clearly be dependent
+    # on the binding energy. Right?...
+
+    # oex:  these are excitation-energy coordinates of the kz axis
+    # odeg: these are degree coordinates of the ky axis
+    
+    oex = hsq_2m*(okx**2 + okd**2) - V0      + Phi
+    ##    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^      ^^^^^
+    ##    This is the E_kin part,          This is needed to 
+    ##    mostly only related to the       make a beam energy
+    ##    excitation energy (right?)       out of it (i.e. renormalize
+    ##                                     to vacuum level).
+    
+    odeg  = _deg( np.arcsin (  np.sign(okd) * np.sqrt ( (okd**2) / ((okd**2 + okx**2) - m2_hsq*V0))   ) )
+
+    ##print "reverse coordinate shapes:"
+    ##print oex.shape
+    ##print odeg.shape
+    ##pprint.pprint (odeg)
+    ##return None
 
     # Some of the coordinates above may end up as NaNs. Filter them out
     # before interpolation, and replace the points with 'fill' values later.
     nan_map = np.isnan(odeg) + np.isnan(oex)
     odeg[nan_map] = ideg[0]
     oex[nan_map]  = iex[0]
-
     print "done."
-
-    print "Interpolating...",
     
-    ocoord_index = [idata.dim[1].x2i(odeg), idata.dim[2].x2i(oex)]
+    print "Interpolating... ",
+    log.info ("Interpolating")
 
-    #
-    # Here's another version, commented out. It has the advantage of being
-    # easier to read and calculates all points in one single map_coordinates
-    # call. However it's slower, it unesessarily interpolates in the 0-th dim.
-    #
-    ##ocoord_index = np.broadcast_arrays(np.arange(idata.dim[0].size)[:,None,None],
-    ##                                   idata.dim[1].x2i(odeg)[None,:,:],
-    ##                                   idata.dim[2].x2i(oex)[None,:,:])
-    ##odata = spni.map_coordinates (idata, ocoord_index, mode='constant', cval=fill)
+    # map_coordinates() uses index coordinates, need to transform here.
+    ocoord_index = np.broadcast_arrays(np.arange(idata.dim[0].size)[:,None,None],
+                                       idata.dim[1].x2i(odeg),
+                                       idata.dim[2].x2i(oex))
+    
+    spni.map_coordinates (idata, ocoord_index, output=odata,
+                          order=degree, mode='constant', cval=fill)
 
-    for idat, odat in zip(idata, odata):
-        spni.map_coordinates (idat, ocoord_index, output=odat,
-                              order=degree, mode='constant', cval=fill)
+    # The old, 2D version. OBSOLETE, but it should work, even
+    # though slightly inaccurate in the Ekin dimension.
+    ###ocoord_index = [idata.dim[1].x2i(odeg[0]), idata.dim[2].x2i(oex[0])]
+    ###for idat, odat in zip(idata, odata):
+    ###    spni.map_coordinates (idat, ocoord_index, output=odat,
+    ###                          order=degree, mode='constant', cval=fill)
 
     # erase values at coordinates that were originally NaNs
     odata[:,nan_map] = fill
 
     print "done."
-
-    if isinstance (idata, wave.Wave):
-        odata = odata.view(wave.Wave)
-        odata.dim[1].lim = ik_d_lim
-        odata.dim[2].lim = ik_x_lim
     
     return odata
 
