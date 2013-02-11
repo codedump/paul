@@ -541,7 +541,7 @@ def deg2ky (*args, **kwargs):
     eoffs  = _param ('eoffs',    'Ef', 0.0)
     fill   = _param ('fill',     'fill', idata.min())
     degree = _param ('degree',   'deg', 3)
-    Phi    = _param ('Phi',      'phi', 4.3523)
+    #Phi    = _param ('Phi',      'phi', 4.3523)
 
     print "Preparing grid... ",
     
@@ -836,10 +836,11 @@ def deg2kz (*args, **kwargs):
     E      = _param ('energy',   'e', idata.dim[0].range)
     ideg   = _param ('detector', 'd', idata.dim[1].range)
     iex    = _param ('exbeam',   'x', idata.dim[2].range)
-    Phi    = _param ('Phi',      'Phi', 4.352)
     V0     = _param ('V0',       'v0', 12.5)
     fill   = _param ('fill',     'fill', idata.min())
     degree = _param ('degree',   'deg', 3)
+
+    #Phi    = _param ('Phi',      'Phi', 4.352)  ## obsolete -- we work with kinetic energies,                                                  ## we don't care about the work function
     
     odata = idata.copy()
 
@@ -876,11 +877,10 @@ def deg2kz (*args, **kwargs):
     _deg   = lambda rad: rad * 180.0 / np.pi
 
     # forward transformations (needed for boundary calculations)
-    _dx2ky = lambda deg, hv:  np.sqrt( m2_hsq * (hv-Phi) ) * np.sin(_rad(deg))
-    _dx2kz = lambda deg, hv:  np.sqrt( m2_hsq * ( 
-                                                  (hv-Phi) * (1-np.sin(_rad(deg))**2) - V0 
-                                                )
-                                     )
+    _dx2ky = lambda deg, ekin:  np.sqrt( m2_hsq *  ekin ) * np.sin(_rad(deg))
+    _dx2kz = lambda deg, ekin:  np.sqrt( m2_hsq * (ekin * (1-np.sin(_rad(deg))**2) - V0 ) )
+
+    print "Preparing grid...",
 
     # axes limits of the k-space data
     ik_d_lim = tuple( _dx2ky (np.array([ideg[0], ideg[-1]]), max(iex)))
@@ -890,21 +890,27 @@ def deg2kz (*args, **kwargs):
     # rectangular, evenly-spaced grid in k coordinates;
     kaxis_d = np.linspace (start=ik_d_lim[0], stop=ik_d_lim[1], num=len(ideg))
     kaxis_x = np.linspace (start=ik_x_lim[0], stop=ik_x_lim[1], num=len(iex))
-
+    
     # for some funny reason, we need to invert det/exb order here...
     okx, okd = np.meshgrid(kaxis_x, kaxis_d)
-
+    print "done."
+    
+    print "Calculating reverse coordinates...",
     # Reverse transformations: this is where the magic happens
     # (see notes above). Everything else is just house keeping. :-)
     oex, odeg   = np.meshgrid (iex, ideg)
     oex  = V0 + hsq_2m*(okx**2 + okd**2)
-    odeg = _deg( np.arcsin (np.sign(okd)*np.sqrt (hsq_2m * okd**2 / oex)) )
+    odeg = _deg( np.arcsin (  np.sign(okd) * np.sqrt ( (okd**2) / ((okd**2 + okx**2) + m2_hsq*V0))   ) )
 
     # Some of the coordinates above may end up as NaNs. Filter them out
     # before interpolation, and replace the points with 'fill' values later.
     nan_map = np.isnan(odeg) + np.isnan(oex)
     odeg[nan_map] = ideg[0]
     oex[nan_map]  = iex[0]
+
+    print "done."
+
+    print "Interpolating...",
     
     ocoord_index = [idata.dim[1].x2i(odeg), idata.dim[2].x2i(oex)]
 
@@ -924,6 +930,8 @@ def deg2kz (*args, **kwargs):
 
     # erase values at coordinates that were originally NaNs
     odata[:,nan_map] = fill
+
+    print "done."
 
     if isinstance (idata, wave.Wave):
         odata = odata.view(wave.Wave)
