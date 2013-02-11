@@ -840,7 +840,8 @@ def deg2kz (*args, **kwargs):
     fill   = _param ('fill',     'fill', idata.min())
     degree = _param ('degree',   'deg', 3)
 
-    #Phi    = _param ('Phi',      'Phi', 4.352)  ## obsolete -- we work with kinetic energies,                                                  ## we don't care about the work function
+    Phi    = _param ('Phi',      'Phi', 4.352)  ## obsolete -- we work with kinetic energies,
+                                                ## we don't care about the work function
     
     odata = idata.copy()
 
@@ -877,17 +878,18 @@ def deg2kz (*args, **kwargs):
     _deg   = lambda rad: rad * 180.0 / np.pi
 
     # forward transformations (needed for boundary calculations)
-    _dx2ky = lambda deg, ekin:  np.sqrt( m2_hsq *  ekin ) * np.sin(_rad(deg))
-    _dx2kz = lambda deg, ekin:  np.sqrt( m2_hsq * (ekin * (1-np.sin(_rad(deg))**2) - V0 ) )
+    _dx2ky = lambda deg, ekin:  np.sin(_rad(deg)) * np.sqrt( m2_hsq *  ekin )
+    _dx2kz = lambda deg, ekin:                      np.sqrt( m2_hsq * (ekin*(1-np.sin(_rad(deg))**2) + V0 ) )
 
     print "Preparing grid...",
 
-    # axes limits of the k-space data
-    ik_d_lim = tuple( _dx2ky (np.array([ideg[0], ideg[-1]]), max(iex)))
-    ik_x_lim = (_dx2kz ( max(ideg[0], ideg[-1]), min(iex[0], iex[-1])),
-                _dx2kz ( 0,                      max(iex[0], iex[-1])) )
-
-    # rectangular, evenly-spaced grid in k coordinates;
+    # axes limits of the k-space data and the
+    # rectangular, evenly-spaced grid in k coordinates
+    ik_d_lim = tuple( _dx2ky (np.array([ideg[0], ideg[-1]]), max(iex)-Phi) )
+    
+    ik_x_lim = ( _dx2kz ( max(ideg[0], ideg[-1]), min(iex[0], iex[-1])-Phi),
+                 _dx2kz ( 0,                      max(iex[0], iex[-1])-Phi))
+    
     kaxis_d = np.linspace (start=ik_d_lim[0], stop=ik_d_lim[1], num=len(ideg))
     kaxis_x = np.linspace (start=ik_x_lim[0], stop=ik_x_lim[1], num=len(iex))
     
@@ -899,8 +901,8 @@ def deg2kz (*args, **kwargs):
     # Reverse transformations: this is where the magic happens
     # (see notes above). Everything else is just house keeping. :-)
     oex, odeg   = np.meshgrid (iex, ideg)
-    oex  = V0 + hsq_2m*(okx**2 + okd**2)
-    odeg = _deg( np.arcsin (  np.sign(okd) * np.sqrt ( (okd**2) / ((okd**2 + okx**2) + m2_hsq*V0))   ) )
+    oex  = hsq_2m*(okx**2 + okd**2) - V0 + Phi
+    odeg = _deg( np.arcsin (  np.sign(okd) * np.sqrt ( (okd**2) / ((okd**2 + okx**2) - m2_hsq*V0))   ) )
 
     # Some of the coordinates above may end up as NaNs. Filter them out
     # before interpolation, and replace the points with 'fill' values later.
