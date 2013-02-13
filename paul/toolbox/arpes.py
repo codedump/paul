@@ -832,17 +832,45 @@ def deg2kz (*args, **kwargs):
     # rotate data into 'edt' axis configuration
     axes = kwargs.setdefault('axes', 'edt')
     idata = wave.transpose(args[0], (axes.find('e'), axes.find('d'), axes.find('x')))
+
+    # Some conveneince parameters for on-the-fly adjustments to the data scale.
+
+    # Phi is the work function. Turns out that calculations are not dependent
+    # on Phi (they only depend on the inner potential, V0). However, Phi
+    # is used with e_offs == 'auto' for automatic energy axis adjustment.
+    Phi    = _param ('Phi',             'phi',   4.352)
+
+    # Axis adjustments. They will have an impact on the transformation,
+    # i.e. not correctly adjusted axes will give resuln in distorted data.
+    e_offs = _param ('energy_offset',   'eoffs', 'auto')
+    x_offs = _param ('exbeam_offset',   'xoffs', 0)
+    d_offs = _param ('detector_offset', 'doffs', 0)
+
+    # apply user-specified scale offsets (convenience only)
+    idata.dim[1].offset += d_offs
+    idata.dim[2].offset += x_offs
     
     E      = _param ('energy',   'e', idata.dim[0].range)
     ideg   = _param ('detector', 'd', idata.dim[1].range)
     iex    = _param ('exbeam',   'x', idata.dim[2].range)
+    
     V0     = _param ('V0',       'v0', 12.5)
     fill   = _param ('fill',     'fill', idata.min())
     degree = _param ('degree',   'deg', 3)
+            
+    # Energy axis needs some special treatment. It is supposed to
+    # be E_initial, i.e. the energy of the electrons inside the solid.
+    # If 'auto' offset is specified, then we will renormalize it to
+    if e_offs == 'auto':
+        if np.sign(E[0]) == np.sign(E[-1]):
+            e_offs = -(iex[0]-Phi)
+        else:
+            e_offs = 0
 
-    Phi    = _param ('Phi',      'Phi', 4.352)  ## obsolete -- we work with kinetic energies,
-                                                ## we don't care about the work function
+    idata.dim[0].offset += e_offs
+    E += e_offs
     
+        
     odata = idata.copy()
 
     #
@@ -884,21 +912,13 @@ def deg2kz (*args, **kwargs):
     print "Preparing grid... ",
     log.info ("Preparing grid")
 
-    # Basically, the kinetic energy scale (one per slice) was lost
-    # when the 3D volume was built: in the volume, the Ekin-axis
-    # contains only kinetic energy of _one_ specific slice.
-    # We assume that it is the kinetic energy of the first slice
-    # (i.e. the one measured at excitation energy iex[0]), 
-    # and that all subsequent slices have a kinetic energy scale
-    # which is merely shifted by iex[i]-iex[0].
-    # On this basis, we rebuild the kinetic energies of all slices
-    # in a (E_kin * E_ex) 2D plane:
-    Ekin_plane = np.vstack([E+offs for offs in [ x-iex[0] for x in iex ] ]).swapaxes(0,1)
+    Ekin_min = min(E)+min(iex) - Phi
+    Ekin_max = max(E)+max(iex) - Phi
 
     # axes limits of the k-space data and the rectangular, evenly-spaced grid in k space
-    ik_d_lim = tuple( _dx2ky (np.array([ideg[0], ideg[-1]]), Ekin_plane.max()) )
-    ik_x_lim = ( _dx2kz ( max(abs(ideg[0]), abs(ideg[-1])),  Ekin_plane.min()),
-                 _dx2kz ( 0,                                 Ekin_plane.max()) )
+    ik_d_lim = tuple( _dx2ky (np.array([ideg[0], ideg[-1]]), Ekin_max) )
+    ik_x_lim = ( _dx2kz ( max(abs(ideg[0]), abs(ideg[-1])),  Ekin_min),
+                 _dx2kz ( 0,                                 Ekin_max) )
     if isinstance (idata, wave.Wave):
         odata.dim[1].lim = ik_d_lim
         odata.dim[2].lim = ik_x_lim
@@ -908,7 +928,7 @@ def deg2kz (*args, **kwargs):
     kaxis_x = np.linspace (start=ik_x_lim[0], stop=ik_x_lim[1], num=len(iex))
 
     # full output grid, k-space coordinates
-    oekin, okd, okx = np.broadcast_arrays (Ekin_plane[:,None,:],
+    nd_Ei, okd, okx = np.broadcast_arrays (E[:,None,None],
                                            kaxis_d[None,:,None],
                                            kaxis_x[None,None,:])
     print "done."
@@ -916,35 +936,12 @@ def deg2kz (*args, **kwargs):
     print "Calculating reverse coordinates... ",
     log.info ("Calculating reverse coordinates")
 
-    #
     # Reverse transformations: this is where the magic happens.
-    #
-    
-    # Something's wrong here. The formualae, as they stand,
-    # give correct results for one specific  kpara*kperp  plane
-    # (which one?). However, the result seems to be independent
-    # on the binding energy axis of the 3D data block
-    # (i.e. _every_ excitation energy is treated the same).
-    # This cannot be, as the 'deg' axis should clearly be dependent
-    # on the binding energy. Right?...
 
-    # oex:  these are excitation-energy coordinates of the kz axis
-    # odeg: these are degree coordinates of the ky axis
-    
-    oex = hsq_2m*(okx**2 + okd**2) - V0      + Phi
-    ##    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^      ^^^^^
-    ##    This is the E_kin part,          This is needed to 
-    ##    mostly only related to the       make a beam energy
-    ##    excitation energy (right?)       out of it (i.e. renormalize
-    ##                                     to vacuum level).
-    
-    odeg  = _deg( np.arcsin (  np.sign(okd) * np.sqrt ( (okd**2) / ((okd**2 + okx**2) - m2_hsq*V0))   ) )
-
-    ##print "reverse coordinate shapes:"
-    ##print oex.shape
-    ##print odeg.shape
-    ##pprint.pprint (odeg)
-    ##return None
+    oex  = hsq_2m * (okx**2 + okd**2) - V0 - nd_Ei + Phi
+    odeg = _deg (np.arcsin (np.sign(okd) * 
+                            np.sqrt(hsq_2m*(okd**2) / (nd_Ei + oex - Phi))
+                 ) )
 
     # Some of the coordinates above may end up as NaNs. Filter them out
     # before interpolation, and replace the points with 'fill' values later.
@@ -957,11 +954,13 @@ def deg2kz (*args, **kwargs):
     log.info ("Interpolating")
 
     # map_coordinates() uses index coordinates, need to transform here.
+    # This is actually the _only_ spot in this function that depends
+    # on idata being a Wave() rather than an ndarray. Adjust here if needed...
     ocoord_index = np.broadcast_arrays(np.arange(idata.dim[0].size)[:,None,None],
                                        idata.dim[1].x2i(odeg),
                                        idata.dim[2].x2i(oex))
     
-    spni.map_coordinates (idata, ocoord_index, output=odata,
+    spni.map_coordinates (idata, ocoord_index, output=odata.view(np.ndarray),
                           order=degree, mode='constant', cval=fill)
 
     # The old, 2D version. OBSOLETE, but it should work, even
