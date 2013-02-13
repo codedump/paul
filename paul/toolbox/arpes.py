@@ -714,37 +714,34 @@ def deg2kz (*args, **kwargs):
          energy directly via... (here comes V0 etc. need some more
          reading.)
 
-    The input wave, usually, will have two energy axes: the kinetic
-    energy axis and the excitation energy axis. The kinetic energy
-    axis is usually wrong for all but one single slice, as all
-    scans in a *kz* series are performed at different excitation
-    energies, and thus their electrons have different kinetic
-    energy ranges. The "kinetic energy axis" therefore is interpreted
-    more like a "renormalized binding energy". *deg2kz()* makes
-    use of it in the following fashion:
+    The input wave usually will have two energy axes: the internal
+    energy axis and the excitation energy axis. The internal energy
+    axis (labeled E_internal, or E_i) should usually have it's zero
+    at the Fermi level, but this is not guaranteed. Rather, we
+    assume the axis to have some offset (typically *hv[0]*-*Phi*, where
+    hv[0] is the excitation energy of the fist slice, and *Phi* is the
+    work function).
+    The excitation energy represents the photon energy at which
+    each data slice was scanned.
+
+    Parameter 'e_offs' set on 'auto' will renormalize the energy
+    axis using a *Phi* = 4.352 meV (which should be correct for 
+    a Scienta R4000), and *hv[0]* of the first slice.
+    If this doesn't come out right, you have two options:
     
-      a) to determine energy steps from one kx*kz slice to the next.
-         Hereby the energy is treated as "kinetic", i.e. stronger
-         bound states below E_F are expected to receive _smaller_ 
-         energies. Note that this is in contrast some binding
-         energy definitions of ARPES, but consistent with energy
-         definitions where Inverse PES or a combination of IPES and
-         ARPES is employed.
-
-      b) to determine the offset between the excitation energy
-         specified by the *z* axis and the kinetic energy axis.
-         This offset is calculated once, for the first wave,
-         and then retained for the rest of the slices.
-
-    In other words, energy determination for the i-th
-    ARPES slice (i.e. data set measured as a *E_kin* x *detector_angle*
-    image) is performed as follows:
-    
-      1) The offset *eoffs* = *E_beam[0]* - *max(E_kin)* is calculated
-         once, for the 0-th  ARPES slice.
-
-      2) For all subsequent slices i, *max(E_kin)* = *E_beam[i]* - *offs*
-         is used.
+      1) Adjust energy axis normalization yourself,
+         after transformation is finished
+         
+      2) Specify a manual offset yourself. 'e_offs' = 0 will do.
+         (FIXME: Figure out whether you'd need to adjust *Phi*?...
+                 The transformation math is largegly unaffected
+                 by the *Phi* parameter, if V0 is set correctly.
+                 But the overall equation:
+                    E_initial + hv - Phi = E_kinetic
+                 must hold, same as:
+                    E_initial + hv - Phi + V0...
+         /FIXME.)
+        
     
 
     Notes on coordinate transformation, also valid for *deg2ky()*
