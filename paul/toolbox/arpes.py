@@ -687,10 +687,22 @@ def deg2kz (*args, **kwargs):
       This is usually a material specific constant, in most
       ARPES applications depending on the measurement device.
       Defaults to Phi=4.352(1) eV, which is ok for a
-      Scienta R4000 analyzer.
+      Scienta R4000 analyzer. It is only used for the energy
+      axis auto-scaling or for automatic V0 calculation if E0 was
+      specified. The transformation itself is independent on Phi.
       
-    - `v0`: The inner potential of the crystal V0 in eV, usually
-      somewhere between 8 and 15 eV. Defaults to 12.5 eV.
+    - `v0`: The inner potential of the crystal V0 in eV, being defined
+      as |E0| + Phi, i.e. sum of the bottom of the valence band used as
+      a final state and the work function. Usually somewhere between
+      8 and 15 eV. Defaults to 12.5 eV.
+
+    - `e0`: The bottom of the valence band without the work function
+      Phi (see above for the meaning of Phi).
+
+    - `m_rel`: Relative electron mass m_rel = m' / m_e, where m_e is the
+       mass of the electron in vacuum and m' the effective mass used
+       for the free electron final state esimation. Defaults to 1.0, which
+       is mostly a good choice.
       
     - `degree`: The spline degree to use for interpolation. Default is 3.
     
@@ -730,18 +742,9 @@ def deg2kz (*args, **kwargs):
     If this doesn't come out right, you have two options:
     
       1) Adjust energy axis normalization yourself,
-         after transformation is finished
+         after transformation is finished.
          
-      2) Specify a manual offset yourself. 'e_offs' = 0 will do.
-         (FIXME: Figure out whether you'd need to adjust *Phi*?...
-                 The transformation math is largegly unaffected
-                 by the *Phi* parameter, if V0 is set correctly.
-                 But the overall equation:
-                    E_initial + hv - Phi = E_kinetic
-                 must hold, same as:
-                    E_initial + hv - Phi + V0...
-         /FIXME.)
-        
+      2) Specify a manual offset yourself. 'e_offs' = None will do.
     
 
     Notes on coordinate transformation, also valid for *deg2ky()*
@@ -830,45 +833,43 @@ def deg2kz (*args, **kwargs):
     axes = kwargs.setdefault('axes', 'edt')
     idata = wave.transpose(args[0], (axes.find('e'), axes.find('d'), axes.find('x')))
 
-    # Some conveneince parameters for on-the-fly adjustments to the data scale.
-
-    # Phi is the work function. Turns out that calculations are not dependent
-    # on Phi (they only depend on the inner potential, V0). However, Phi
-    # is used with e_offs == 'auto' for automatic energy axis adjustment.
-    Phi    = _param ('Phi',             'phi',   4.352)
-
-    # Axis adjustments. They will have an impact on the transformation,
+    # Some conveneince parameters for on-the-fly adjustments to the
+    # data scale. They will have an impact on the transformation,
     # i.e. not correctly adjusted axes will give resuln in distorted data.
-    e_offs = _param ('energy_offset',   'eoffs', 'auto')
     x_offs = _param ('exbeam_offset',   'xoffs', 0)
     d_offs = _param ('detector_offset', 'doffs', 0)
-
-    # apply user-specified scale offsets (convenience only)
-    idata.dim[1].offset += d_offs
-    idata.dim[2].offset += x_offs
     
     E      = _param ('energy',   'e', idata.dim[0].range)
-    ideg   = _param ('detector', 'd', idata.dim[1].range)
-    iex    = _param ('exbeam',   'x', idata.dim[2].range)
-    
+    ideg   = _param ('detector', 'd', idata.dim[1].range + d_offs)
+    iex    = _param ('exbeam',   'x', idata.dim[2].range + x_offs)
+
     V0     = _param ('V0',       'v0', 12.5)
     fill   = _param ('fill',     'fill', idata.min())
     degree = _param ('degree',   'deg', 3)
-            
-    # Energy axis needs some special treatment. It is supposed to
-    # be E_initial, i.e. the energy of the electrons inside the solid.
-    # If 'auto' offset is specified, then we will renormalize it to
-    if e_offs == 'auto':
-        if np.sign(E[0]) == np.sign(E[-1]):
-            e_offs = -(iex[0]-Phi)
-        else:
-            e_offs = 0
 
-    idata.dim[0].offset += e_offs
-    E += e_offs
+    m_rel  = _param ('m_rel',   'mrel', 1.0)
     
-        
+    # The work function -- it is only used for cosmetic energy axis
+    # scaling (not related to the transformation) and for explicitly
+    # setting the V0 information from E0
+    Phi    = _param ('Phi',      'phi', 4.352)
+    E0     = _param ('E0',       'e0',  None)
+    if E0 is not None:
+        V0 = abs(E0) + abs(Phi)
+
+    # Some cosmetic parameters (i.e. energy axis adjustments).
+    # Work function -- used only for automatic axis adjustment.
+    # They will be applied to output data scaling only.
+    e_offs = _param ('energy_offset',   'eoffs', None)
+    if e_offs == 'auto':
+        e_offs = -iex[0] + Phi if np.sign(E[0]) == np.sign(E[-1]) else None
+
     odata = idata.copy()
+        
+    if e_offs is not None:
+        log.info ("Energy axis auto-offset: %f  eV." % e_offs)
+        print "Energy axis auto-offset:", e_offs, "eV."
+        odata.dim[0].lim = (E[0] + e_offs, E[-1] + e_offs)
 
     #
     # Some useful constants:
@@ -895,9 +896,9 @@ def deg2kz (*args, **kwargs):
     #
     # Useful constants in the transformation formulae:
     #
-    hsq_2m = 3.80998194907763662131527 # hbar^2 / 2me
-    m2_hsq = 0.26246843511741342307750 # 2me / hbar^2
-    sqfac  = 0.51231673320067676965494 # sqrt ( 2m / hbar^2)
+    hsq_2m = 3.80998194907763662131527 / m_rel             # hbar^2 / 2me
+    m2_hsq = 0.26246843511741342307750 * m_rel             # 2me / hbar^2
+    #sqfac  = 0.51231673320067676965494 * math.sqrt (m_rel) # sqrt ( 2m / hbar^2)
 
     _rad   = lambda deg: deg * np.pi / 180.0
     _deg   = lambda rad: rad * 180.0 / np.pi
@@ -909,8 +910,8 @@ def deg2kz (*args, **kwargs):
     print "Preparing grid... ",
     log.info ("Preparing grid")
 
-    Ekin_min = min(E)+min(iex) - Phi
-    Ekin_max = max(E)+max(iex) - Phi
+    Ekin_min = min(E)
+    Ekin_max = max(E)+max(iex)-min(iex)
 
     # axes limits of the k-space data and the rectangular, evenly-spaced grid in k space
     ik_d_lim = tuple( _dx2ky (np.array([ideg[0], ideg[-1]]), Ekin_max) )
@@ -924,20 +925,32 @@ def deg2kz (*args, **kwargs):
     kaxis_d = np.linspace (start=ik_d_lim[0], stop=ik_d_lim[1], num=len(ideg))
     kaxis_x = np.linspace (start=ik_x_lim[0], stop=ik_x_lim[1], num=len(iex))
 
-    # full output grid, k-space coordinates
-    nd_Ei, okd, okx = np.broadcast_arrays (E[:,None,None],
-                                           kaxis_d[None,:,None],
-                                           kaxis_x[None,None,:])
+    # Full output grid, k-space coordinates. E_data is the data energy
+    # scale, which amounts to:
+    #    E_data = E_kin - (iex - iex[0])
+    #
+    # So basically this holds:
+    #    E_initial = E_data - iex[0] + Phi
+    # 
+    E_data, okd, okx = np.broadcast_arrays (E[:,None,None],
+                                            kaxis_d[None,:,None],
+                                            kaxis_x[None,None,:])
     print "done."
     
     print "Calculating reverse coordinates... ",
     log.info ("Calculating reverse coordinates")
 
     # Reverse transformations: this is where the magic happens.
+    #
+    # Some hints:
+    #   - Energy of the electrons inside the solid,
+    #     referred to E_F=0:
+    #
+    #        E_initial = E_data - iex[0] + Phi
 
-    oex  = hsq_2m * (okx**2 + okd**2) - V0 - nd_Ei + Phi
+    oex  = hsq_2m * (okx**2 + okd**2) - V0 - E_data + iex[0]
     odeg = _deg (np.arcsin (np.sign(okd) * 
-                            np.sqrt(hsq_2m*(okd**2) / (nd_Ei + oex - Phi))
+                            np.sqrt(hsq_2m*(okd**2) / ((E_data - iex[0]) + oex ))
                  ) )
 
     # Some of the coordinates above may end up as NaNs. Filter them out
@@ -953,6 +966,8 @@ def deg2kz (*args, **kwargs):
     # map_coordinates() uses index coordinates, need to transform here.
     # This is actually the _only_ spot in this function that depends
     # on idata being a Wave() rather than an ndarray. Adjust here if needed...
+    idata.dim[1].offset += d_offs # ugly... the only reason we need to 
+    idata.dim[2].offset += x_offs # ajust offsets is because of the transformation...
     ocoord_index = np.broadcast_arrays(np.arange(idata.dim[0].size)[:,None,None],
                                        idata.dim[1].x2i(odeg),
                                        idata.dim[2].x2i(oex))
