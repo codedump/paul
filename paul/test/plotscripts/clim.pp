@@ -26,8 +26,12 @@ def populate (*args, **kwargs):
 def decorate (*args, **kwargs):
     ax = kwargs['axes'].axes
     w = kwargs['wav']
+
+    col_min = w.infv('FDD', 'V_min', default=np.nanmin(w))
+    col_max = w.infv('FDD', 'V_max', default=np.nanmax(w))
     
-    clim = (w.min()+(w.max()-w.min())*0.00, w.min()+(w.max()-w.min())*0.95)
+    clim = (col_min+(col_max-col_min)*0.00,
+            col_min+(col_max-col_min)*0.95)
 
     ax.images[0].set_clim (clim)
     ax.set_ylim (w.dim[0].lim)

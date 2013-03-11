@@ -199,10 +199,72 @@ def hybridize(wlist, V=0.0, count=1):
 # Data manipulation helpers (normalization, coordinate transformation etc)
 #
 
+def norm_by_fdd (data, axis=0, energy=None, Ef=0.0, kT=None, T=None, dE=None):
+    '''
+    Normalizes data by the Fermi Dirac Distribution with Fermi level
+    spefied by `ef` and broadening specified by `kt` (in eV) or
+    `T` (in Kelvin). 
+
+    Parameters:
+      - `data`: the 2D ARPES data Wave.
+      
+      - `energy`: alternative energy axis specification (if specified,
+        intrinsic scaling of *data* is ignored)
+
+      - `EF`: the Fermi level in eV, in intrinsic axis
+        coordinates (default is 0.0)
+
+      - `kT`: the effective temperature broadening parameter in eV
+
+      - `T`: alternative broadening specification: real temperature
+        in Kelvin and experimental resolution dE. It can be shown
+        that the resulting function (convolution of a Fermi-Dirac
+        distribution and a Gauss profile) can be fairly well
+        approximated by a Fermi-Dirac distribution with the following
+        effective kT parameter:
+              kT = sqrt ( (k*T*3.96)^2 + (dE)^2 )  / 3.96
+
+      - `dE`: experimental resolution for kT calculation
+        
+
+    Returns: a FDD-normalized Wave, with the following info parameters
+    updated:
+       [FDD]
+       V_min=%f  # minimum data value before normalization
+       V_max=%f  # maximum data value before normalization
+       Ef=%f     # specified Fermi level
+       kT=%f     # specified kT parameter
+    '''
+
+    odat = data.swapaxes(axis,0).copy(wave.Wave)
+
+    if T is not None and dE is not None:
+        kboltzmann = 8.617343e-5    # eV/K
+        kT = math.sqrt( (T*3.96*kboltzmann)^2 + dE^2 ) / 3.96
+
+    if kT is None:
+        log.error ("Missing parameter: Fermi-Dirac width kT")
+        return None
+
+    if energy is None:
+        energy = data.dim[0].range
+
+    fdd = 1 / ( np.exp((energy-Ef)/kT)+1.0 )
+    while len(fdd.shape) < len(odat.shape):
+        fdd = np.expand_dims(fdd, 1)
+    odat /= fdd
+    
+    odat.info['FDD'] = {'V_min': np.nanmin(data),
+                        'V_max': np.nanmax(data),
+                        'Ef':    Ef,
+                        'kT':    kT }
+    
+    return odat.swapaxes(0,axis)
+
 def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None),
                    copy=True, smooth=None, stype='gauss', field=False):
     '''
-    Normalizes 1D sub-arrays obtained from a N-dimensional ndarray
+    Normalizes 1D sub-arrays obtained from an N-dimensional ndarray
     along *axis* by the values integrated along
     *axis* in range specified by *pos*.
     
@@ -375,10 +437,22 @@ def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None),
 
 
     else:
+        # No smoothing at all
         _smooth_field = _norm_field
+
+
+    if not (_smooth_field > 0).all():
+        err = "Smooth field contains negative values. Are you " \
+              "trying to normalize already ground-correted data? " \
+              "(You shouldn't.)"
+        log.error (err)
+        raise ValueError (err)
         
-    
-    data2 /= np.abs(_smooth_field[np.newaxis])
+
+    while len(data2.shape) > len(_smooth_field.shape):
+        _smooth_field = np.expand_dims(_smooth_field, 0)
+        
+    data2 /= _smooth_field
     data2 -= 1.0
 
     if field:         # for debugging of code and data... ;-)

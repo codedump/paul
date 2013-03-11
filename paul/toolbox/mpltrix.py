@@ -121,7 +121,7 @@ def imwater (fig_ax, wlist, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0), autosca
     max_i  = wlist.ax(0).x2i_rnd(wlist.dim[0].max) # index of k|| = max
     
     # the "natural" y scaling, that would be in effect if we didn't change anything
-    ylim_wouldbe = (0, wlist.shape[0]*offs[1])
+    ylim_wouldbe = (0, wlist.shape[0]*abs(offs[1]))
 
     # the original y-range of the data
     ylim_data    = (wlist.dim[0].min, wlist.dim[0].max)

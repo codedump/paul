@@ -10,6 +10,7 @@ import paul.toolbox.mpltrix as mpltrix
 import numpy as np
 import matplotlib as mpl
 import pprint as pp
+import math
 
 import logging
 log = logging.getLogger (__name__)
@@ -23,65 +24,50 @@ def populate(*args, **kwargs):
     can.reset()
 
     comp_ax = 0
-    comp_step = 10
+    comp_step = 7
     comp_norm = False
 
-    offs = (0, 0.03)
+    offs = (0, -0.02)
     xlim = (0, 0)
     ylim = (0, 0)
     
     #xlim = (11.625, 11.66)
     #xlim = (27.60, 27.66)
+    xlim = (-0.04, 0.01)
     
     #ylim = (-10, 12)
     #ylim = (2, 38)
+    #ylim = (-0.5, 0.7)
+    #ylim = (-0.1, 0.1)
 
+    # swap axes to move the comp-axis to 0
+    input_wave = kwargs['wav'][0]
+    val_max = input_wave.infv('FDD', 'V_max', default=input_wave.argmax())
     if comp_ax:
-        _wav = kwargs['wav'][0]
+        _wav = input_wave / val_max
     else:
-        _wav = kwargs['wav'][0].swapaxes(0,1)
+        _wav = input_wave.swapaxes(0,1) / val_max
 
-    can.axes.axvline (11.6485, ls=':')
-    can.axes.axvline (12.648, ls=':')
+        # Surpress data above Ef+5*kT if sample was FDD normalized
+    if ('FDD' in _wav.info):
+        indexer = [slice(None),slice(None)]
+        kt_lim   = input_wave.infv('FDD', 'kT', default=0)*5
+        kt_index = math.ceil(input_wave.dim[0].x2i(kt_lim))
+        indexer[int(not comp_ax)] = slice(0, kt_index)
 
-    #print "First input element:"
-    #pp.pprint (_wav)
+        _wav = _wav[indexer]
     
-    # create waterwall compression
-    wav = atrix.ncomp (_wav/_wav.infv('FDD', 'V_max', default=_wav.max()),
-                       axis=comp_ax,
-                       step=comp_step,
-                       intg=comp_step,
-                       norm=comp_norm) 
+    # waterfall compression
+    wav = atrix.ncomp (_wav, step=comp_step, intg=comp_step, norm=comp_norm) 
     
-    kwargs['wav'] = [wav]
+    lines = mpltrix.imwater (can.axes, wav, offs=offs, xlim=xlim, ylim=ylim)
 
-    # surpress data above Ef+5*kT if sample was FDD normalized
-    if ('FDD' in wav.info):
-        wav = wav(slice(wav.dim[0].offset, wav.infv('FDD', 'kT', default=0)*5), slice(None))
-
-
-
-    #print "Compressed element:"
-    #pp.pprint (wav)
-    #print "Is array:", isinstance(wav, np.ndarray)
-    #print "Is wave:", isinstance(wav, wave.Wave)
-    #print "Limits:", wav.lim, _wav.lim
-
-    # plot the data
-    kwargs['lines'] = mpltrix.imwater (can.axes, wav,
-                                       axis=comp_ax, 
-                                       offs=offs, 
-                                       xlim=xlim, 
-                                       ylim=ylim)
-
-    #print "axis limits:", w.dim[comp_ax].lim
-    #can.axes.set_ylim (11.15, 11.35)
-    #can.axes.set_ylim (w.dim[0].lim)
-
-    decorate (*args, **kwargs)
+    decorate (*args, wav=[wav], axes=can.axes, lines=lines)
     can.draw()
     
 
 def decorate (*args, **kwargs):
-    pass
+    ax = kwargs['axes']
+    ax.axvline (0, ls=':')
+    #ylim = ax.get_ylim()
+    #ax.set_ylim (ylim[1], ylim[0])
