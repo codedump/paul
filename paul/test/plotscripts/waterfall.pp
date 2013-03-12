@@ -33,7 +33,7 @@ def populate(*args, **kwargs):
     
     #xlim = (11.625, 11.66)
     #xlim = (27.60, 27.66)
-    xlim = (-0.04, 0.01)
+    #xlim = (-0.04, 0.01)
     
     #ylim = (-10, 12)
     #ylim = (2, 38)
@@ -68,6 +68,6 @@ def populate(*args, **kwargs):
 
 def decorate (*args, **kwargs):
     ax = kwargs['axes']
-    ax.axvline (0, ls=':')
+    ax.axvline (19.6482, ls=':')
     #ylim = ax.get_ylim()
     #ax.set_ylim (ylim[1], ylim[0])

@@ -76,6 +76,11 @@ class PlotscriptToolbar(QtGui.QToolBar):
         def_id = self.combo.findText (default)
         self.combo.setCurrentIndex (def_id) # trigger the default loader
 
+        # If set to anything else than None, then this widget
+        # will be used as a parent for the external editor (if possible).
+        self.editor_widget = None
+        
+
     def __del__(self):
         for i in self.tmp_files:
             log.debug ("Removing temporary plotscript %s" % i)
@@ -191,7 +196,20 @@ class PlotscriptToolbar(QtGui.QToolBar):
         Called when user clicks the "Edit" button in the viewer window.
         It is supposed to start an editor on the current plotscript file.
         '''
-        editor = "emacs"
+
+        ## doesn't work -- bug in emacs ("Unknown command '-parent-id'")
+        #if self.editor_widget is None:
+        #    # quick hack: create a new frame for emacsclient;
+        #    # we want all Paul-related stuff to be opened in the same frame,
+        #    # for simplicity...
+        #    self.editor_widget = QtGui.QWidget (parent=None)
+        
+        if self.editor_widget is not None:
+            editor = ["emacsclient.emacs-snapshot",  "--parent-id",  "%d" % self.editor_widget.winId()]
+        else:
+            editor = os.environ.setdefault ('EDITOR', 'gedit').split(" ")
+            
+            
         if len(self.file_cur) == 0:
             tmp_fd, tmp_path = tempfile.mkstemp(suffix=".pp", prefix="paul-")
             os.write(tmp_fd,
@@ -208,7 +226,7 @@ class PlotscriptToolbar(QtGui.QToolBar):
             #self.combo.insertItem (self.id_user, tmp_path, self.locByCombo)
             #self.emitPath (tmp_path)
             self.setPath(tmp_path)
-        subprocess.Popen([editor, self.file_cur])
+        subprocess.Popen(editor + [self.file_cur])
 
     @QtCore.pyqtSlot()
     def onForceReload (self):

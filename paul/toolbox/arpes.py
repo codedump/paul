@@ -613,6 +613,7 @@ def deg2ky (*args, **kwargs):
     ideg_d = _param ('detector', 'd', idata.dim[1].range)
     ideg_t = _param ('tilt',     't', idata.dim[2].range)
     eoffs  = _param ('eoffs',    'Ef', 0.0)
+    doffs  = _param ('doffs',    'deg_offs', 0.0)
     fill   = _param ('fill',     'fill', idata.min())
     degree = _param ('degree',   'deg', 3)
     #Phi    = _param ('Phi',      'phi', 4.3523)
@@ -626,6 +627,9 @@ def deg2ky (*args, **kwargs):
     # From here, the E axis will show use absolute energies
     # (without the work function Phi)
     E += eoffs
+
+    # detector offset -- convenience option
+    ideg_d += doffs
     
     # This is the maximum kinetic energy available *in* *the* *data*
     # (which is usually larger than the Fermi level :-) )
@@ -680,8 +684,10 @@ def deg2ky (*args, **kwargs):
     
     # map_coordinates() takes index coordinates.
     ocoord_index = np.broadcast_arrays (np.arange(idata.dim[0].size)[:,None,None],
-                                        idata.dim[1].x2i(odeg_d),
-                                        idata.dim[2].x2i(odeg_t))
+                                        (odeg_d - ideg_d[0]) / ((ideg_d[-1]-ideg_d[0])/len(ideg_d)),
+                                        (odeg_t - ideg_t[0]) / ((ideg_t[-1]-ideg_t[0])/len(ideg_t)))
+                                        #idata.dim[1].x2i(odeg_d),
+                                        #idata.dim[2].x2i(odeg_t))
     spni.map_coordinates (idata, ocoord_index, output=odata.view(np.ndarray),
                           order=degree, mode='constant', cval=fill)
 
@@ -712,7 +718,9 @@ def deg2ky_single (wav, **kwargs):
     '''
     if kwargs.has_key('axes'):
         kwargs['axes'] += "t"
-    return deg2ky (wave.dstack([wav, wav, wav]), **kwargs)[0]
+    fake_3d = wave.dstack([wav, wav, wav])
+    fake_3d.dim[2].lim = (-1e-10, 1e-10)
+    return deg2ky (fake_3d, **kwargs).sum(2)
 
 
 def deg2kz (*args, **kwargs):

@@ -42,6 +42,6 @@ def decorate (*args, **kwargs):
     ax.xaxis.set_minor_locator (mpl.ticker.MultipleLocator(1))
     ax.yaxis.set_minor_locator (mpl.ticker.MultipleLocator(5))
 
-    ax.xaxis.grid (True, which='both')
+    #ax.xaxis.grid (True, which='both')
     
     
