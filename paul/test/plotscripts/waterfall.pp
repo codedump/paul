@@ -42,7 +42,8 @@ def populate(*args, **kwargs):
 
     # swap axes to move the comp-axis to 0
     input_wave = kwargs['wav'][0]
-    val_max = input_wave.infv('FDD', 'V_max', default=input_wave.argmax())
+    val_max = input_wave.infv('FDD', 'V_max', default=np.nanmax(input_wave))
+    
     if comp_ax:
         _wav = input_wave / val_max
     else:
@@ -68,6 +69,6 @@ def populate(*args, **kwargs):
 
 def decorate (*args, **kwargs):
     ax = kwargs['axes']
-    ax.axvline (19.6482, ls=':')
+    ax.axvline (26.6460, ls=':')
     #ylim = ax.get_ylim()
     #ax.set_ylim (ylim[1], ylim[0])

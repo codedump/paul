@@ -31,7 +31,7 @@ def decorate (*args, **kwargs):
     col_max = w.infv('FDD', 'V_max', default=np.nanmax(w))
     
     clim = (col_min+(col_max-col_min)*0.00,
-            col_min+(col_max-col_min)*0.95)
+            col_min+(col_max-col_min)*0.55)
 
     ax.images[0].set_clim (clim)
     ax.set_ylim (w.dim[0].lim)

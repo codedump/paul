@@ -67,7 +67,7 @@ plot_water = plotwater   # define an alias, for interface compatibility
 
 
 
-def imwater (fig_ax, wlist, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0), autoscale=True,
+def imwater (fig_ax, wlist, offs=(0, 0), xlim=(0,0), ylim=(0,0), autoscale=True,
              ignore=[]):
     '''
     Same as plotwater(), but designed to work for 2D waves.
@@ -91,8 +91,10 @@ def imwater (fig_ax, wlist, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0), autosca
         return
 
     if len(ignore) > 0:
-        log.error ("NOT IMPLEMENTED: 'ignore' parameter!  "
-                   "(Hint: You should rather preselect input wave range.)")
+        err_msg = "NOT IMPLEMENTED: 'ignore' parameter!  "\
+                   "(Hint: You should rather preselect input wave range.)"
+        log.error (err_msg)
+        raise NotImplemented (err_msg)
 
 
     if not isinstance(wlist, wave.Wave):
@@ -121,7 +123,7 @@ def imwater (fig_ax, wlist, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0), autosca
     max_i  = wlist.ax(0).x2i_rnd(wlist.dim[0].max) # index of k|| = max
     
     # the "natural" y scaling, that would be in effect if we didn't change anything
-    ylim_wouldbe = (0, wlist.shape[0]*abs(offs[1]))
+    ylim_wouldbe = (0, wlist.shape[0]*offs[1])
 
     # the original y-range of the data
     ylim_data    = (wlist.dim[0].min, wlist.dim[0].max)
@@ -139,7 +141,15 @@ def imwater (fig_ax, wlist, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0), autosca
     # data at y=0. Here we calculate an offset we need to
     # apply to the data in order to have the lines aligned
     # at the correct position on the y axis.
-    data_yshift  = -(zero_i - min_i) * offs[1]
+    data_yshift  = -(zero_i - min_i) * abs(offs[1])
+
+    # If we work with a negative y-offset (=offs[1]), then slices will
+    # be built up the other way round (i.e. towards increasingly lower
+    # y-values), meaning our data will be shown lower than
+    # the original scale range. We need to shift the data one full
+    # y-range to counteract that:
+    if offs[1] < 0:
+        data_yshift += abs(offs[1])*wlist.dim[0].size
                                             
 
     # Scale the wave intensity to have it appear as big
@@ -152,17 +162,26 @@ def imwater (fig_ax, wlist, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0), autosca
     if xlim == (0, 0):
         xlim = (wlist.dim[1].min - (offs[0]*len(wlist))*(offs[0]<0),
                 wlist.dim[1].max + (offs[0]*len(wlist))*(offs[0]>0))
+        
     if ylim == (0, 0):
         ylim = (ylim_data[0], ylim_data[1])
+        
 
     ## ...then go for the actual work.
     lines = LineCollection([zip(x, w) for w in wlist], offsets=offs)
 
     if xlim is not None:
         fig_ax.set_xlim (xlim)
+        
     if ylim is not None:
-        fig_ax.set_ylim (ylim[0]-(ylim[1]-ylim[0])*0.05,
-                         ylim[1]+(ylim[1]-ylim[0])*0.05)
+        ylim_values = (ylim[0]-(ylim[1]-ylim[0])*0.05,
+                       ylim[1]+(ylim[1]-ylim[0])*0.05)
+
+        # need to reverse display, if y-offset is negative
+        if offs[1] > 0:
+            fig_ax.set_ylim (ylim_values)
+        else:
+            fig_ax.set_ylim (ylim_values[::-1])
 
     fig_ax.add_collection (lines)
     return lines

@@ -45,6 +45,7 @@ from paul.base.errors import *
 from numpy import getbuffer, transpose, array
 import os, re, stat
 from pprint import pprint
+import errno
 
 __version__ = '0.1'
 
@@ -780,16 +781,28 @@ def wave_init_header5():
     return bhead, whead
 
 
-def wave_write (wav, filename, autoname=True):
+def wave_write (wav, filename, autoname=True, autodir=True):
     '''
     Writes a wave to a Version 5 file. If 'autoname' is True,
     then the wave name will be set to the basename of the file name.
+    It 'autodir' is True, then the directory part of the path
+    name will be automatically created (via os.makedirs()).
     '''
 
     if hasattr(filename, 'write'):
         f = filename
         fpath = '' # unknown path
     else:
+        # as a convenience, we will create subdirectories, if required.
+        if autodir:
+            try:
+                os.makedirs(os.path.dirname(filename))
+            except OSError as ex:
+                if ex.errno == errno.EEXIST:
+                    pass
+                else:
+                    raise
+        
         f = open(filename, 'wb+')
         fpath = filename
 

@@ -73,7 +73,10 @@ class AxisInfo(object):
         '''
         Initializes a new AxisInfo object with *parent* as the parent wave.
         If *copy_from* is not None, then significant fields (offset, delta, units)
-        are copied from *copy_from*.
+        are copied from *copy_from*. The *parent*, however, is used from the
+        explicit parameter list (i.e. it is safe to use copy_from when
+        copying axis information from one wave to another, as long as 
+        the correct 'parent' parameter is used).
         '''
         self._parent = parent
         if copy_from is not None:
@@ -205,11 +208,14 @@ class AxisInfo(object):
         '''
         return int(math.floor(self.x2i_fra(val)))
 
-    def x2i_rnd(self, val):
+    def x2i_rnd(self, val, decimals=0):
         '''
-        Returns the index corresponding to the rounded axis value.
+        Returns the rounded index corresponding to the specified
+        axis value. If *astype* is not None, then *val* is assumed
+        to be an array-like object, which is converted to the
+        specified type.
         '''
-        return int(round(self.x2i_fra(val)))
+        return np.round(self.x2i_fra(val), decimals=decimals)
 
 
     def ppi(self, interval):
@@ -288,6 +294,12 @@ class Wave(ndarray):
         Default is usally only be changed by internal functions
         e.g. when slicing is involved and AxisInfo() information needs
         to be reconstructed from scratch anyway.
+
+        When copying information from wave *src* to wave *dst*, including
+        axis scaling, it is safe to use the following call:
+
+        >  dst._copy_info (src)
+          
         '''
         for k,v in from_wave.info.iteritems():
             if k != 'axes':
@@ -306,13 +318,24 @@ class Wave(ndarray):
                 self.info['axes'] = axes
 
 
-    def copy_info_from (self, from_wave, noax=True):
+    def copy_info_from (self, from_wave):
         '''
         Copies the "info" field from Wave specified by *from_wave*.
         This is just a wrapper for self._copy_info(), with a cleaner
-        syntax and a reversed default setting for *noax*.
+        syntax and a reversed default setting for *noax* (i.e. the axis
+        information is not copied)
         '''
-        self._copy_info(from_wave, noax)
+        self._copy_info (from_wave, noax=True)
+        return self
+
+        
+    def copy_meta_from (self, from_wave):
+        '''
+        Copies all meta information from *from_wave*, including 
+        info and axis-scaling information.
+        '''
+        self._copy_info (from_wave, noax=False)
+        return self
         
 
     def reshape(self, sizes):

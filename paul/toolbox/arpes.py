@@ -111,7 +111,7 @@ def e(mrel=1.0, ebind=0.0, kpos=0.0, klim=1.0, pts=100, out=None):
     return wav
 
 
-def hybridize(wlist, V=0.0, count=1):
+def _hybridize_n2n (wlist, V=0.0, count=1):
     '''
     --------------------------------------------------------------
     ACHTUNG: This implementation is broken, gives too high gaps
@@ -161,17 +161,18 @@ def hybridize(wlist, V=0.0, count=1):
     number of times that we're going to hybridize. (Mind the sqrt() -- this
     is because the potential needs to be halvened under the sqrt().)
     '''
-    norm = 1.0/np.sqrt(count)
+    norm = 1.0 / np.sqrt(count)
 
     '''
     Next problem arises when hybridizing more than 2 bands: multi-band
-    hybridization is performet in a each-with-every-other kind of loop.
-    So, we need to keep the interaction potential even smaller.
+    hybridization is performed in a each-with-every-other kind of loop.
+    So, we need to keep the interaction potential even smaller
+    (by factor 0.5*N*(N-1)).
     The (missing) factor 1/2 accounts for the fact that our algorithm,
     for symmetry reasons, would hybridize a i->j and j->i.
     There is no sqrt() here, because this normalization factor is
     '''
-    norm *= 1.0/(len(wlist)*(len(wlist)-1)/2.0)
+    norm /= len(wlist) * (len(wlist)-1) * 0.5
 
     
     V2 *= norm  # The actual normalization
@@ -193,6 +194,32 @@ def hybridize(wlist, V=0.0, count=1):
                 hlist[j] = h2
 
     return hlist
+
+def _hybridize_hmatrix (wlist, V=0.0):
+    '''
+    Hybridizes bands from *wlist* using the coupling matrix *V*.
+    *V* is a NxN matrix, where N = len(wlist).
+    Returns a list hybridized bands, corresponding to:
+
+       hi/hj = 1/2 * (wlist[i] + wlist[j] +/- sqrt((wlist[i]-wlist[j])**2 + 4*abs(v)))
+    
+    This is a different implementation of the hybridization algorithm. Instead of
+    performing a step-wise, pairwise NxN hybridization with renormalization
+    of the potential (this is what _hybridze_n2n() is doing), here we're diagonalizing
+    the matrix:
+    
+       | e1(k)  v12  ...   v1n  |
+       |  v21  e2(k) ...   v2n  |
+       |  ...   ...  ...   vnm  |
+       |  vn1   v2n  vnm  en(k) |
+       
+    where vxy = sqrt (Vxy), ei(k) are the non-hybridized bands,
+    and the diagonal elements of the diagonalized matrix hi(k)
+    will be the hybridized bands.
+    '''
+    pass
+
+hybridize = _hybridize_n2n
 
 
 #
@@ -249,7 +276,7 @@ def norm_by_fdd (data, axis=0, energy=None, Ef=0.0, kT=None, T=None, dE=None):
     if energy is None:
         energy = data.dim[0].range
 
-    fdd = 1 / ( np.exp((energy-Ef)/kT)+1.0 )
+    fdd = 1.0 / ( np.exp((energy-Ef)/kT)+1.0 )
     while len(fdd.shape) < len(odat.shape):
         fdd = np.expand_dims(fdd, 1)
     odat /= fdd
@@ -260,6 +287,7 @@ def norm_by_fdd (data, axis=0, energy=None, Ef=0.0, kT=None, T=None, dE=None):
                         'kT':    kT }
     
     return odat.swapaxes(0,axis)
+    
 
 def norm_by_noise (data, axis=0, xpos=(None, None), ipos=(None, None),
                    copy=True, smooth=None, stype='gauss', field=False):
