@@ -8,6 +8,7 @@ import scipy as sp
 import scipy.interpolate as spi
 import scipy.ndimage.interpolation as spni
 import scipy.ndimage as spimg
+import scipy.linalg as splin
 from pprint import pprint
 import paul.base.wave as wave
 from paul.toolbox.atrix import ncomp
@@ -137,15 +138,17 @@ def _hybridize_n2n (wlist, V=0.0, count=1):
     times (default is 1). This is intended for multi-band hybridization,
     where one pass may not be enough.
     '''
-    # if only one value is specified, construct a coupling matrix out of it
-    if type(V) == float:
-        V = np.matrix([[V for i in wlist] for j in wlist]) / 2
+    
+    # Construct V-matrix, if needed.
+    if not hasattr(V, 'shape') or V.shape != (len(wlist), len(wlist)):
+        V = np.matrix([[float(V) for i in wlist] for j in wlist])
 
-    V -= np.diag(np.diag(V))
-
-    V2  = V + V.T - 2*np.diag(np.diag(V))      # make sure matrix is symmetric
-    V2 -= np.diag(np.diag(V))                  # remove diagonal elements
-
+    # Symmetrize V-matrix, remove diagonal, average over 
+    # elements that are non-zero in both triangles.
+    V2  = (V+V.T - 2*np.diag(np.diag(V)))  /  ((V!=0).astype(float) + 
+                                               (V!=0).astype(float).T + 
+                                               (V==0).astype(float))
+    
     ''' This is what we'll be operating on'''
     hlist = list(wlist)
     
@@ -186,16 +189,15 @@ def _hybridize_n2n (wlist, V=0.0, count=1):
             for j in range(len(hlist)):
                 if i == j:
                     continue
-                h1 = 0.5 * (hlist[i] + hlist[j]) + \
-                    np.sqrt( (0.5*(hlist[j]-hlist[i]))**2 + V2[i,j]**2 )
-                h2 = 0.5 * (hlist[i] + hlist[j]) - \
-                    np.sqrt( (0.5*(hlist[j]-hlist[i]))**2 + V2[i,j]**2 )
+                h1 = 0.5*(hlist[i]+hlist[j]) + np.sqrt( (0.5*(hlist[j]-hlist[i]))**2 + V2[i,j]**2 )
+                h2 = 0.5*(hlist[i]+hlist[j]) - np.sqrt( (0.5*(hlist[j]-hlist[i]))**2 + V2[i,j]**2 )
                 hlist[i] = h1
                 hlist[j] = h2
 
     return hlist
+    
 
-def _hybridize_hmatrix (wlist, V=0.0):
+def _hybridize_hmatrix (wlist, V=0.0, count='(ignored)'):
     '''
     Hybridizes bands from *wlist* using the coupling matrix *V*.
     *V* is a NxN matrix, where N = len(wlist).
@@ -216,10 +218,61 @@ def _hybridize_hmatrix (wlist, V=0.0):
     where vxy = sqrt (Vxy), ei(k) are the non-hybridized bands,
     and the diagonal elements of the diagonalized matrix hi(k)
     will be the hybridized bands.
-    '''
-    pass
 
-hybridize = _hybridize_n2n
+    Parameters:
+      - `wlist`: List of (non-hybridized) N-dim. bands. They are assumed to all have
+      the same resolution and axis values. If they are waves, then the axes
+      ranges of the first wave are used
+      
+      - kcoord`: (optional) list of (N-1)-dimensional axis coordinates, one for each axis.
+      _Each_ element of the list is an N-dimensional array (which could be generated,
+      for example, using numpy.broadcast_arays() on the original axes ranges, or
+      returned by the Wave.axn property.)
+
+      - V: the hybridization potential, specified either as a NxN matrix or a floating
+      point value. If it's a float, then a matrix is constructed with V/2 at all
+      positions. If it's a matrix, the matrix is symmetrized by duplicating non-zero
+      elements from one trinagle into the zeros of the other triangle, or by averaging
+      at positions where non-zero elements are available in both triangles.
+      Please not that zero elements *must* be a truly NULL -- small floating
+      point numbers will _not_ be recognized as zero!
+    '''
+
+    # build V-matrix, if necessary
+    if not hasattr(V, 'shape') or V.shape != (len(wlist), len(wlist)):
+        V = np.matrix([[float(V) for i in wlist] for j in wlist])
+
+    # Symmetrize V-matrix, remove diagonal, average over 
+    # elements that are non-zero in both triangles.
+    V2  = (V+V.T - 2*np.diag(np.diag(V)))  /  ((V!=0).astype(float)   + 
+                                               (V!=0).astype(float).T + 
+                                               (V==0).astype(float))
+    
+    # flatten bands and zip them element-wise together
+    ebands = zip(*[b.flat for b in wlist])
+
+    # This is where all the magic happens ;-)
+    #
+    # At this points, we have a 2D matrix (ebands) containing
+    # all original band diagonals (dimension 0), at all k-values
+    # flattened (dimension 1). The only thing we need to do is add
+    # them to V2 to build a 'perturbed' H-matrix and diagonalize it.
+    # For hybridzed bands, eigenvalues need to be re-sorted to avoid
+    # band crossings.
+    hbands = [ np.sort(np.real(splin.eig (V2 + np.diag(Ek), left=False, right=False)))
+               for Ek in ebands ]
+
+    # Done, now we basically only reformat the output bands to
+    # match the data type and vector layout of the input data.
+    _hlist = [ np.reshape(_h, wlist[0].shape) for _h in  np.array(hbands).T ]
+    hlist  = [ np.empty_like(w) for w in wlist ]
+    for h, _h in zip(hlist, _hlist):
+        h[...] = _h[...]
+
+    return hlist
+    
+
+hybridize = _hybridize_hmatrix
 
 
 #

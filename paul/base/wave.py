@@ -56,7 +56,7 @@ class AxisInfo(object):
     So... need to rethink this. Here's one possible sollution:
        . Implement AxisInfo as a subclass of dict()
        . Insert default keys 'offset', 'delta' and 'units'
-       . Make one non-bound method ax(), which can be applied
+       . Make one non-bound method dim(), which can be applied
          to any object (not only to waves) and which would
          return either the corresponding AxisInfo() object
          in case of a Wave, or a sane default (offset=0, delta=1)
@@ -407,8 +407,8 @@ class Wave(ndarray):
         '''
         Sets the axis scaling using delta / offset parameters
         '''
-        self.ax(aindex).offset = offset
-        self.ax(aindex).delta = delta
+        self.dim[aindex].offset = offset
+        self.dim[aindex].delta = delta
 
     
     def setLimits (self, aindex, left, right):
@@ -417,8 +417,8 @@ class Wave(ndarray):
         (rather left/right). depending on which limit
         is the greater, "delta" might also end up negative!
         '''
-        self.ax(aindex).offset = left
-        self.ax(aindex).delta = (right-left) / self.shape[aindex]
+        self.dim[aindex].offset = left
+        self.dim[aindex].delta = (right-left) / self.shape[aindex]
 
 
     @property
@@ -429,13 +429,35 @@ class Wave(ndarray):
         return self.info['axes']
 
 
-    def ax(self, aindex):
-        '''
-        Returns the axis information for the specified axis.
-        '''
-        return self.dim[aindex]
+        # OBSOLETE: use self.dim[] instead!
+    #def ax(self, aindex):    
+        #'''
+        #Returns the axis information for the specified axis.
+        #'''
+        #return self.dim[aindex]
 
+    @property
+    def ax(self):
+        '''
+        Returns a list containing 1-dim. arrays with the axes values for each dimension.
+        '''
+        return [d.range for d in self.dim]
 
+    
+    @property
+    def axn(self):
+        '''
+        Returns a list containing N-dim. arrays with the axes values for each
+        dimension. The arrays are created using numpy.broadcast_arrays() on Wave.ax.
+        '''
+        dno = len(self.shape)
+        if dno == 1:
+            return self.ax
+        indices    = [ tuple([None]*(i) + [slice(None)] + [None]*(dno-i-1)) for i in range(dno) ]
+        ranges_nd  = [ d.range[i] for d,i in zip(self.dim, indices) ]
+        return np.broadcast_arrays (*ranges_nd)
+
+        
     @property
     def imlim(self):
         '''
@@ -443,6 +465,7 @@ class Wave(ndarray):
         '''
         return (self.dim[1].offset, self.dim[1].end, self.dim[0].end, self.dim[0].offset)
 
+        
     @property
     def lim(self):
         '''
@@ -568,12 +591,12 @@ class Wave(ndarray):
             new_axi = AxisInfo(parent)
 
             if isinstance(index, slice):
-                old_axi = source.ax(i)
+                old_axi = source.dim[i]
                 i_start = index.start
                 i_stop  = index.stop
                 i_step  = index.step
                 if i_start is not None:
-                    new_axi.offset = source.ax(i).i2x(i_start)
+                    new_axi.offset = source.dim[i].i2x(i_start)
                 else:
                     new_axi.offset = old_axi.offset
                 if i_step is not None:
@@ -586,10 +609,10 @@ class Wave(ndarray):
                 i += 1
 
             elif hasattr(index, "__iter__"):
-                old_axi = source.ax(i)
+                old_axi = source.dim[i]
                 a = array(index).min()
-                new_axi.offset = source.ax(i).i2x(a.min())
-                new_axi.delta = (source.ax(i).i2x(a.max())-source.ax(i).i2x(a.min()))/float(len(a))
+                new_axi.offset = source.dim[i].i2x(a.min())
+                new_axi.delta = (source.dim[i].i2x(a.max())-source.dim[i].i2x(a.min()))/float(len(a))
                 new_axi.units = old_axi.units
                 new_info.append(new_axi)
                 #print "i: new info for axis", i, new_axi
@@ -607,7 +630,7 @@ class Wave(ndarray):
                 i += 1
 
         while i < len(source.info['axes']):
-            new_info.append(AxisInfo(parent=parent, copy_from=source.ax(i)))
+            new_info.append(AxisInfo(parent=parent, copy_from=source.dim[i]))
             #print "c: new info for axis", i, self.ax(i)
             i += 1
 
@@ -1032,11 +1055,11 @@ class Wave(ndarray):
                     if len(ind) == 3:
                         i_step = ind[2]
                 if i_start is not None:
-                    i_start = self.ax(axis_i).x2i(i_start)
+                    i_start = self.dim[axis_i].x2i(i_start)
                 if i_stop is not None:
-                    i_stop = self.ax(axis_i).x2i(i_stop)
+                    i_stop = self.dim[axis_i].x2i(i_stop)
                 if i_step is not None:
-                    i_step /= self.ax(axis_i).delta
+                    i_step /= self.dim[axis_i].delta
 
                 # interpolation recommendation
                 if ((i_start is not None) and (abs(i_start-round(i_start)) > 1e-10)):
@@ -1062,7 +1085,7 @@ class Wave(ndarray):
                 #
                 new_ind = []
                 for item in ind:
-                    new_ind.append(self.ax(axis_i).i2x(item))
+                    new_ind.append(self.dim[axis_i].i2x(item))
 
                 # recommended interpolation
                 if recmd_intrp in (None, 'lim'):
@@ -1087,7 +1110,7 @@ class Wave(ndarray):
                 #
                 # default: ind is probably a simple float()-able number
                 #
-                nr = self.ax(axis_i).x2i(ind)
+                nr = self.dim[axis_i].x2i(ind)
                 if abs(nr-round(nr)) > 1e-10:
                     if recmd_intrp not in (True, False):
                         recmd_intrp = 'lim'
@@ -1151,7 +1174,7 @@ class Wave(ndarray):
         i1 = ndarray([len(self.shape)], dtype=int)
         i2 = ndarray([len(self.shape)], dtype=int)
         for v, ai in zip(vals, range(len(self.shape))):
-            ax = self.ax(ai)
+            ax = self.dim[ai]
             ii[ai] = (ax.x2i(v))
             i1[ai] = floor(ii[ai])
             i2[ai] = i1[ai]+1
@@ -1669,7 +1692,7 @@ def _test_index_call(*call_i, **kwargs):
     for i in range(a2.ndim):
         a2.dim[i].delta   = 0.1
         a2.dim[i].offset -= (0.5 * a2.dim[i].end)
-        verbose and pprint (str(a2.ax(i)))
+        verbose and pprint (str(a2.dim[i]))
 
     if lim_i  == True:
         lim_i  = call_i
