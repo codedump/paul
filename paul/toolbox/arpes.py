@@ -244,9 +244,10 @@ def _hybridize_hmatrix (wlist, V=0.0, count='(ignored)'):
 
     # Symmetrize V-matrix, remove diagonal, average over 
     # elements that are non-zero in both triangles.
-    V2  = (V+V.T - 2*np.diag(np.diag(V)))  /  ((V!=0).astype(float)   + 
-                                               (V!=0).astype(float).T + 
-                                               (V==0).astype(float))
+    v_norm = ((V!=0).astype(float) + 
+              (V!=0).astype(float).T + 
+              (V==0).astype(float))
+    V2     = (V+V.T - 2*np.diag(np.diag(V)))  /  v_norm
     
     # flatten bands and zip them element-wise together
     ebands = zip(*[b.flat for b in wlist])
