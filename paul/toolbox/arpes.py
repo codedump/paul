@@ -29,7 +29,7 @@ Spectroscopy (ARPES) data.
 # dispersions, band hybridizations etc.)
 #
 
-def e(mrel=1.0, ebind=0.0, kpos=0.0, klim=1.0, pts=100, out=None):
+def e_free(mrel=1.0, ebind=0.0, kpos=0.0, klim=1.0, pts=100, out=None):
     '''
     Returns the parabolic dispersion of an electron bound at
     energy *Ebind*, with relative mass *mrel* (1.0 being
@@ -112,7 +112,7 @@ def e(mrel=1.0, ebind=0.0, kpos=0.0, klim=1.0, pts=100, out=None):
     return wav
 
 
-def _hybridize_n2n (wlist, V=0.0, count=1):
+def _hybridize_n2n (wlist, V=0.0, count='auto'):
     '''
     --------------------------------------------------------------
     ACHTUNG: This implementation is broken, gives too high gaps
@@ -120,12 +120,12 @@ def _hybridize_n2n (wlist, V=0.0, count=1):
              Besides, this implementation is not physically
              sound (although the results, apart from the
              wrong factor, seem plausible).
-             A physically correct implementation would
-             involve constructing a Hamiltonian matrix
-             with the bands on the diagonals and the
-             interaction potentials off-diagonal, and
-             diagonalizing that matrix in order to gain
-             the hybridized bands.
+             A physically correct version is implemented
+             in hybridize(), and involves constructing a
+             symmetric Hamiltonian matrix with the bands
+             on the diagonals and the interaction potentials
+             off-diagonal, and diagonalizing that matrix in
+             order to gain the hybridized bands.
     --------------------------------------------------------------
     
     Hybridizes bands from *wlist* using the coupling matrix *V*.
@@ -138,6 +138,9 @@ def _hybridize_n2n (wlist, V=0.0, count=1):
     times (default is 1). This is intended for multi-band hybridization,
     where one pass may not be enough.
     '''
+
+    if count == 'auto':
+        count = len(wlist)
     
     # Construct V-matrix, if needed.
     if not hasattr(V, 'shape') or V.shape != (len(wlist), len(wlist)):
@@ -147,7 +150,7 @@ def _hybridize_n2n (wlist, V=0.0, count=1):
     # elements that are non-zero in both triangles.
     V2  = (V+V.T - 2*np.diag(np.diag(V)))  /  ((V!=0).astype(float) + 
                                                (V!=0).astype(float).T + 
-                                               (V==0).astype(float))
+                                               ((V+V.T)==0).astype(float))
     
     ''' This is what we'll be operating on'''
     hlist = list(wlist)
@@ -197,7 +200,7 @@ def _hybridize_n2n (wlist, V=0.0, count=1):
     return hlist
     
 
-def _hybridize_hmatrix (wlist, V=0.0, count='(ignored)'):
+def hybridize (wlist, V=0.0):
     '''
     Hybridizes bands from *wlist* using the coupling matrix *V*.
     *V* is a NxN matrix, where N = len(wlist).
@@ -223,11 +226,6 @@ def _hybridize_hmatrix (wlist, V=0.0, count='(ignored)'):
       - `wlist`: List of (non-hybridized) N-dim. bands. They are assumed to all have
       the same resolution and axis values. If they are waves, then the axes
       ranges of the first wave are used
-      
-      - kcoord`: (optional) list of (N-1)-dimensional axis coordinates, one for each axis.
-      _Each_ element of the list is an N-dimensional array (which could be generated,
-      for example, using numpy.broadcast_arays() on the original axes ranges, or
-      returned by the Wave.axn property.)
 
       - V: the hybridization potential, specified either as a NxN matrix or a floating
       point value. If it's a float, then a matrix is constructed with V/2 at all
@@ -242,12 +240,17 @@ def _hybridize_hmatrix (wlist, V=0.0, count='(ignored)'):
     if not hasattr(V, 'shape') or V.shape != (len(wlist), len(wlist)):
         V = np.matrix([[float(V) for i in wlist] for j in wlist])
 
-    # Symmetrize V-matrix, remove diagonal, average over 
-    # elements that are non-zero in both triangles.
-    v_norm = ((V!=0).astype(float) + 
-              (V!=0).astype(float).T + 
-              (V==0).astype(float))
-    V2     = (V+V.T - 2*np.diag(np.diag(V)))  /  v_norm
+    # symmerize matrix, remove diagonal elements
+    v_sym  = (V+V.T - 2*np.diag(np.diag(V)))
+
+    # elements normalization:
+    #   . average over elements that are non-zero in both triangles (norm = 2)
+    #   . leave elements alone that are zero in either of the triangles (norm = 1)
+    #   . leave diagonals alone (norm = 1)
+    v_norm = ( (V!=0).astype(float) +
+               (V!=0).astype(float).T +
+               ((V+V.T)==0).astype(float) )    
+    V2     = v_sym  /  v_norm
     
     # flatten bands and zip them element-wise together
     ebands = zip(*[b.flat for b in wlist])
@@ -271,9 +274,6 @@ def _hybridize_hmatrix (wlist, V=0.0, count='(ignored)'):
         h[...] = _h[...]
 
     return hlist
-    
-
-hybridize = _hybridize_hmatrix
 
 
 #
