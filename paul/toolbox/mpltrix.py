@@ -118,9 +118,9 @@ def imwater (fig_ax, wlist, offs=(0, 0), xlim=(0,0), ylim=(0,0), autoscale=True,
     ## Do the auto-scaling magic... :-)
     
     # some indices along the y axis...
-    min_i  = wlist.ax(0).x2i_rnd(wlist.dim[0].min) # index of k|| = min
-    zero_i = wlist.ax(0).x2i_rnd(0)                # index of k|| = 0
-    max_i  = wlist.ax(0).x2i_rnd(wlist.dim[0].max) # index of k|| = max
+    min_i  = wlist.dim[0].x2i_rnd(wlist.dim[0].min) # index of k|| = min
+    zero_i = wlist.dim[0].x2i_rnd(0)                # index of k|| = 0
+    max_i  = wlist.dim[0].x2i_rnd(wlist.dim[0].max) # index of k|| = max
     
     # the "natural" y scaling, that would be in effect if we didn't change anything
     ylim_wouldbe = (0, wlist.shape[0]*offs[1])
