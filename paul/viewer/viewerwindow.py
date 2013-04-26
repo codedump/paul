@@ -532,6 +532,7 @@ class ViewerWindow(QtGui.QMainWindow):
             pscr_dir = '<unknown>'
             log.warn ('Translation of path (%s) relative to plotscript requested, but no plotscript specified!' % path)
         assert (len(pscr_dir) != 0)
+        log.debug ("Path translation for '%s', relative to '%s' requested" % (path, pscr_dir))
         return os.path.normpath(os.path.join(os.path.relpath(pscr_dir, os.getcwd()), path))
 
 

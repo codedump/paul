@@ -2,6 +2,7 @@
 
 import numpy as np
 from paul.base.wave import *
+import matplotlib.cm as cm
 
 import matplotlib as mpl
 
@@ -18,7 +19,7 @@ def populate (*args, **kwargs):
         log.debug ("Array")
 
     kwargs['axes'] = can.axes
-    can.axes.imshow (wav, extent=wav.imlim, interpolation='none')
+    can.axes.imshow (wav, extent=wav.imlim, interpolation='none', cmap=cm.gray)
     decorate (*args, axes=can.axes, wav=wav)
     can.draw()
     
@@ -30,8 +31,8 @@ def decorate (*args, **kwargs):
     col_min = w.infv('FDD', 'V_min', default=np.nanmin(w))
     col_max = w.infv('FDD', 'V_max', default=np.nanmax(w))
     
-    clim = (col_min+(col_max-col_min)*0.00,
-            col_min+(col_max-col_min)*0.55)
+    clim = [col_min+(col_max-col_min)*0.00,
+            col_min+(col_max-col_min)*0.99]
 
     ax.images[0].set_clim (clim)
     ax.set_ylim (w.dim[0].lim)

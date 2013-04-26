@@ -124,6 +124,7 @@ def init(*args, **kwargs):
     # some setup variables (graph coloring etc)
     GUI.col_min = ValueWidget (None, "Color min: ", QtGui.QDoubleSpinBox(), -99, 99, 0.01, 0.00, setColor)
     GUI.col_max = ValueWidget (None, " max: ", QtGui.QDoubleSpinBox(), -99, 99, 0.01, 1.00, setColor)
+
     GUI.cut_dim = ValueWidget (None, " 3D visual plane: ", QtGui.QSpinBox(), 0, 2, 1, 1, set3DDisplay)
     GUI.toolbar = QtGui.QToolBar("Slicing and colors")
     GUI.mainwin.addToolBarBreak()
@@ -165,18 +166,13 @@ def updateIndicators():
             if PLOT.waves[0].ndim == 2:
                 sax = s.slice_axis
                 wav = PLOT.waves[0]
+                PLOT.cut_dim = 2
                 
             elif PLOT.waves[0].ndim == 3:
                 wav = PLOT.cut_wav
                 other_dims = range(PLOT.waves[0].ndim)
                 other_dims.remove(PLOT.cut_dim)
                 sax = 0 if (s.slice_axis == min(other_dims)) else 1
-                #if (PLOT.cut_dim == 0):
-                #    sax = 0 if s.slice_axis == 1 else 1
-                #elif (PLOT.cut_dim == 1):
-                #    sax = 0 if s.slice_axis == 0 else 1
-                #elif (PLOT.cut_dim == 2):
-                #    sax = s.slice_axis
     
             else:
                 return # nothing to do, 1D wave

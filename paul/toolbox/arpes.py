@@ -1869,7 +1869,66 @@ def align_kz_uru2si2 (data, ss_index='auto', ef_index='auto',
     # return the aligned samples -- but don't forget to remove
     # the "1" that was added in the normalization step :-)
     return [w-1 for w in alg2], shf1+shf2, shf_deg, norm, alg1, shf1_deg, shf2_deg
-    
+
+
+def autocorr2(wav, regrid=True, reoffset=True, debug=False):
+    '''
+    Creates the autocorrelation function of the specified 2D wave,
+    as follows: result = ifft(abs(fft(wav))).real
+
+    If input type is Wave and regrid==True, then the wave is regridded
+    to have the same granularity (i.e. dim-delta) in both dimensions.
+
+    If reoffset==True, then the intrinsic dim-offset of the wave is
+    recalculated such that (0,0) is in the middle of the screen
+    (following the meaning of the data).
+
+    If debug==True, then the autocorrelation spectrum and the modified
+    (i.e. regridded) wave are returned in a tuple.
+    Otherwise only the autocorrelation spectrum is returned.
+
+    If the input type is Wave, the scale of the wave is re-set such that
+    the middle of the wave is (0,0) in intrinsic coordinates
+    '''
+
+    if len(wav.shape) != 2:
+        raise ValueError ("Expected 2D wave")
+
+
+    if isinstance(wav, wave.Wave) and regrid:
+        mindelta = min(wav.dim[0].delta, wav.dim[1].delta)
+        src = wave.regrid (wav,
+                           {'delta': mindelta},
+                           {'delta': mindelta},
+                           units='axis')
+    else:
+        src = wav
+
+    # calculate the auto-correlation function.
+    _fft = np.fft.fft2(wav)
+    #_mag = np.abs(_fft)
+    _mag = _fft * np.ma.conjugate(_fft)
+    _inv = np.fft.ifft2(_mag)
+    tmp0 = np.real(_inv)
+
+    # roll (0, 0) to the middle of the image
+    tmp1 = np.roll (tmp0, tmp0.shape[0]/2, 0)
+    tmp2 = np.roll (tmp1, tmp1.shape[1]/2, 1)
+
+    if isinstance(wav, wave.Wave):
+        out = tmp2.view(wave.Wave)
+        out._copy_info (wav)
+
+        if reoffset:
+            out.dim[0].offset = -0.5 * (out.dim[0].max - out.dim[0].min)
+            out.dim[1].offset = -0.5 * (out.dim[1].max - out.dim[1].min)
+    else:
+        out = tmp2
+
+    if debug == True:
+        return out, src
+    else:
+        return out
     
 
 if __name__ == "__main__":
