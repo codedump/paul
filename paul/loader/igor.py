@@ -350,7 +350,7 @@ def load(filename):
     return wave_read(filename)
 
 
-def wave_note_parse (notestr, strict_blocks=False, sep=None):
+def wave_note_parse_simple (notestr, strict_blocks=False, sep=None):
     '''
     Parses the "notes" string of a wave for useful information.
     Here's the rules:
@@ -432,6 +432,8 @@ def wave_note_parse (notestr, strict_blocks=False, sep=None):
         nmap[cur_map_name] = cur_map
 
     return nmap
+
+wave_note_parse = wave_note_parse_simple
 
 def wave_note_write (infomap, block_prefix='', sep='\r'):
     '''
@@ -669,10 +671,19 @@ def wave_read_info(f, wave_info, bin_info):
     return bin_info
 
 
-def wave_read (filename):
+def wave_read (filename, note_parse=True, note_text=None):
     '''
-    Loads an Igor binary wave from the specified file (either a file stream
-    or a file name).
+    Loads an Igor binary wave from the specified file
+    (either a file stream or a file name).
+    
+    The value of 'note_parse' defines now wave notes
+    are being interpreted:
+      . 'no' or False: Notes are not parsed
+      . 'simple': Notes are parsed in a simplified config-file manner
+      . 'cfg': Notes are parsed in a full config-file manner
+
+    If 'note_text' is a bytearray object, then the full (i.e.
+    unparsed) version of the notes will be saved there.
     '''
     filepath = ''
     if hasattr(filename, 'read'):
@@ -704,9 +715,21 @@ def wave_read (filename):
 
         # set some useful wave info
         data.info['name'] = ''.join(wave_info.setdefault('bname', '(bastard wave)'))
+        
+        if note_parse in ('no', None, False):
+            pass
+        elif note_parse in (True, 'simple'):
+            nmap = wave_note_parse_simple (bin_info['note'])
+            data.info.update (nmap)
+        elif note_parse in ('cfg', 'config'):
+            pass
 
-        nmap = wave_note_parse(bin_info['note'])
-        data.info.update (nmap)
+        if isinstance (note_text, str):
+            note_text.join(bin_info['note'])
+        elif isinstance (note_text, bytearray):
+            del note_text[0:-1]
+
+            note_text.extend(bin_info['note'].replace('\r', '\n'))
 
         # have all the data, now set explicit scaling information
         if 'sfA' in wave_info and 'sfB' in wave_info:
@@ -781,12 +804,19 @@ def wave_init_header5():
     return bhead, whead
 
 
-def wave_write (wav, filename, autoname=True, autodir=True):
+def wave_write (wav, filename, autoname=True, autodir=True, note=None):
     '''
-    Writes a wave to a Version 5 file. If 'autoname' is True,
-    then the wave name will be set to the basename of the file name.
-    It 'autodir' is True, then the directory part of the path
+    Writes a wave to a Version 5 file.
+
+    If 'autoname' is True, then the wave name will be set to
+    the basename of the file name.
+
+    If 'autodir' is True, then the directory part of the path
     name will be automatically created (via os.makedirs()).
+
+    If 'note' is not None, then the wave note is set as the string
+    representation of 'note' (the wave's own info field being ignored).
+    Otherwise the wave note is computed from the wave's own info field.
     '''
 
     if hasattr(filename, 'write'):
@@ -856,9 +886,10 @@ def wave_write (wav, filename, autoname=True, autodir=True):
         if wtype == None:
             log.warn ("Data type is remains 'None', which probably means that actual type '%s' was not recognized as any of: %s" % (str(wave.dtype), [str(v) for k,v in TYPE_TABLE.iteritems()]))
 
-        # encode the wave.info as note text
-        note_text = wave_note_write (wave.info)
-        bhead['noteSize'] = len(note_text)+1
+        # set the wave note
+        note_text = note if note is not None \
+                    else wave_note_generate (wave.info) # ...or from wave.info
+        bhead['noteSize'] = len(note_text)
 
         # calculate sizes and checksums etc
 
@@ -879,7 +910,7 @@ def wave_write (wav, filename, autoname=True, autodir=True):
         # dimensions first. Take care to access a "native" byte order
         # version of the data, otherwise tofile() will do nasty things.
         transpose(wave).tofile(f)
-        f.write (buffer(note_text+"\0"))
+        f.write (buffer(note_text))
 
     finally:
         f.close()
