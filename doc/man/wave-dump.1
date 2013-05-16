@@ -1,0 +1,25 @@
+.\" Process this file with
+.\" groff -man -Tascii foo.1
+.\"
+.TH WAVE-DUMP 1 "MAY 2013" Linux "User Manuals"
+.SH NAME
+wave-dump \- Dump data from 1D and 2D Igor Binary Waves in a format suitable for gnuplot processing
+.SH SYNOPSIS
+.B wave-dump
+ [-h] input [input ...]
+.SH DESCRIPTION
+.B wave-dump
+Reads each of specified IBW files and dumps the data in a format suitable for gnuplot.
+.SH OPTIONS
+Arguments
+.IP  input
+IBW files to process.
+.IP  -h,\ --help
+shows a short help message and exit
+.SH AUTHOR
+Florin Boariu <florin.figtrix@rootshell.ro>
+.SH "SEE ALSO"
+.BR paul(1), 
+.BR wave(1),
+.BR wave-note(1),
+.BR wave-dump(1),

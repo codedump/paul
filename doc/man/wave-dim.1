@@ -1,0 +1,63 @@
+.\" Process this file with
+.\" groff -man -Tascii foo.1
+.\"
+.TH WAVE-DIM 1 "MAY 2013" Linux "User Manuals"
+.SH NAME
+wave-dim \- Coveniently edit axis meta-information in Igor Binary Waves
+.SH SYNOPSIS
+.B wave-dim
+ [-h] [-p | -s ATTR VAL | -i ATTR VAL | -r ATTR]
+           [-d DIMLIST] [-o [OUTPUT [OUTPUT ...]]]
+	   input [input ...]
+.SH DESCRIPTION
+.B wave-note
+Reads each of specified IBW files and performs an operation (printing, removing, appending or editing) upon them. The wave is then being re-written with to contain the new note and saved to disk to an output file. If no output file is specified, the original input file is overwritten.
+.SH OPTIONS
+Arguments
+.IP  input
+IBW files to process.
+.IP  -h,\ --help
+shows a short help message and exit
+.IP  -p
+print all relevant dimension information
+.IP  -s,\ --set\ ATTR\ VAL
+set dimension attribute ATTR to value VAL
+.IP  -i,\ --inc\ ATTR\ VAL
+increment dimension attribute ATTR by VAL
+.IP  -r,\ --read\ ATTR
+read dimension attribute ATTR
+.IP  -d,\ --dim,\ --dims\ DIMLIST
+comma-separated list of numbers in the range starting with 0, representing dimensions to process
+.IP  -o,\ --output\ file.ibw
+instead of overwriting the original wave, save output to 'file.ibw'
+.SH EXAMPLES
+Print the dimension info of foo.ibw:
+.RS
+
+wave-dim foo.ibw -p
+
+.RE
+.RE
+Sets dimension delta of dimension 1 to 0.001 for wave foo.ibw and save result to bar.ibw, leaving foo.ibw unmodified:
+.RS
+
+wave-dim foo.ibw -d 1 -s delta 0.001 -o bar.ibw
+
+.RE
+Increase dimension offsets for the first two dimensions by 10:
+.RS
+
+wave-dim foo.ibw -d 0,1 -i 10
+
+.RE
+.RE
+
+.SH BUGS
+If notes are modified, waves are being read, interpreted, then re-written to disk. For this reason, the tool only works with waves that are well-understood by the Paul tool. Specifically, doesn't work with text waves.
+.SH AUTHOR
+Florin Boariu <florin.figtrix@rootshell.ro>
+.SH "SEE ALSO"
+.BR paul(1), 
+.BR wave(1),
+.BR wave-note(1),
+.BR wave-dump(1),

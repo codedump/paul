@@ -435,7 +435,7 @@ def wave_note_parse_simple (notestr, strict_blocks=False, sep=None):
 
 wave_note_parse = wave_note_parse_simple
 
-def wave_note_write (infomap, block_prefix='', sep='\r'):
+def wave_note_generate (infomap, block_prefix='', sep='\r'):
     '''
     Wries the infomap into a string representation that can be
     saved as an Igor wave note. This is to retain our
@@ -486,7 +486,7 @@ def wave_note_write (infomap, block_prefix='', sep='\r'):
             else:
                 blk = k
             notestr += "[%s]%s" % (blk, sep)
-            notestr += wave_note_write (v)
+            notestr += wave_note_generate (v)
     notestr += sep
 
     ## second, add the stray-lines section

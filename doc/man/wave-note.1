@@ -1,0 +1,59 @@
+.\" Process this file with
+.\" groff -man -Tascii foo.1
+.\"
+.TH WAVE-NOTE 1 "MAY 2013" Linux "User Manuals"
+.SH NAME
+wave-note \- Coveniently edit notes in Igor Binary Wave format.
+.SH SYNOPSIS
+.B wave-note
+[-h] [-p | -P | -e | -k | -a APPEND] [-o [OUTPUT]] input [input ...]
+.SH DESCRIPTION
+.B wave-note
+Reads each of specified IBW files and performs an operation (printing, removing, appending or editing) upon them. The wave is then being re-written with to contain the new note and saved to disk to an output file. If no output file is specified, the original input file is overwritten.
+.SH OPTIONS
+Arguments
+.IP  input
+IBW files to process.
+.IP  -h,\ --help
+shows a short help message and exit
+.IP  -p,\ --print
+prints the current note and exit
+.IP  -P,\ --parse
+prints the current note, parse it, then print the parse-tree
+.IP  -e,\ --edit
+edit the current note in the editor specified by the EDITOR environment variable (defaults to 'nano' if the variable is empty) and re-write it to the wave when the editor exits
+.IP  -a,\ --append\ "LINE"
+appends "\\nLINE" to the note
+.IP  -o,\ --output\ file.ibw
+instead of overwriting the original wave, save output to 'file.ibw'
+.SH EXAMPLES
+Print the note of foo.ibw:
+.RS
+
+wave-note foo.ibw -p
+
+.RE
+.RE
+Edits the note of foo.ibw and save result to bar.ibw, leaving foo.ibw unmodified:
+.RS
+
+wave-note foo.ibw -e -o bar.ibw
+
+.RE
+Strip notes from all .ibw files in the current directory:
+.RS
+
+wave-note *.ibw -k
+
+.RE
+.RE
+
+.SH BUGS
+If notes are modified, waves are being read, interpreted, then re-written to disk. For this reason, the tool only works with waves that are well-understood by the Paul tool. Specifically, doesn't work with text waves.
+.SH AUTHOR
+Florin Boariu <florin.figtrix@rootshell.ro>
+.SH "SEE ALSO"
+.BR paul(1), 
+.BR wave(1),
+.BR wave-dim(1),
+.BR wave-dump(1),
