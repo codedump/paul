@@ -61,9 +61,9 @@ def cook_deg2ky (data, axis=0, tilt=0.0, eoffs=0.0):
     Conversion polar -> k coordinates, where 'axis' is the energy axis.
     'tilt' specifies the tilt angle at which the data was measured.
     '''
-    print "* Converting to k-coordinates (total offset: %f eV)" % eoffs_total
+    print "* Converting to k-coordinates (eoffs: %f)" % eoffs
     axtag = ('ed' if axis==0 else 'de')
-    return arpes.deg2ky_single (data, axes=axtag, tilt=tilt, eoffs=0.0)
+    return arpes.deg2ky_single (data, axes=axtag, tilt=tilt, eoffs=eoffs)
 
     
 def cook_norm_gnd(data, axis=0, norm_range=None):
@@ -80,7 +80,7 @@ def cook_norm_gnd(data, axis=0, norm_range=None):
     return data-gnd
 
     
-def cook_fdd(data, axis=0, kT=0, Ef=0):
+def cook_fdd(data, axis=0, kT=0):
     '''
     Normalizes data by the Fermi-Dirac distribution with specified
     parameters kT and E_F. 'axis' designates the energy axis.
@@ -125,7 +125,7 @@ def cook_from_beamline (data, eax=0, eoffs=0, doffs=0, tilt=None, kT=None, norm_
     if norm_range is not None:
         data   = cook_norm_gnd (data, axis=eax, norm_range=norm_range)
     if kT is not None:
-        data   = cook_fdd (data, axis=0, kT=kT, Ef=0)
+        data   = cook_fdd (data, axis=0, kT=kT)
         w_fdd  = data.copy()
 
     
@@ -178,17 +178,39 @@ if __name__ == "__main__":
         print "  Usage: %s IBW-File E_offset deg_offset kT" % sys.argv[0]
         sys.exit()
 
+
+    '''
+    Options to implement:
+
+    -n,--norm-range:  normalization(s)
+    -D,--doffset: degree axis offset
+    -E,--eoffset: energy axis offset
+    -a,--eax,--axis: set energy axis
+    -T,--kT,--fdd: FDD-normalization (kT parameter)
+    -t,--tilt,--deg2ky: polar -> ky transformation (tilt parameter)
+    '''
+
     infile = sys.argv[1]
     inw = igor.load (infile)
     
     print
     print "Input file:", infile
     
-    outw, odeg, oky, oky_fdd = cook_from_beamline (inw, eax=0,
+    outw, odeg, oky, oky_fdd = cook_from_beamline (inw, eax=0, tilt=0.0,
                                                    eoffs=float(sys.argv[2]),
                                                    doffs=float(sys.argv[3]),
                                                    kT=float(sys.argv[4]),
                                                    norm_range=(130, 150))
+
+    ##
+    ## old function:
+    ##
+    #odeg, oky, oky_fdd = cook_from_beamline (inw,
+    #                                         eoffs=float(sys.argv[2]),
+    #                                         doffs=float(sys.argv[3]),
+    #                                         kT=float(sys.argv[4]),
+    #                                         norm_range=(130, 150))
+    
     owaves = [odeg, oky, oky_fdd]
     ofiles = [infile.replace(".ibw", "g.ibw"),
               infile.replace(".ibw", "g_ky.ibw"),
