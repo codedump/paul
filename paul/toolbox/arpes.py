@@ -795,13 +795,26 @@ def deg2ky_single (wav, **kwargs):
        - `wav`: The 2D wave to transform.
        - `axes`: one of 'ed' or 'de', showing the order of the
                  (e)nergy and (d)etector axes.
+       - `tilt`: (float) tilt angle at which the data was measured
 
     For valid *kwargs*, see *deg2ky()*.
     '''
+    
+    # 'axes' parameter needs to be expanded to 'edt' or 'det'
     if kwargs.has_key('axes'):
         kwargs['axes'] += "t"
+
+    # 'tilt' argument has a different meaning here.
+    # if it is specified, save the value and remove the argument.
+    if kwargs.has_key('tilt'):
+        tilt = kwargs['tilt']
+        del kwargs['tilt']
+    else:
+        tilt = 0.0
+        
     fake_3d = wave.dstack([wav, wav, wav])
-    fake_3d.dim[2].lim = (-1e-10, 1e-10)
+    fake_3d.dim[2].lim = (tilt-1e-10, tilt+1e-10)
+    
     return deg2ky (fake_3d, **kwargs).sum(2)
 
 
