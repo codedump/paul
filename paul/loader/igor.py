@@ -824,9 +824,10 @@ def wave_write (wav, filename, autoname=True, autodir=True, note=None):
         fpath = '' # unknown path
     else:
         # as a convenience, we will create subdirectories, if required.
-        if autodir:
+        filedir = os.path.dirname(filename)
+        if autodir and len(filedir) > 0:
             try:
-                os.makedirs(os.path.dirname(filename))
+                os.makedirs(filedir)
             except OSError as ex:
                 if ex.errno == errno.EEXIST:
                     pass
