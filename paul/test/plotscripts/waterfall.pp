@@ -27,20 +27,20 @@ def populate(*args, **kwargs):
     input_wave = kwargs['wav'][0]
 
     comp_ax = 0
-    comp_step = 5
+    comp_step = 10
     comp_norm = False
     do_fdd = False
-    do_fdd = True
+    #do_fdd = True
 
-    offs = (0, 0.15)
+    offs = (0, 0.05)
     xlim = (0, 0)
     ylim = (0, 0)
     
     #xlim = (11.625, 11.66)
     #xlim = (27.60, 27.66)
-    xlim = (-0.06, 0.02)
+    #xlim = (-0.06, 0.02)
     
-    ylim = (-0.3, 0.6)
+    #ylim = (-0.3, 0.6)
     #ylim = (2, 38)
     #ylim = (-0.5, 0.7)
     #ylim = (-0.1, 0.1)
@@ -53,7 +53,8 @@ def populate(*args, **kwargs):
     data_lim = (input_wave.infv('FDD', 'V_min', default=np.nanmin(input_wave)),
                 input_wave.infv('FDD', 'V_max', default=np.nanmax(input_wave)))
     norm = max(data_lim)    # normalize to maximum intensity (typically SS)
-    norm = input_wave(0,0)  # normalize to value at E_F.
+
+    #norm = input_wave(0,0)  # normalize to value at E_F.
     
     # swap axes to move the comp-axis to 0
     work_wave = (1.0/norm) * (input_wave if comp_ax == 1 else input_wave.swapaxes(0,1))

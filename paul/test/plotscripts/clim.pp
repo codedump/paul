@@ -19,7 +19,7 @@ def populate (*args, **kwargs):
         log.debug ("Array")
 
     kwargs['axes'] = can.axes
-    can.axes.imshow (wav, extent=wav.imlim, interpolation='none', cmap=cm.gray)
+    can.axes.imshow (wav, extent=wav.imlim, interpolation='none',)
     decorate (*args, axes=can.axes, wav=wav)
     can.draw()
     
@@ -31,8 +31,8 @@ def decorate (*args, **kwargs):
     col_min = w.infv('FDD', 'V_min', default=np.nanmin(w))
     col_max = w.infv('FDD', 'V_max', default=np.nanmax(w))
     
-    clim = [col_min+(col_max-col_min)*0.35,
-            col_min+(col_max-col_min)*0.55]
+    clim = [col_min+(col_max-col_min)*0.05,
+            col_min+(col_max-col_min)*0.95]
 
     ax.images[0].set_clim (clim)
     ax.set_ylim (w.dim[0].lim)

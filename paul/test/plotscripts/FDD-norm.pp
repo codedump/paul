@@ -14,7 +14,7 @@ def populate (*args, **kwargs):
 
     if not wav[0].info.has_key ('FDD'):
         #clim = (np.nanmin(wav[0]), np.nanmax(wav[0]))
-        foo = arpes.norm_by_fdd (wav[0], axis=0, Ef=0, kT=0.001500)
+        foo = arpes.norm_by_fdd (wav[0], axis=0, Ef=0, kT=0.002000)
         ax.plot (wav[0].dim[0].range, foo)
     else:
         foo = wav[0]

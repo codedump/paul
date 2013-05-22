@@ -292,7 +292,7 @@ def norm_by_fdd (data, axis=0, energy=None, Ef=0.0, kT=None, T=None, dE=None):
       - `energy`: alternative energy axis specification (if specified,
         intrinsic scaling of *data* is ignored)
 
-      - `EF`: the Fermi level in eV, in intrinsic axis
+      - `Ef`: the Fermi level in eV, in intrinsic axis
         coordinates (default is 0.0)
 
       - `kT`: the effective temperature broadening parameter in eV
@@ -334,6 +334,11 @@ def norm_by_fdd (data, axis=0, energy=None, Ef=0.0, kT=None, T=None, dE=None):
     while len(fdd.shape) < len(odat.shape):
         fdd = np.expand_dims(fdd, 1)
     odat /= fdd
+
+    import paul.loader.igor as igor
+    fdd_w = fdd.view(wave.Wave)
+    fdd_w.dim[0].lim = odat.dim[0].lim
+    igor.wave_write (fdd_w, "foo.ibw")
     
     odat.info['FDD'] = {'V_min': np.nanmin(data),
                         'V_max': np.nanmax(data),

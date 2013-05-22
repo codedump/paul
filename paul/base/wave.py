@@ -1686,8 +1686,7 @@ def _test_index_call(*call_i, **kwargs):
     full_i  = kwargs.setdefault ('full_i', None)
     verbose = kwargs.setdefault ('verbose', False)
 
-    #a1 = array([[[i*1+j*10+k*100 for i in range(5)] for j in range(5)] for k in range(5)]).view(Wave)
-    a2 = array([[[i*1+j*10+k*100 for i in range(5)] for j in range(5)] for k in range(5)]).view(Wave)
+    a2 = array([[[i*1+j*10+k*100 for i in range(6)] for j in range(6)] for k in range(6)]).view(Wave)
 
     for i in range(a2.ndim):
         a2.dim[i].delta   = 0.1
