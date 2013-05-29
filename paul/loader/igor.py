@@ -1116,19 +1116,48 @@ def pack_make_uxp (path, out=None, _prefix=''):
     else:
         out.write ("NewDataFolder/S '%s'\r" % path_igor)
         out.write ('NewPath home "%s"\r' % full_path_igor)
+
+    #
+    # need to load IBWs before descending into subdirectories -- that's
+    # we sort the files and dirs apart early and loop individually over them
+    #
     
-    for entry in os.listdir(full_path):
-        entry_fullpath = os.path.join(full_path, entry)
-        if entry_fullpath.lower().rfind(".ibw") == len(entry_fullpath)-4:
+    listdir = os.listdir(full_path)
+    file_list = [ f for f in listdir if os.path.isfile(os.path.join(full_path,f)) ]
+    dir_list  = [ f for f in listdir if os.path.isdir (os.path.join(full_path,f)) ]
+    
+    for entry in file_list:
+
+        # path relative to main directory
+        fpath = os.path.join (full_path, f)
+
+        # extenstion
+        ext_i = entry.rfind(".")
+        if ext_i < 0:
+            ext_i = len(entry)
+        ext = entry[ext_i:]
+
+        # extension-dependent treating
+        if ext.lower() == ".ibw":
             out.write ('LoadWave /P=home "%s"\r' % (entry))
-        elif stat.S_ISDIR(os.stat(entry_fullpath).st_mode):
-            pack_make_uxp (entry, out=out, _prefix=full_path)
+        elif entry == "variables":
+            out.write ('ReadVariables\r') 
+
+    for entry in dir_list:
+        pack_make_uxp (entry, out=out, _prefix=full_path)
+
+
 
     if len(_prefix) == 0:
         out.write ("SetDataFolder root:\r")
+        
+        # apparently, at the end Igor looks for variables, history and Procedure
+        # in the root experiment directory. Should make one last "NewPath %(full_path)s" here...?
+        out.write ('NewPath home "%s"\r' % full_path_igor)
+        
     else:
-        #out.write ('SetDataFolder "%s::"  // current dir: %s\r\r' % (full_path_igor, _prefix))
         out.write ('SetDataFolder ::  // data folder is now: %s\r\r' % (_prefix))
+
 
 #
 # standalone application functionality
