@@ -32,7 +32,7 @@ uru2si2_kvec = [
 # distance: 1.5246749107
 
 # Paul: plot parameters begin
-plot_params = {'rot': 57,
+plot_params = {'rot': 45, # 57,
                'repeat': 1,
                'xlim': (-0.3, 1.1),
                'ylim': (-0.5, 0.5),

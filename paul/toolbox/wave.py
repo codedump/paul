@@ -30,7 +30,7 @@ def wave_note_read (wfile):
     return str(text)
 
 
-def wave_note_write (infile=None, note='', wav=None, outfile=None):
+def wave_note_write (infile=None, note='', wav=None, outfile=None, safe=True):
     '''
     Writes the note section of the specified wave.
     To this purpose, wave is read from 'wfile' if not an existing
@@ -48,14 +48,17 @@ def wave_note_write (infile=None, note='', wav=None, outfile=None):
     if wav is None:
         wav = ig.wave_read (infile_name, note_parse=False)
 
-    # write the wave (using an intermediary temporary file)
-    with NamedTemporaryFile (delete=False) as tmp:
-        tmp.close()
-        ig.wave_write (wav, tmp.name, note=note)
-        os.rename (tmp.name, outfile_name)
+    if safe:
+        # write the wave (using an intermediary temporary file)
+        with NamedTemporaryFile (delete=False) as tmp:
+            tmp.close()
+            ig.wave_write (wav, tmp.name, note=note)
+            os.rename (tmp.name, outfile_name)
+    else:
+        ig.wave_write (wav, outfile_name)
 
 
-def wave_note_edit (wfile_in, wfile_out):
+def wave_note_edit (wfile_in, wfile_out, safe=True):
     '''
     Reads the specified wave, opens the Info text in a text editor,
     waits for the user to edit the text (i.e. close the file),
@@ -80,7 +83,7 @@ def wave_note_edit (wfile_in, wfile_out):
         note1 = ''.join(tmp.readlines())
         os.remove (tmp_name)
 
-    wave_note_write (infile=wfile_in, note=note1, outfile=wfile_out)
+    wave_note_write (infile=wfile_in, note=note1, outfile=wfile_out, safe=safe)
 
 
 def wave_note_init (subparser=None, func=None, name='wave-note'):
@@ -99,8 +102,9 @@ def wave_note_init (subparser=None, func=None, name='wave-note'):
     act.add_argument('-a', '--append', type=str,            help="Append the specified string to wave notes.")
 
     parser.add_argument ('-o', '--output',  type=argparse.FileType('w'), help="Output wave. If not specified, input wave will be overwritten.", nargs='?', default=None)
-    parser.add_argument('input', nargs='+', type=argparse.FileType('r'),
-                        help="IBW file(s) to process.")
+    parser.add_argument('input', nargs='+', type=argparse.FileType('r'), help="IBW file(s) to process.")
+    parser.add_argument('--safe',   action='store_true',  help='If output would overwrite input file, save output in a temporaray file first, then move it over the input file to lower the risk of data corruption.', default=True)
+    parser.add_argument('--unsafe', action='store_false', help='Opposite of "--safe". May lead to data loss if anything goes wrong with saving the data.', dest='safe')
 
     if func is not None:
         # call wave_note sub-application by default
@@ -119,7 +123,7 @@ def wave_note_main (param):
     if param.edit:
         if param.output is None:
             param.output = param.input[0]
-        wave_note_edit (param.input[0], param.output)
+        wave_note_edit (param.input[0], param.output, param.safe)
 
     # parse note (and print)
     elif param.parse:
@@ -131,7 +135,7 @@ def wave_note_main (param):
         
     # append to note
     elif param.append:
-        [ wave_note_write (f, "%s\n%s" % (wave_note_read(f), param.append))
+        [ wave_note_write (f, "%s\n%s" % (wave_note_read(f), param.append, param.safe))
           for f in files ]
 
     # print note (param.nprint)
@@ -165,8 +169,9 @@ def wave_dim_init (subparser=None, func=None, name='wave-dim'):
 
     parser.add_argument ('-d', '--dim', '--dims',     type=d2ilist, help="Comma-seperated list of dimensions to manipulate.", default=None)
     parser.add_argument ('-o', '--output', nargs='*', type=argparse.FileType('w'), help="Output wave. If not specified, input wave will be overwritten.", default=None)
-    parser.add_argument('input',           nargs='+', type=argparse.FileType('r'),
-                        help="IBW file(s) to process.")
+    parser.add_argument('input',           nargs='+', type=argparse.FileType('r'), help="IBW file(s) to process.")
+    parser.add_argument('--safe',   action='store_true',  help='If output would overwrite input file, save output in a temporaray file first, then move it over the input file to lower the risk of data corruption.', default=True)
+    parser.add_argument('--unsafe', action='store_false', help='Opposite of "--safe". May lead to data loss if anything goes wrong with saving the data.', dest='safe')
 
     if func is not None:
         # call wave_note sub-application by default
@@ -212,14 +217,16 @@ def wave_dim_main (param):
         else:        
             print string.join([ str(d) for d in wav.dim ], '\n')
 
-
         # re-write the wave, if modifications were performed
         if wav_save:
             wav_name = fout.name if hasattr(fout, "close") else fout
-            with NamedTemporaryFile (delete=False) as tmp:
-                tmp.close()
-                ig.wave_write (wav, tmp.name)
-                os.rename (tmp.name, wav_name)
+            if param.safe:
+                with NamedTemporaryFile (delete=False) as tmp:
+                    tmp.close()
+                    ig.wave_write (wav, tmp.name)
+                    os.rename (tmp.name, wav_name)
+            else:
+                ig.wave_write (wav, wav_name)
 
 
 ##
