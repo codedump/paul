@@ -53,47 +53,46 @@ def exit(*av, **kav):
 
     
 def populate (*av, **kav):
-    fsmap      = kav['wav'][0]
+
+    global slice_data, plot_params
+    p = plot_params
+
+    # figure initialization...
     kav['can'].clear()
-    p  = plot_params
+    fig = kav['fig']
+    fig.text (0, 0, "mouse left: set trace points\nmouse right: save trace")
 
-    global slice_data
+    # data initialization...
+    fsmap = kav['wav'][0]
+    if len(kav['wav']) > 1 and kav['wav'][1].info.has_key('FS trace'):
+        fstrace = kav['wav'][1]
+    else:
+        fstrace = np.zeros([2, p['slice']['no']])
+
+    fig.text(0, 0.1, "FS trace file: %s" %s fstrace.infs('tmp', 'last path'), color='red')
     
-    sd = slice_data
-
-    ax_fs = kav['fig'].add_subplot (gridplot ((1,3), (0,0), colspan=2))
-    ax_ln = kav['fig'].add_subplot (gridplot ((1,3), (0,2), colspan=1))
-
-    ax_fs.imshow (fsmap, extent=fsmap.imlim, interpolation='none', cmap=cm.hot)
-
-    sd['sheets'] = []  # list of FS sheets
-    sd['sheets'].append ({
-        'pts-pol': np.zeros([2, p['slice']['no']]),  # polar point coordinates
-        'pts-car': np.zeros([2, p['slice']['no']]),  # cartesian point coordinates
-        'wfile': None, 
-        })
-
     # slicing...
     tmp = slice2d_fsmap_radial (fsmap, center=p['slice']['center'], num=p['slice']['no'])
-    kav['slices'] = tmp['slices']
-    kav['coords'] = tmp['coords']
+    kav['slices']  = tmp['slices']
+    kav['coords']  = tmp['coords']
+    kav['fsmap']   = fsmap
+    kav['fstrace'] = fstrace
 
-    ## Obsolete... LineCollection doesn't work nice with pick events,
-    ## for the purpose of selecting single lines :-(
-    #kav['slices'] = plotwater (ax_ln, tmp['slices'], offs=p['lines']['offs'])
-    kav['coords'] = plotwater (ax_fs,
-                               wlist=[c[0] for c in tmp['coords']],
-                               xlist=[c[1] for c in tmp['coords']])
+    # displaying...
+    ax_fs = fig.add_subplot (gridplot ((1,3), (0,0), colspan=2))
+    ax_ln = fig.add_subplot (gridplot ((1,3), (0,2), colspan=1))
+
+    # display FS map, radial lines, and FS trace
+    ax_fs.imshow (fsmap, extent=fsmap.imlim, interpolation='none', cmap=cm.hot)
+    kav['coords'] = plotwater (ax_fs, wlist=[c[0] for c in tmp['coords']],
+                                      xlist=[c[1] for c in tmp['coords']])
 
     # Slices have to be drawn manually to be pickable :-(
     max_data = max([np.nanmax(l) for l in kav['slices']]) 
     offset = 0
     for sl, i in zip (kav['slices'], range(len(kav['slices']))):
         ax_ln.plot (sl.dim[0].range, sl+offset, picker=10)
-        offset += max_data*p['lines']['offs'][1]
-
-        
-    #ax_ln.set_ylim ((0, max_data * len(kav['coords'])+1))
+        offset += max_data*p['lines']['offs'][1]        
     
     decorate_fs (*av, axes=ax_fs, **kav)
     decorate_ln (*av, axes=ax_ln, **kav)

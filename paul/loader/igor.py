@@ -457,7 +457,7 @@ def wave_note_generate (infomap, block_prefix='', sep='\r'):
     ## first, write root-block entries
     for (k,v) in infomap.iteritems():
         # there are some sections to be ignored -- they're for internal use only
-        if k in ["debug", "strays", "axes", "name" ]:
+        if k in ["debug", "strays", "axes", "name", "tmp" ]:
             continue
         
         # if item is a dictionary, ignore
@@ -688,7 +688,7 @@ def wave_read (filename, note_parse=True, note_text=None):
     filepath = ''
     if hasattr(filename, 'read'):
         f = filename  # filename is actually a stream object
-        filepath = ''
+        filepath = filename.name
     else:
         f = open(filename, 'rb')
         filepath = filename
@@ -739,8 +739,10 @@ def wave_read (filename, note_parse=True, note_text=None):
             
         # store the read headers for debug information
         ##data.info['debug'] = [bin_info, wave_info ]
-
         #log.debug ("Loaded %s from path: %s" % (data.info['name'], data.info['path']))
+
+        if len (filepath) > 0:
+            data.info['tmp'] = {'last path': os.path.abspath(str(filepath)) }
 
         return data
 

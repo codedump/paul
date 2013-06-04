@@ -467,10 +467,10 @@ class ViewerWindow(QtGui.QMainWindow):
             self.plot.canvas.plot(self.plot.waves, redraw=True)
 
 
-        if hasattr (self.plot.waves, 'info'):
-            self.setWindowTitle ("Paul Viewer: %s" % self.plot.waves.info['name'])
+        if isinstance (self.plot.waves, list) and hasattr(self.plot.waves[0], 'info'):
+            self.setWindowTitle ("Paul Viewer: %s" % self.plot.waves[0].info['name'])
         else:
-            self.setWindowTitle ("Paul Viewer <name missing>")
+            self.setWindowTitle ("Paul Viewer on non-wave")
 
 
     @QtCore.pyqtSlot('QStringList')
@@ -497,10 +497,13 @@ class ViewerWindow(QtGui.QMainWindow):
         for fname in flist:
             d = igor.load (fname)
             d.info.setdefault('name', os.path.basename(str(fname)))
+            d.info.setdefault('tmp', {})
+            d.info['tmp']['last path'] = str(fname)
             self.pscr.toolbar.path_ref = str(fname)
             self.plot.files = list(flist)
             data.append (d)
         self.plotWaves (data)
+
 
     def refresh(self):
         '''
