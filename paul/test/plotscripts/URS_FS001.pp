@@ -76,8 +76,13 @@ def decorate (*args, **kwargs):
 
     ax = kwargs['axes']
     ax.set_aspect (1)
-    ax.axhline (0, ls=':', color='black')
-    ax.axvline (0, ls=':', color='black')
+    ax.axhline (0,     ls=':', color='black')
+    ax.axvline (0,     ls=':', color='black')
+    
+    ax.axhline ( 1.078, ls=':', color='black')
+    ax.axvline ( 1.078, ls=':', color='black')
+    ax.axhline (-1.078, ls=':', color='black')
+    ax.axvline (-1.078, ls=':', color='black')
 
     #ax.set_xlim (p['xlim'])
     #ax.set_ylim (p['ylim'])

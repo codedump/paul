@@ -775,8 +775,13 @@ def deg2ky (*args, **kwargs):
                                         (odeg_t - ideg_t[0]) / ((ideg_t[-1]-ideg_t[0])/len(ideg_t)))
                                         #idata.dim[1].x2i(odeg_d),
                                         #idata.dim[2].x2i(odeg_t))
+
+    mode = 'constant'
+    if kwargs.has_key('force_wrap_mode') and kwargs['force_wrap_mode'] == True:
+        mode = 'wrap'
+        
     spni.map_coordinates (idata, ocoord_index, output=odata.view(np.ndarray),
-                          order=degree, mode='constant', cval=fill)
+                          order=degree, mode=mode, cval=fill)
 
     print "done."
     
@@ -786,7 +791,7 @@ def deg2ky (*args, **kwargs):
     return odata
 
 
-def deg2ky_single (wav, **kwargs):
+def deg2ky_single (wav, tilt_margin=1e-5, **kwargs):
     '''
     Quick'n'dirty wrapper around *deg2ky()* that convers a
     single 2D wave by re-packing it into a 3D wave.
@@ -802,25 +807,49 @@ def deg2ky_single (wav, **kwargs):
                  (e)nergy and (d)etector axes.
        - `tilt`: (float) tilt angle at which the data was measured
 
-    For valid *kwargs*, see *deg2ky()*.
+    Internal set up parameters:
+    
+       - `tilt_margin`: constant for tilt emulation (defaults to 1e-5).
+         Don't touch unless you've read the source and understand what
+         it does.
+
+    For other valid *kwargs*, see *deg2ky()*.
+
+    Returns a transformed version of the wave, with proper scaling.
     '''
     
-    # 'axes' parameter needs to be expanded to 'edt' or 'det'
+    # 'axes' parameter 'ed' or 'de' needs
+    # to be expanded to 'edt' or 'det' for deg2ky().
     if kwargs.has_key('axes'):
         kwargs['axes'] += "t"
 
-    # 'tilt' argument has a different meaning here.
-    # if it is specified, save the value and remove the argument.
+    # 'tilt' argument has a different meaning:
+    # Here it is a single value representing the discrete tilt angle
+    # at which the data was measured.
+    # In deg2ky() it represents an array of tilt values for each
+    # point in the tilt direction.
+    # 
+    # If it is specified, save the value and remove the argument
+    # (such that it remains unspecified for the deg2ky() call).
+    #
+    # Also, at higher tilt angles, polar -> k transformation distorsion
+    # may throw us out of the available data region. To avoid
+    # this, we force a wrap-around mode there. This will give
+    # slightly wrong results (which are inherent to the way ARPES
+    # at non-normal emission works, not related to this algorithm.)
+    #
     if kwargs.has_key('tilt'):
         tilt = kwargs['tilt']
         del kwargs['tilt']
+        kwargs['force_wrap_mode'] = True
     else:
         tilt = 0.0
         
     fake_3d = wave.dstack([wav, wav, wav])
-    fake_3d.dim[2].lim = (tilt-1e-10, tilt+1e-10)
+    fake_3d.dim[2].lim = (tilt-tilt_margin, tilt+tilt_margin)
     
-    return deg2ky (fake_3d, **kwargs).sum(2)
+    
+    return deg2ky (fake_3d, **kwargs).mean(2)
 
 
 def deg2kz (*args, **kwargs):

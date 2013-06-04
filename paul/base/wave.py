@@ -108,7 +108,7 @@ class AxisInfo(object):
     @property
     def end(self):
         '''
-        Returns the value of the last point of the axis.
+        Returns the axis value of the last point of the axis.
         '''
         return self.offset + self.delta*(self.size-1)
 
@@ -461,15 +461,26 @@ class Wave(ndarray):
     @property
     def imlim(self):
         '''
-        Limits tuple to use with imshow.
+        Limits tuple to use with matplotlib's imshow().
+        
+        The image axis begins at dim.offset and ends at dim.end+1
+        (i.e. the point _after_ the last point). This is to account for
+        the width of the last pixel, which, otherwise, would have its
+        coordinate displayed off-screen :-)
         '''
-        return (self.dim[1].offset, self.dim[1].end, self.dim[0].end, self.dim[0].offset)
+        return (self.dim[1].offset,
+                self.dim[1].end+self.dim[1].delta,
+                self.dim[0].end+self.dim[0].delta,
+                self.dim[0].offset)
 
         
     @property
     def lim(self):
         '''
-        General N-dim limits tuple (offset/end of each axis)
+        General N-dim limits tuple (offset/end of each axis).
+        
+        Note that this is *different* from imlim in that this is list
+        of tuples containing the real (first, last) point coordinates.
         '''
         return tuple(np.array([[d.offset, d.end] for d in self.dim]).flat)
         

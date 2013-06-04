@@ -25,7 +25,7 @@ def gridplot (grid, loc, rowspan=1, colspan=1):
     return subplotspec
 
 
-def plotwater (fig_ax, wlist, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0)):
+def plotwater (fig_ax, wlist, xlist=None, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0)):
     '''
     Creates a waterfall plot on the matplotlib Axes instance
     *fig_ax* from a list of 1D waves specified by *wlist*.
@@ -42,9 +42,11 @@ def plotwater (fig_ax, wlist, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0)):
     if isinstance(wlist, wave.Wave):
         return imwater(fig_ax, wlist, axis, offs, xlim, ylim, autoscale=True)
 
-    xlist = [np.arange(start=wave.WCast(w).dim[0].offset,
-                       stop=wave.WCast(w).dim[0].end,
-                       step=wave.WCast(w).dim[0].delta) for w in wlist]
+    # generate x coordinate list, if not specified
+    if xlist is None:
+        xlist = [np.arange(start=wave.WCast(w).dim[0].offset,
+                           stop=wave.WCast(w).dim[0].end,
+                           step=wave.WCast(w).dim[0].delta) for w in wlist]
     
     if xlim == (0, 0):
         xlim = (min([wave.WCast(w).dim[0].min for w in wlist]) - (offs[0]*len(wlist))*(offs[0]<0),

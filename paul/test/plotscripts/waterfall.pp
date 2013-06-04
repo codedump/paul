@@ -27,12 +27,12 @@ def populate(*args, **kwargs):
     input_wave = kwargs['wav'][0]
 
     comp_ax = 0
-    comp_step = 10
+    comp_step = 3
     comp_norm = False
     do_fdd = False
-    #do_fdd = True
+    do_fdd = True
 
-    offs = (0, 0.05)
+    offs = (0, 0.1)
     xlim = (0, 0)
     ylim = (0, 0)
     

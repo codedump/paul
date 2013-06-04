@@ -375,7 +375,7 @@ class ViewerWindow(QtGui.QMainWindow):
         '''
         log.debug ("ViewerWindow cleaning up.")
         if hasattr(self.pscr, 'obj') and hasattr(self.pscr.obj, 'exit'):
-            self.pscr.obj.exit(self.plot.canvas)
+            self.pscr.obj.exit(can=self.plot.canvas)
 
 
     def initMainFrame(self):
@@ -618,7 +618,7 @@ class ViewerWindow(QtGui.QMainWindow):
             self.pscrCall ('reload', can=self.plot.canvas, win=self, fig=self.plot.canvas.fig, vars=self.pscr.vars)
         else:
             try:
-                self.pscrCall ('exit', self.plot.canvas, self)
+                self.pscrCall ('exit', can=self.plot.canvas, win=self)
                 self.pscrUnload()
                 self.pscrLoad(str(script_file))
                 self.pscrCall ('init', can=self.plot.canvas, win=self, vars=self.pscr.vars)
