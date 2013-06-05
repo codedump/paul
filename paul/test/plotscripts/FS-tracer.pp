@@ -19,6 +19,8 @@ from paul.toolbox.pscr import *
 from paul.toolbox.mpltrix import *
 
 import paul.base.wave as wave
+import paul.loader.igor as igor
+
 import numpy as np
 import scipy.ndimage.interpolation as spni
 import matplotlib.cm as cm
@@ -27,7 +29,7 @@ plot_params = {
     'slice': {
         'no': 24,
         'center': (0.0, 0.0),
-        'sheet file': "FS-sheet.ibw",
+        'picker': 3,
     },
 
     'lines': {
@@ -53,6 +55,16 @@ def exit(*av, **kav):
 
     
 def populate (*av, **kav):
+    '''
+    This function needs two waves to operate:
+    - wav[0] is the FS map to operate
+    - wav[1] is the FS trace to save the trace points.
+      wav[1] is a 3 x num_slices wave, where the 1st dimension
+      has the following meaning:
+        i=0: x-coordinates of the FS trace points
+        i=1: y-coordinates of the FS trace points
+        i=2: radial coordinate of the FS trace points relative to info['FS trace']['center']
+    '''
 
     global slice_data, plot_params
     p = plot_params
@@ -60,61 +72,181 @@ def populate (*av, **kav):
     # figure initialization...
     kav['can'].clear()
     fig = kav['fig']
-    fig.text (0, 0, "mouse left: set trace points\nmouse right: save trace")
 
-    # data initialization...
+    # data initialization: define fsmap and fstrace waves
     fsmap = kav['wav'][0]
     if len(kav['wav']) > 1 and kav['wav'][1].info.has_key('FS trace'):
-        fstrace = kav['wav'][1]
+        if kav['wav'][1].shape != (3, p['slice']['no']):
+            log.debug ("Found slice array, but it needs resizing (shape: %s)" % str(kav['wav'][1].shape))
+            fstrace = None
+        else:
+            fstrace = kav['wav'][1].copy()
     else:
-        fstrace = np.zeros([2, p['slice']['no']])
+        fstrace = None
+            
+    if fstrace is None:
+        fstrace = np.zeros([3, p['slice']['no']]).view(wave.Wave)
+    fstrace.info['FS trace'] = {'source': fsmap.infs('name'),
+                                'slices': p['slice']['no'],
+                                'center': p['slice']['center'], }
+    slice_data['trace file'] = get_trace_file(fsmap, fstrace)
 
-    fig.text(0, 0.1, "FS trace file: %s" %s fstrace.infs('tmp', 'last path'), color='red')
+    fig.text (0.01, 0.01, "mouse left:  set trace points\nmouse right: save trace\ntrace file: %s" 
+              % os.path.relpath(slice_data['trace file']))
     
     # slicing...
     tmp = slice2d_fsmap_radial (fsmap, center=p['slice']['center'], num=p['slice']['no'])
-    kav['slices']  = tmp['slices']
-    kav['coords']  = tmp['coords']
-    kav['fsmap']   = fsmap
-    kav['fstrace'] = fstrace
+    slice_data['angles']  = tmp['angles']
+    slice_data['slices']  = kav['slices']  = tmp['slices']
+    slice_data['coords']  = kav['coords']  = tmp['coords']
+    slice_data['fsmap']   = kav['fsmap']   = fsmap
+    slice_data['fstrace'] = kav['fstrace'] = fstrace
+    slice_data['trace plot'] = None
+    slice_data['trace marks'] = None
+    slice_data['center'] = p['slice']['center']
 
     # displaying...
     ax_fs = fig.add_subplot (gridplot ((1,3), (0,0), colspan=2))
     ax_ln = fig.add_subplot (gridplot ((1,3), (0,2), colspan=1))
 
+    slice_data['plot axes'] = [ax_fs, ax_ln]
+
     # display FS map, radial lines, and FS trace
-    ax_fs.imshow (fsmap, extent=fsmap.imlim, interpolation='none', cmap=cm.hot)
-    kav['coords'] = plotwater (ax_fs, wlist=[c[0] for c in tmp['coords']],
-                                      xlist=[c[1] for c in tmp['coords']])
+    ax_fs.imshow (fsmap.view(np.ndarray), extent=fsmap.imlim, interpolation='none', cmap=cm.hot)
+    slice_data['trace coord'] = plotwater (ax_fs,
+                                            wlist=[c[0] for c in tmp['coords']],
+                                            xlist=[c[1] for c in tmp['coords']])
 
     # Slices have to be drawn manually to be pickable :-(
-    max_data = max([np.nanmax(l) for l in kav['slices']]) 
-    offset = 0
-    for sl, i in zip (kav['slices'], range(len(kav['slices']))):
-        ax_ln.plot (sl.dim[0].range, sl+offset, picker=10)
-        offset += max_data*p['lines']['offs'][1]        
-    
+    offset     = max([np.nanmax(l) for l in kav['slices']]) * p['lines']['offs'][1]
+    slice_data['slices offset'] = offset
+    slice_data['slices plots'] = [ ax_ln.plot (kav['slices'][i].dim[0].range,
+                                               kav['slices'][i]+offset*i,
+                                               picker=p['slice']['picker'])
+                                               for i in range(p['slice']['no']) ]
+
+    update_trace (ax_fs, ax_ln, slice_data)
+            
     decorate_fs (*av, axes=ax_fs, **kav)
     decorate_ln (*av, axes=ax_ln, **kav)
 
+    slice_data['canvas'] = kav['can']
     kav['can'].draw()
+
+
+def update_trace (ax_fs, ax_ln, slice_data):
+    '''
+    Updates trace marks on the FS map and the lines axes.
+    '''
+    num_slices = len(slice_data['slices'])
+    slices = slice_data['slices']
+
+    trace_x = slice_data['fstrace'][0]
+    trace_y = slice_data['fstrace'][1]
+    trace_rad = slice_data['fstrace'][2]
+    
+    offset  = slice_data['slices offset']
+
+    if slice_data.setdefault('trace marks', None) is not None:
+        print "deleting old trace marks"
+        slice_data['trace marks'].remove()
+    slice_data['trace marks'] = ax_ln.vlines (trace_rad,
+                                              [slices[i](trace_rad[i]) + (i-0.3)*offset for i in range(num_slices)],
+                                              [slices[i](trace_rad[i]) + (i+0.3)*offset for i in range(num_slices)],
+                                              color='black', lw=1.0)
+
+    if slice_data.setdefault('trace plot', None) is not None:
+        #slice_data['trace plot'].remove()
+        del slice_data['trace plot']
+    
+    trace_x = np.sin(slice_data['angles']) * trace_rad
+    trace_y = np.cos(slice_data['angles']) * trace_rad
+    slice_data['trace plot'] = ax_fs.plot (trace_x, trace_y)
+    
+
+def get_trace_file (fsmap, fstrace, stub='fstrace'):
+    '''
+    Returns a file path suitable to save the fstrace in
+    by sequentially trying a number of options:
+    
+      1. if fstrace already is associated with a file on disk,
+      (i.e. fstrace.info['tmp']['last path'] exists),
+      that one is used
+
+      2. if fsmap is associated with a file on disk
+      (i.e. fsmap.info['tmp']['last path'] is defined),
+      a new (non-existent) file name is constructed using this
+      and 'stub' as a starting point
+
+      3. else a new file name is constructed using only stub
+      as a file name
+    '''
+
+    #print "fstrace:", fstrace.infs('tmp', 'last path')
+    #print "fsmap:  ", fsmap.infs('tmp', 'last path')
+    #print
+
+    tmp = fstrace.infs('tmp', 'last path')
+    if tmp is not None and len(tmp) > 0:
+        return tmp
+
+    tmp = fsmap.infs('tmp', 'last path')
+    if (tmp is not None) and (len(tmp) > 0):
+        i = tmp.rfind(".")
+        if i < 0:
+            i = len(tmp)
+        prefix = tmp[:i]
+
+    mkfn = lambda pre, stb, cnt: "%s_%s%s.ibw" % (pre, stb, ("%d" % cnt) if cnt >= 0 else "")
+    cnt = -1
+    while os.path.exists(mkfn(prefix, stub, cnt)):
+        cnt += 1
+
+    return mkfn(prefix, stub, cnt)
 
     
 def on_pick (event):
     '''
     Called when user selects object on the canvas.
     '''
+
+    global slice_data
+    
     ipos = event.ind[0] + round(0.5*(event.ind[-1]-event.ind[0]))
     xpos = event.artist.get_xdata()[ipos]
-    print "Grr!"
-    print "  Artist: ", event.artist, "xpos", xpos, "at", ipos, event.ind, event.artist.get_picker()
+
+    id_list = [id(s[0]) for s in slice_data['slices plots']]
+
+    slice_index = id_list.index(id(event.artist))
+    if (slice_index < 0):
+        print "Oops, unknown slice", event.artist
+    print "  Slice: ", slice_index, "xpos", xpos, "at", ipos
+    slice_data['fstrace'][2][slice_index] = xpos
+    
+    update_trace(slice_data['plot axes'][0],
+                 slice_data['plot axes'][1],
+                 slice_data)
+    
+    slice_data['canvas'].draw()
+
+    
 
 def on_click (event):
     '''
     Called when used clicks the canvas.
     '''
-    #print "Boo!"
-    pass
+
+    global slice_data
+    
+    if event.button == 1:
+        pass
+    elif event.button == 2:
+        pass
+    elif event.button == 3:
+        log.debug ("Writing '%s'" % slice_data['trace file'])
+        igor.wave_write (slice_data['fstrace'], slice_data['trace file'])
+    else:
+        print "Whoops!"
 
     
 def decorate_fs (*args, **kwargs):

@@ -466,7 +466,7 @@ def wave_note_generate (infomap, block_prefix='', sep='\r'):
 
         # if item is an iterable (list, tuple... but NOT string), go through the sub-items
         if hasattr(v, "__iter__"):
-            val = " ".join(v)
+            val = " ".join(str(v))
         else:
             val = v
         notestr += "%s = %s%s" % (k, val, sep)

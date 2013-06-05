@@ -275,18 +275,22 @@ class Wave(ndarray):
 
         else:                    # explicit construction, or new from non-Wave template.
             # Need to set sane defaults for self.info[]
-            for i in range(len(self.shape)):
-                self.info['axes'] = self.info.setdefault('axes', ()) + (AxisInfo(self),)
             self.info['name']='wave%x' % id(obj)
-            if obj is None: pass         # this would be explicit construction...
-            else:           pass         # ...and new from 'ndarray' or another subtype of it
-
+            
+            for i in range(len(self.info.setdefault('axes',())), len(self.shape)):
+                self.info['axes'] += (AxisInfo(self),)
+            
+            if obj is None: # this would be explicit construction...
+                pass
+            else:           # ...and new from 'ndarray' or another subtype of it
+                pass         
                 
     def _copy_info(self, from_wave, noax=False):
         '''
         Copies the info field from *from_wave*. This is basically just
         a wrapper around deepcopy() with some caveats to avoid recursion
         and correct AxisInfo() handling.
+        
         Parameter *noax* specifies whether info fields used for internal
         purposes (specifically Axis info) is to be copied or retained.
         If *noax* is True, then the AxisInfo() is retained. Default is
