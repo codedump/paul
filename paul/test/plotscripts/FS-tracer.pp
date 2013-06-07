@@ -27,8 +27,9 @@ import matplotlib.cm as cm
 
 plot_params = {
     'slice': {
-        'no': 24,
-        'center': (0.0, 0.0),
+        'no': 'auto',
+        'no hint': 36,
+        'center': (0.0, -1.078),
         'picker': 3,
     },
 
@@ -91,35 +92,44 @@ def populate (*av, **kav):
 
     # data init: fsmap and general settings
     fsmap = kav['wav'][0]
-    slice_data['fsmap']  = fsmap
+    slice_data['fsmap']  = fsmap    
 
     # data init: trace wave
-    if len(kav['wav']) > 1 and kav['wav'][1].info.has_key('FS trace'):
-        if kav['wav'][1].shape != (3, p['slice']['no']):
-            log.debug ("Found slice array, but it needs resizing (shape: %s)" % str(kav['wav'][1].shape))
-            fstrace = None
-        else:
-            fstrace = kav['wav'][1].copy()
-    else:
-        fstrace = None
-    if fstrace is None:
-        fstrace = np.zeros([3, p['slice']['no']]).view(wave.Wave)
-    fstrace.info['FS trace'] = {'source': fsmap.infs('name'),
-                                'slices': p['slice']['no'],
-                                'center': p['slice']['center'],
-                                'type': 'radial',}
+    fstrace = kav['wav'][1].copy()  if len(kav['wav']) > 1 else None
 
+    # check compatibility of slice wave with configured settings
+    if (fstrace is not None) and \
+        (fstrace.infs('FS trace', 'type') == 'radial') and \
+        (p['slice']['no'] == 'auto' or p['slice']['no'] == fstrace.infv('FS trace', 'slices')) and \
+        (fstrace.shape == (3, fstrace.infv('FS trace', 'slices'))):
+        # everything is great, user supplied FS trace is compatible with what we expect
+        slice_num = fstrace.infv('FS trace', 'slices')
+    else:
+        # build slice wave, if it was not already built
+        log.debug ("(re)building slice array")
+        slice_num = p['slice']['no'] if p['slice']['no'] is not 'auto' else p['slice']['no hint']
+        fstrace   = np.zeros([3, slice_num]).view(wave.Wave)
+
+    print "FS trace in %d slices" % slice_num
+
+    
+    fstrace.info['FS trace'] =  {'source': fsmap.infs('name'),
+                                 'slices': slice_num,
+                                 'center': p['slice']['center'],
+                                 'type': 'radial',}
     trace_data = {}
-    trace_data['slices'] = slice2d_fsmap_radial (fsmap, center=p['slice']['center'], num=p['slice']['no'])
+    trace_data['slices'] = slice2d_fsmap_radial (fsmap, center=p['slice']['center'], num=slice_num)
     trace_data['wave'] = fstrace
     trace_data['center'] = p['slice']['center']
     trace_data['file'] = get_trace_file(fsmap, fstrace)
     trace_data['plot'] = None
     trace_data['marks'] = None
     trace_data['marks pos'] = fstrace[2] if fstrace.shape[0] > 2 \
-      else np.zeros(p['slice']['no'])
+      else np.zeros(fstrace.shape[1])
     fig.text (0.01, 0.01, "mouse left:  set trace points\nmouse right: save trace\ntrace file: %s" 
               % os.path.relpath(trace_data['file']))
+
+    ##print np.array(trace_data['slices']['angles']) / 3.141592 * 180.0
 
     # add 0-th (and only) trace to the traces list
     slice_data['traces'].append(trace_data)
@@ -137,23 +147,13 @@ def populate (*av, **kav):
     trace_data['slices']['plots']  = [ ax_ln.plot (trace_data['slices']['waves'][i].dim[0].range, 
                                                    trace_data['slices']['waves'][i]+offset*i,
                                                    picker=p['slice']['picker'])[0]
-                                                   for i in range(p['slice']['no']) ]
+                                                   for i in range(len(trace_data['slices']['waves'])) ]
                                                
 
     update_trace (ax_fs, ax_ln, trace_data)
     decorate_fs (*av, axes=ax_fs, **kav)
     decorate_ln (*av, axes=ax_ln, **kav)
     kav['can'].draw()
-
-
-def load_trace (axes, wav=None):
-    '''
-    Loads and prepares the specified trace.
-    Returns a 'trace_data' map.
-
-    `wav` may be empty, in which case a new trace will
-    be created from scratch.
-    '''
 
 
 def update_trace (ax_fs, ax_ln, trace_data):
@@ -255,7 +255,7 @@ def on_pick (event):
 
 def on_click (event):
     '''
-    Called when used clicks the canvas.
+    Called when user clicks the canvas.
     '''
 
     global slice_data
@@ -263,10 +263,27 @@ def on_click (event):
     if event.button == 1:
         pass
     elif event.button == 2:
-        pass
+
+        slice_wave = np.array(slice_data['traces'][0]['slices']['waves']).view(wave.Wave)
+        slice_wave.info['FS slices'] = {'type': 'radial',
+                                        'source': slice_data['fsmap'].info['name'],
+                                        'deltas': str([ w.dim[0].delta for w in slice_data['traces'][0]['slices']['waves']]),
+                                        }
+        slice_wave.dim[0].lim   = (0, 2*3.1415926535)
+        slice_wave.dim[0].units = 'rad'
+        slice_wave.dim[1].lim   = slice_data['traces'][0]['slices']['waves'][0].dim[0].lim
+        slice_wave.dim[1].units = slice_data['traces'][0]['slices']['waves'][0].dim[0].units
+
+        print [ w.dim[0].delta for w in slice_data['traces'][0]['slices']['waves'] ]
+        
+        slice_file = get_trace_file (slice_data['fsmap'], slice_wave, stub=("%dslices" % (slice_wave.dim[0].size, )))
+        
+        log.debug ("Saving radial slices to '%s'" % slice_file)
+        print "Saving radial slices to ", os.path.relpath(slice_file)
+        igor.wave_write (slice_wave, slice_file)
     elif event.button == 3:
-        log.debug ("Writing '%s'" % slice_data['traces'][0]['file'])
-        print "Writing", os.path.relpath(slice_data['traces'][0]['file'])
+        log.debug ("Saving FS trace to '%s'" % slice_data['traces'][0]['file'])
+        print "Saving FS trace to", os.path.relpath(slice_data['traces'][0]['file'])
         igor.wave_write (slice_data['traces'][0]['wave'], slice_data['traces'][0]['file'])
     else:
         print "Whoops!"
@@ -312,7 +329,7 @@ def slice2d_fsmap_radial (fsmap, center=(0.0, 0.0), num=12):
     max_radius = np.array([ abs(l-c) for l,c in zip([d.lim for d in fsmap.dim], center_pt) ]).max()
     
     for angle in np.array(np.linspace(start=0, stop=math.pi*2, num=num, endpoint=False)):
-        radial_pt = np.array([math.cos(angle), math.sin(angle)]) * max_radius
+        radial_pt = np.array([math.cos(angle), math.sin(angle)]) * max_radius + center
         sl, ln = slice2d_line (fsmap, xstart=center_pt, xstop=radial_pt)
         sd['angles'].append (angle)
         sd['waves'].append (sl)

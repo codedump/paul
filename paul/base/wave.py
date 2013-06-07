@@ -249,6 +249,41 @@ class Wave(ndarray):
     (see below) have been reimplemented (rather: wrapped :-) )
     to be aware of the supplementary features that Wave offers. See
     below for more details.
+
+
+    
+        FIXME: need to re-work the 'info'-interface... somehow, we need
+               to separate the following info groups from one another,
+               either from the beginning (i.e. in the storage),
+               or by implementing corresponding calls; some info classes
+               come into mind:
+               
+                . "private", non-damaging info:
+                   this is info of relevance only to this particular memory
+                   instance of the wave, but that won't corrupt anything
+                   if copied (i.e. "name", "last path" etc).
+                   
+                . "private", damaging info:
+                   info that would in general damage things if copied,
+                   i.e. references to different objects, "debug" area,
+                   AxisInfo objects etc.
+                   
+                . "public" info
+                   info that can be copied elsewhere safely (in general,
+                   this goes for all user-supplied info and everything
+                   that was read from the wave notes).
+
+               Another attempt to sort:
+                a) "notes" info (public)
+                b) "private" info (private, non damaging)
+                c) "meta" info (private, damaging)
+
+               Storage ideas:
+                . self.notes, self.info, self.meta for a,b,c
+                . self.info, self.info['private'], self.... for a,b,c
+                . self.info, self.id, self.... for a,b,c
+                . self.info, self.priv, self.... for a,b,c
+    
     '''
     
     def __new__ (subtype, *args, **kwargs):
@@ -285,7 +320,7 @@ class Wave(ndarray):
             else:           # ...and new from 'ndarray' or another subtype of it
                 pass         
                 
-    def _copy_info(self, from_wave, noax=False):
+    def _copy_info(self, from_wave, noax=False, exclude=('axes')):
         '''
         Copies the info field from *from_wave*. This is basically just
         a wrapper around deepcopy() with some caveats to avoid recursion
@@ -303,7 +338,6 @@ class Wave(ndarray):
         axis scaling, it is safe to use the following call:
 
         >  dst._copy_info (src)
-          
         '''
         for k,v in from_wave.info.iteritems():
             if k != 'axes':
