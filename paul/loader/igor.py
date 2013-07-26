@@ -374,7 +374,7 @@ def wave_note_parse_simple (notestr, strict_blocks=False, sep=None):
         with a single dot on them. If strict_blocks is False, then
         blocks don't end on empty lines.
 
-    Returns an "info" map.
+    Returns an info map.
     '''
     nmap = { "strays": [] }
     cur_map = nmap
@@ -425,7 +425,27 @@ def wave_note_parse_simple (notestr, strict_blocks=False, sep=None):
             continue
 
         # normal key=val entry of the current block (which-ever it is...)
-        cur_map[nv[0].strip()] = nv[1].strip().split()
+        key_str = nv[0].strip()
+        val_str = nv[1].strip()
+
+        # trying to evaluate 'val' parameter to a decent python object;
+        # if not possible, assume object is a string, and evaluate object element-wise;
+        # if even that fails, return the plain string;
+        try:
+            val_py = eval(val_str)
+        except:
+            try:
+                val_list = []
+                for s in val_str.split():
+                    try:
+                        val_py = eval(s)
+                    except:
+                        val_py = str(s)
+                    val_list.append(val_py)
+                val_py = val_list
+            except:
+                val_py = val_str
+        cur_map[key_str] = val_py
 
     # save the last section, if not already saved
     if cur_map is not nmap:
@@ -466,7 +486,7 @@ def wave_note_generate (infomap, block_prefix='', sep='\r'):
 
         # if item is an iterable (list, tuple... but NOT string), go through the sub-items
         if hasattr(v, "__iter__"):
-            val = " ".join(str(v))
+            val = str(v)
         else:
             val = v
         notestr += "%s = %s%s" % (k, val, sep)

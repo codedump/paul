@@ -29,9 +29,14 @@ plot_params = {
     'slice': {
         'no': 'auto',
         'no hint': 36,
-        'center': (0.0, -1.078),
+        'center': (0.0, 0.0),
         'picker': 3,
+        'default scale': 'linear',
     },
+
+    'arpes': {
+        'clim': (0.0, 1.0),
+        },
 
     'lines': {
         'offs': (0, 0.3),
@@ -118,7 +123,7 @@ def populate (*av, **kav):
                                  'center': p['slice']['center'],
                                  'type': 'radial',}
     trace_data = {}
-    trace_data['slices'] = slice2d_fsmap_radial (fsmap, center=p['slice']['center'], num=slice_num)
+    trace_data['slices'] = slice2d_fsmap_radial (fsmap, center=p['slice']['center'], num=slice_num, scale=p['slice']['default scale'])
     trace_data['wave'] = fstrace
     trace_data['center'] = p['slice']['center']
     trace_data['file'] = get_trace_file(fsmap, fstrace)
@@ -137,6 +142,9 @@ def populate (*av, **kav):
 
     # display FS map, radial lines, and FS trace
     ax_fs.imshow (fsmap.view(np.ndarray), extent=fsmap.imlim, interpolation='none', cmap=cm.hot)
+    vlim = np.array ([fsmap.infv('FDD', 'V_min', default=np.nanmin(fsmap)),
+                      fsmap.infv('FDD', 'V_max', default=np.nanmax(fsmap))])
+    ax_fs.images[0].set_clim(vlim * np.array(p['arpes']['clim']))
     trace_data['coord'] = plotwater (ax_fs,
                                      wlist=[c[0] for c in trace_data['slices']['coords']],
                                      xlist=[c[1] for c in trace_data['slices']['coords']])
@@ -148,7 +156,6 @@ def populate (*av, **kav):
                                                    trace_data['slices']['waves'][i]+offset*i,
                                                    picker=p['slice']['picker'])[0]
                                                    for i in range(len(trace_data['slices']['waves'])) ]
-                                               
 
     update_trace (ax_fs, ax_ln, trace_data)
     decorate_fs (*av, axes=ax_fs, **kav)
@@ -308,7 +315,7 @@ def decorate_ln (*args, **kwargs):
     ax = kwargs['axes']
 
     
-def slice2d_fsmap_radial (fsmap, center=(0.0, 0.0), num=12):
+def slice2d_fsmap_radial (fsmap, center=(0.0, 0.0), num=12, scale='linear'):
     '''
     Slices the specified FS map radially.
     Returns a dictionary with following fields:
@@ -330,7 +337,7 @@ def slice2d_fsmap_radial (fsmap, center=(0.0, 0.0), num=12):
     
     for angle in np.array(np.linspace(start=0, stop=math.pi*2, num=num, endpoint=False)):
         radial_pt = np.array([math.cos(angle), math.sin(angle)]) * max_radius + center
-        sl, ln = slice2d_line (fsmap, xstart=center_pt, xstop=radial_pt)
+        sl, ln = slice2d_line (fsmap, xstart=center_pt, xstop=radial_pt, scale=scale)
         sd['angles'].append (angle)
         sd['waves'].append (sl)
         sd['coords'].append (ln)
@@ -342,7 +349,7 @@ def slice2d_fsmap_radial (fsmap, center=(0.0, 0.0), num=12):
 def slice2d_line (wav2d, numpts='auto',
                   xstart=None, xstop=None, xstep='auto',
                   xline=None, iline=None,
-                  xline_out=None, iline_out=None):
+                  xline_out=None, iline_out=None, scale='linear'):
     '''
     Returns a slice of the 2D wave along a specified line.
     The line has a resolution specified by 'xstep', or
@@ -389,7 +396,16 @@ def slice2d_line (wav2d, numpts='auto',
         iline = np.array([ d.x2i(l) for d, l in zip (wav2d.dim, xline) ])
         
     # the magic: this is where the slicing happens
-    line = spni.map_coordinates (wav2d.view(np.ndarray), iline, mode='constant', cval=np.NaN).view(wave.Wave)
+    src = np.nan_to_num(wav2d)
+    #src = wav2d.view (np.ndarray)
+    #src = wav2d
+    line = spni.map_coordinates (src, iline, mode='constant', cval=np.NaN).view(wave.Wave)
+
+    if scale == 'log':
+        line = np.log(line)
+
+
+    #print iline, xline, line
 
     # remove coordinate points that have no data
     # (e.g. because they point outside the 2D map)

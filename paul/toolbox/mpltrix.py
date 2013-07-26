@@ -69,8 +69,8 @@ plot_water = plotwater   # define an alias, for interface compatibility
 
 
 
-def imwater (fig_ax, wlist, offs=(0, 0), xlim=(0,0), ylim=(0,0), autoscale=True,
-             ignore=[]):
+def imwater (fig_ax, wlist, axis=0, offs=(0, 0), xlim=(0,0), ylim=(0,0), autoscale=True,
+             ignore=[], scale_out={ 'offset': None, 'scale': None}):
     '''
     Same as plotwater(), but designed to work for 2D waves.
     if *autoscale* is True, then resulting line collection will have
@@ -104,32 +104,37 @@ def imwater (fig_ax, wlist, offs=(0, 0), xlim=(0,0), ylim=(0,0), autoscale=True,
                                        # the same number of points
         wlist = new_wlist
 
-    #wlist.swapaxes(0, axis)
+    # swap axes, if anything other than 0 was selected
+    if axis != 0:
+        print "Reversing axis"
+        data = wlist.swapaxes(0, axis)
+    else:
+        data = wlist.copy()
+        
 
-    if len(wlist.shape) != 2:
-        err = "Only 2D waves can be plotted as waterfalls (dim = %d here)" % len(wlist.shape)
+    if len(data.shape) != 2:
+        err = "Only 2D waves can be plotted as waterfalls (dim = %d here)" % len(data.shape)
         log.error (err)
         raise ValueError (err)
 
     ## first, calculate the X axis values
-    x = np.arange(start = wlist.dim[1].offset,
-                  stop  = wlist.dim[1].end,
-                  step  = wlist.dim[1].delta)
+    x = np.arange(start = data.dim[1].offset,
+                  stop  = data.dim[1].end,
+                  step  = data.dim[1].delta)
 
     
     ## Do the auto-scaling magic... :-)
     
     # some indices along the y axis...
-    min_i  = wlist.dim[0].x2i_rnd(wlist.dim[0].min) # index of k|| = min
-    zero_i = wlist.dim[0].x2i_rnd(0)                # index of k|| = 0
-    max_i  = wlist.dim[0].x2i_rnd(wlist.dim[0].max) # index of k|| = max
+    min_i  = data.dim[0].x2i_rnd(data.dim[0].min) # index of k|| = min
+    zero_i = data.dim[0].x2i_rnd(0)                # index of k|| = 0
+    max_i  = data.dim[0].x2i_rnd(data.dim[0].max) # index of k|| = max
     
     # the "natural" y scaling, that would be in effect if we didn't change anything
-    ylim_wouldbe = (0, wlist.shape[0]*offs[1])
+    ylim_wouldbe = (0, data.shape[0]*offs[1] if offs[1] != 0 else (np.nanmax(data)-np.nanmin(data)))
 
     # the original y-range of the data
-    ylim_data    = (wlist.dim[0].min, wlist.dim[0].max)
-
+    ylim_data    = (data.dim[0].min, data.dim[0].max)
 
     # zoom factor from "original" to "natural" scaling
     axzoom       = (ylim_data[1]-ylim_data[0]) / (ylim_wouldbe[1]-ylim_wouldbe[0])
@@ -151,26 +156,33 @@ def imwater (fig_ax, wlist, offs=(0, 0), xlim=(0,0), ylim=(0,0), autoscale=True,
     # the original scale range. We need to shift the data one full
     # y-range to counteract that:
     if offs[1] < 0:
-        data_yshift += abs(offs[1])*wlist.dim[0].size
+        data_yshift += abs(offs[1])*data.dim[0].size
                                             
 
     # Scale the wave intensity to have it appear as big
     # (compared to the 'offs' parameter) as it would have been
     # if we didn't interfere. Then apply the y-shifting
-    wlist *= axzoom
-    wlist += data_yshift
+        
+    data *= axzoom
+    data += data_yshift
+
+    # tell the calling instance what scaling parameters were
+    # applied to the data -- may be important for further processing
+    if scale_out is not None:
+        scale_out['scale']  = axzoom
+        scale_out['offset'] = data_yshift
 
     ## set the proper limis (only if user didn't specify his own).
     if xlim == (0, 0):
-        xlim = (wlist.dim[1].min - (offs[0]*len(wlist))*(offs[0]<0),
-                wlist.dim[1].max + (offs[0]*len(wlist))*(offs[0]>0))
+        xlim = (data.dim[1].min - (offs[0]*len(data))*(offs[0]<0),
+                data.dim[1].max + (offs[0]*len(data))*(offs[0]>0))
         
     if ylim == (0, 0):
         ylim = (ylim_data[0], ylim_data[1])
         
 
     ## ...then go for the actual work.
-    lines = LineCollection([zip(x, w) for w in wlist], offsets=offs)
+    lines = LineCollection([zip(x, w) for w in data], offsets=offs)
 
     if xlim is not None:
         fig_ax.set_xlim (xlim)

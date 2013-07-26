@@ -43,6 +43,7 @@ def e_free(mrel=1.0, ebind=0.0, kpos=0.0, klim=1.0, pts=100, out=None):
     expected. For 1D results (i.e. 1D pts value):
       1) *klim* is expected to be an iterable with 2 elements
       2) if *klim* is a single number, then (-*klim*, *klim*) is assumed
+    
     For 2D results:
       4) *klim* is supposed to be a 2x2 iterable.
       5) if *klim* is a number, then ((-*klim*, *klim*), (-*klim*, *klim*)) is assumed
@@ -62,9 +63,12 @@ def e_free(mrel=1.0, ebind=0.0, kpos=0.0, klim=1.0, pts=100, out=None):
     if not hasattr(pts, "__iter__"):
         pts = (pts, 1)
         dim = 1
+        
     if len(pts) == 1:
         pts = (pts[0], 1)
         dim = 1
+
+    #print "dim", dim, "pts", pts
 
     if not hasattr(klim, "__iter__"):
         if dim == 2:
@@ -152,7 +156,7 @@ def _hybridize_n2n (wlist, V=0.0, count='auto'):
                                                (V!=0).astype(float).T + 
                                                ((V+V.T)==0).astype(float))
     
-    ''' This is what we'll be operating on'''
+    # This is what we'll be operating on
     hlist = list(wlist)
     
     '''
@@ -161,7 +165,7 @@ def _hybridize_n2n (wlist, V=0.0, count='auto'):
     The formula has most drastic consequences for the crossover-points,
     but it actually affects the _whole_ band. Now, if we repeatedly
     hybridize two bands, then they will get pushed appart, even if they
-    don't cross anymore.
+    dont cross anymore.
     
     To avoid this, we need to normalize the interaction potential by the
     number of times that we're going to hybridize. (Mind the sqrt() -- this
@@ -185,7 +189,7 @@ def _hybridize_n2n (wlist, V=0.0, count='auto'):
 
     '''
     Now, V2 is a traceless, symmetric matrix containing coupling
-    factors for the bands in 'hlist', correctly normalized. Let's go!
+    factors for the bands in hlist, correctly normalized.
     '''
     for t in range(count):
         for i in range(len(hlist)):
