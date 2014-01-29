@@ -938,8 +938,9 @@ def deg2kz (*args, **kwargs):
          (For ARPES, this is energy is negative.)
          
        . Additionally, *kz* transformations depend on the excitation
-         energy directly via... (here comes V0 etc. need some more
-         reading.)
+         energy directly via:
+	 	 E_kin + V_0 = hbar/2m * (kx^2 + kz^2),
+         Where *E_kin* defined as above.
 
     The input wave usually will have two energy axes: the internal
     energy axis and the excitation energy axis. The internal energy
@@ -950,6 +951,20 @@ def deg2kz (*args, **kwargs):
     work function).
     The excitation energy represents the photon energy at which
     each data slice was scanned.
+    Now the problem is that for every one of the individual
+    ky*kx planes, strictly speaking we don't have *E_kin*.
+    All we have is an intrinsic energy scale *E_data*
+    (which is roughly the same as the physical *E_initial = -E_bind*
+    [or *E_initial = E_bind*, depending on which the definition of
+    the sign of E_bind we adhere to], if the data was normalized
+    to have its zero at the Fermi level), and we have the corresponding
+    excitation energy *hv* of the corresponding slice.
+    *E_kin* is then obtained for the i-th slice by:
+         E_kin[i] = E_data - Phi + hv[i],
+    or:
+         E_kin[i] = E_data - Phi + (hv[0] + n*delta_hv),
+    if delta_hv is the step-size of the excitation axis.
+
 
     Parameter 'e_offs' set on 'auto' will renormalize the energy
     axis using a *Phi* = 4.352 meV (which should be correct for 
@@ -1140,13 +1155,59 @@ def deg2kz (*args, **kwargs):
     kaxis_d = np.linspace (start=ik_d_lim[0], stop=ik_d_lim[1], num=len(ideg))
     kaxis_x = np.linspace (start=ik_x_lim[0], stop=ik_x_lim[1], num=len(iex))
 
+    #. To check validity of the calculations, lines with #.
+    #. have been subsequently added. They define three coordinate systems:
+    #. solid, vacuum, and data energy coordinates as follows:
+    #. 
+    #.  o solid:  Fermi (= zero) level in the solid: E_F
+    #.  o data:   Fermi (= zero) level in the data:  E_Fdata[i] = E_F + hv[i]
+    #.  o vacuum: Zero level of the vacuum:          E_vac      = E_F + Phi
+    #.
+    #. Calculations are checked by explicitly writing expressions containing
+    #. the corresponding coordinate system offset (E_F, E_Fdata, E_vac)
+    #. in the mathematical expression (i.e. E_initial + E_F  = E_kin + E_vac).
+    #. To avoid a mess with old conventions, all "new" calculations in the
+    #. comments are preceded with "#."
+    #.
+    #. Here, the photon energy for the i-th slice is hv[i] = iex[i]
+    #. (or simply hv = iex when this is more convenient).
+    #. The special iex[0] is the smallest photon energy, and is
+    #. actually used only in the expression for the "relative" photon
+    #. energy (iex-iex[0]).
+    #. The purpose of the "relative energy" (see below) is to make
+    #. calculations of the final 'binding' energy scale of the plot easier.
+    #.
+
     # Full output grid, k-space coordinates. E_data is the data energy
     # scale, which amounts to:
-    #    E_data = E_kin - (iex - iex[0])
+    #            E_data = E_kin - (iex - iex[0])  [checked: TRUE]
+    #
     #
     # So basically this holds:
-    #    E_initial = E_data - iex[0] + Phi
-    # 
+    #         E_initial = E_data - iex[0] + Phi   [checked: FALSE]
+    #
+    #. E_initial comments: expression is FALSE, should read instead:
+    #.        E_initial = E_data - iex[0]
+    #
+    #.
+    #. E_data: expression is TRUE, for following reasons:
+    #.         "binding" energy scale in the final data, i.e.
+    #.         independent on the photon energy hv. For E_data
+    #.         to be hv-independent, E_Fdata has to be hv-*dependent*,
+    #.         since E_data finally depends on E_kin, which is hv-dependent itself.
+    #.         Now, E_kin = E_initial + hv[i] by definition.
+    #.         (Explicitly: E_vac + E_kin = E_F + E_initial + hv[i])
+    #.         Hence the rest of the funny calculation:
+    #.
+    #.           E_data   (i.e. final electron energy in the plot, calculated
+    #.                          relative to the Fermi level in the plot)
+    #.           is E_kin (i.e. E_initial + hv[i], the actual electron energy)
+    #.           minus (iex[i]-iex[0])
+    #.                    (i.e. a step-wise increasing offset. For the first slice,
+    #.                     the offset iex[i=0] - iex[0] is zero, as it should be.
+    #.                     For subsequent slices, the offset is increased by one
+    #.                     hv-delta step.)
+    #.                                 
     E_data, okd, okx = np.broadcast_arrays (E[:,None,None],
                                             kaxis_d[None,:,None],
                                             kaxis_x[None,None,:])
@@ -1162,6 +1223,42 @@ def deg2kz (*args, **kwargs):
     #     referred to E_F=0:
     #
     #        E_initial = E_data - iex[0] + Phi
+    #.
+    #. Should read:
+    #.       E_initial = E_data - iex[0]
+    #.
+    #. (NEW REMARKS)
+    #. 
+    #. Excitation energy is called hv (= iex here),
+    #. or hv[i] = iex[i] for the i-th slice.
+    #.
+    #.   - Fermi (= zero) level in the solid: E_F
+    #.   - Fermi (= zero) level in the data:  E_Fdata = E_F + hv
+    #.   - Zero level in the vacuum:          E_vac   = E_F + Phi
+    #.   - Electron energy in the solid:      E_initial
+    #.   - Electron energy in the data:       E_data
+    #.   - Electron energy in vacuum:         E_kin  
+    #.
+    #. This results in the following relations:
+    #.
+    #. Relation between solid and data:
+    #.      E_F + E_initial = E_Fdata  + E_data
+    #.  =>  E_F + E_initial = E_F + hv + E_data
+    #.            E_initial =       hv + E_data
+    #.
+    #. Relation between solid and vacuum:
+    #.      E_F + E_initial = E_vac     + E_kin
+    #.  =>  E_F + E_initial = E_F + Phi + E_kin
+    #.            E_initial =       Phi + E_kin
+    #.
+    #. Relation between data and vacuum:
+    #.      E_Fdata  + E_data = E_vac     + E_kin
+    #.  =>  E_F + hv + E_data = E_F + Phi + E_kin
+    #.  =>        hv + E_data =       Phi + E_kin
+    #.
+    #. 
+    #. ACHTUNG: in the old version, matching the earlier E_initial = ...
+    #. definition, the formula below is valid.
 
     oex  = hsq_2m * (okx**2 + okd**2) - V0 - E_data + iex[0]
     odeg = _deg (np.arcsin (np.sign(okd) * 
