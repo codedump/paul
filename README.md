@@ -10,11 +10,11 @@ analysers, tunneling microscope images etc. In my case, it means
 data from angle-resolved photoelectron spectroscopy.
 
 It allows point-and-view displaying of scientific spectra, integrates
-a Matplotlib viewer (and soon editor :-) ) with an easy-to-use file
+a Matplotlib viewer with an easy-to-use file
 navigator and offers powerful live data introspection and processing
 from an integrated IPython shell.
 
-It features some sueful ideas borrowed from a commercial data analysis 
+It features some useful ideas borrowed from a commercial data analysis 
 tool called *IgorPro(tm)* made by *Wavemetrics*,
 a number of data reading/writing functions for various more or less
 obscure scientific data formats, and some new ideas.
@@ -40,20 +40,34 @@ Supported data formats:
 Data processing:
 ----------------
 
-  - Implementation a `Wave` class, i.e. a numpy.ndarray subclass
+  - Implementation of a `Wave` class, i.e. a `numpy.ndarray` subclass
     that can handle intrinsic scaling information as typically
-    used in IgorPro(tm)
+    used in *IgorPro(tm)* -- arguably one if its most powerful features.
 
-  - Implementation of indexing/slicing algorithms in "Wave" based
+  - Implementation of indexing/slicing algorithms in `Wave` based
     not the coordinate system of the intrinsic scale (i.e.
     data slicing can be done not only like `foo[x,y,z]`, but also
     like `foo(p,q,r)`, where `p,q,r` are index objects specifying
     position information in the coordinate system intrinsic to
-    the data :-) )
+    the data.
 
   - Basic functions for common data analysis tasks (slicing
     of data, generating of waterfall diagrams etc) that take
-    advantage of the `Wave` interface
+    advantage of the `Wave` interface.
+    
+  - Ability to use plot specification scripts in order to define
+    Matplotlib visualisation presets and data plots -- a good idea
+    also borrowed from *IgorPro(tm)*.
+    
+  - The ability to modularly "blend into" a Unix environment, manipulate
+    `IBW` data files (...or possibly others; interface is easily extensible)
+    without the need to load / write large, opaque, binary data files (think
+    *IgoroPro(tm)'s* `PXP` files) which cannot be manipulated except by
+    a single, monolithic system.
+    This is arguably one of the most powerful features of *Paul*; in fact,
+    *Paul* was extensively used in scientific day-to-day business within
+    Unix `Makefile` setups to automatically generate graphs from data
+    files and lot specifitation scripts.
 
 
 Data visualization and interaction:
