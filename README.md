@@ -78,21 +78,24 @@ Data visualization and interaction:
 Project Status / Usability 
 --------------------------
 
-Consider the status a "usable prototype". Most of the working code
-works robustly and was used to analyze data and generate graphs
-for various high-ranking publications. Formal documentation is lacking,
-but many portions of the code are very well explained & documented.
+Consider the status a "usable prototype". Most of the code that appears
+to be working does indeed work robustly and was used to analyze data
+and generate graphs for various high-ranking publications.
+Formal documentation is lacking,
+but many portions of the code, in particular the science-heavy parts,
+are very well explained & documented.
 Writing few examples of how to rapidly start using it would probably
 go a long way in helping to get a new user started.
 
 Data exchange code, in particular reading / writing of `IBW` and `UXP`
 files has received a large amount of testing and can be considered
-fairly robust (writing of `UXP` may be still somewhat buggy). However,
-it may be somewhat out of date (code state is from around 2014, I assume
-*IgorPro(tm)* will have moved with its formats along during that time).
+fairly robust; writing of `UXP` could still be a little buggy. However,
+data exchange is probably out of date with regards to newer versions
+of the file formats. Code state is from around 2014, I assume
+*IgorPro(tm)* will have moved along with its formats during that time.
 
 Architecture of the system is in principle validated, but largerly
-undocumented and in an unfinished state.
+undocumented, and in an unfinished state.
 
 On the plus side, the codebase is fairly small and still possible
 to understand and modify/refactor by a single person or a small
