@@ -15,9 +15,9 @@ navigator and offers powerful live data introspection and processing
 from an integrated IPython shell.
 
 It features some sueful ideas borrowed from a commercial data analysis 
-tool called IgorPro(tm) made by a great company called Wavemetrics,
+tool called *IgorPro(tm)* made by *Wavemetrics*,
 a number of data reading/writing functions for various more or less
-obscure scientific data formats, and some new ideas of my own.
+obscure scientific data formats, and some new ideas.
 
 Here's an incomplete feature list:
 
@@ -25,59 +25,85 @@ Here's an incomplete feature list:
 Supported data formats:
 -----------------------
 
-  . Reading and writing if IgroPro(tm) IBW files (binary waves)
+  - Reading and writing if *IgroPro(tm)* `IBW` files (binary waves)
 
-  . Reading and unpacking of IgorPro(tm) PXP and PXT
+  - Reading and unpacking of *IgorPro(tm)* `PXP` and `PXT`
     files (packed experiment files)
 
-  . Reading of Elmitec's proprietary LEED/LEEM image format
+  - Reading of *Elmitec*'s proprietary LEED/LEEM image format
     (used in low electron energy microscopy)
 
-  . Generating of IgorPro(tm) UXP (Unpacked Experiment Files)
+  - Generating of *IgorPro(tm)* `UXP` (Unpacked Experiment Files)
     for easier exchange of data between Paul and Igor.
 
 
 Data processing:
 ----------------
 
-  . Implementation a "Wave" class, i.e. a numpy.ndarray subclass
+  - Implementation a `Wave` class, i.e. a numpy.ndarray subclass
     that can handle intrinsic scaling information as typically
     used in IgorPro(tm)
 
-  . Implementation of indexing/slicing algorithms in "Wave" based
+  - Implementation of indexing/slicing algorithms in "Wave" based
     not the coordinate system of the intrinsic scale (i.e.
-    data slicing can be done not only like foo[x,y,z], but also
-    like foo(p,q,r), where p,q,r are index objects specifying
+    data slicing can be done not only like `foo[x,y,z]`, but also
+    like `foo(p,q,r)`, where `p,q,r` are index objects specifying
     position information in the coordinate system intrinsic to
     the data :-) )
 
-  . Basic functions for common data analysis tasks (slicing
+  - Basic functions for common data analysis tasks (slicing
     of data, generating of waterfall diagrams etc) that take
-    advantage of the "Wave" interface
+    advantage of the `Wave` interface
 
 
 Data visualization and interaction:
 -----------------------------------
 
-  . paul-viewer:  a scripting-based Matplotlib plotting application
+  - **paul-viewer**:  a scripting-based Matplotlib plotting application
                   similarly to the GUI displayed by Pylab (in fact,
                   it makes heavy use of the Matplotlib's FigureCanvas
 		  object :-) ) with the ability to load and
                   automatically reload the plotting script when
                   modified on disk.
 
-  . paul-browser: a click-and-display data browser application, allowing
+  - **paul-browser**: a click-and-display data browser application, allowing
                   to quickly skim through 1D or 2D data files on disk.
 
-  . paul-shell:   a module to expose as much functionality of 
+  - **paul-shell**:   a module to expose as much functionality of 
                   paul-browser and paul-viewer to the IPython command
                   line, making Paul integration with the Spyder
                   toolset easier.
 
 
+Project Status / Usability 
+--------------------------
+
+Consider the status a "usable prototype". Most of the working code
+works robustly and was used to analyze data and generate graphs
+for various high-ranking publications. Formal documentation is lacking,
+but many portions of the code are very well explained & documented.
+Writing few examples of how to rapidly start using it would probably
+go a long way in helping to get a new user started.
+
+Data exchange code, in particular reading / writing of `IBW` and `UXP`
+files has received a large amount of testing and can be considered
+fairly robust (writing of `UXP` may be still somewhat buggy). However,
+it may be somewhat out of date (code state is from around 2014, I assume
+*IgorPro(tm)* will have moved with its formats along during that time).
+
+Architecture of the system is in principle validated, but largerly
+undocumented and in an unfinished state.
+
+On the plus side, the codebase is fairly small and still possible
+to understand and modify/refactor by a single person or a small
+group of developers.
+
+The project is mostly orphaned, meaning that I don't actively work
+on it anymore, although I would love to see it continued. If you
+feel inclined, let me know, and I'll support to you the best of
+my abilities. 
+
 The Paul package is released under GPL-v3.
                   
 -- 
 Florin Boariu <florin.p(at)rootshell.ro>
-                 
-    
