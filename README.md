@@ -22,8 +22,8 @@ obscure scientific data formats, and some new ideas.
 Here's an incomplete feature list:
 
 
-Supported data formats:
------------------------
+Supported data formats
+----------------------
 
   - Reading and writing if *IgroPro(tm)* `IBW` files (binary waves)
 
@@ -37,8 +37,8 @@ Supported data formats:
     for easier exchange of data between Paul and Igor.
 
 
-Data processing:
-----------------
+Data processing
+---------------
 
   - Implementation of a `Wave` class, i.e. a `numpy.ndarray` subclass
     that can handle intrinsic scaling information as typically
@@ -70,8 +70,8 @@ Data processing:
     files and lot specifitation scripts.
 
 
-Data visualization and interaction:
------------------------------------
+Data visualization and interaction
+----------------------------------
 
   - **paul-viewer**:  a scripting-based Matplotlib plotting application
                   similarly to the GUI displayed by Pylab (in fact,
