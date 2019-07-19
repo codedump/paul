@@ -64,7 +64,7 @@ Data processing:
     without the need to load / write large, opaque, binary data files (think
     *IgoroPro(tm)'s* `PXP` files) which cannot be manipulated except by
     a single, monolithic system.
-    This is arguably one of the most powerful features of *Paul*; in fact,
+    Its integrability is arguably one of the most powerful features of *Paul*; in fact,
     *Paul* was extensively used in scientific day-to-day business within
     Unix `Makefile` setups to automatically generate graphs from data
     files and lot specifitation scripts.
